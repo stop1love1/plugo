@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmd.exe /c \"mkdir c:\\\\Users\\\\Admin\\\\claude\\\\plugo\\\\docs\\\\assets 2>nul & copy c:\\\\Users\\\\Admin\\\\claude\\\\plugo\\\\logo.png c:\\\\Users\\\\Admin\\\\claude\\\\plugo\\\\docs\\\\assets\\\\logo.png\")",
+      "Bash(powershell.exe -Command \"New-Item -ItemType Directory -Force -Path ''c:\\\\Users\\\\Admin\\\\claude\\\\plugo\\\\docs\\\\assets'' | Out-Null; Copy-Item ''c:\\\\Users\\\\Admin\\\\claude\\\\plugo\\\\logo.png'' ''c:\\\\Users\\\\Admin\\\\claude\\\\plugo\\\\docs\\\\assets\\\\logo.png'' -Force; Write-Output ''Done''\")"
+    ]
+  }
+}
