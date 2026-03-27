@@ -12,10 +12,12 @@ export class PlugoWebSocket {
   private handlers: MessageHandler;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
+  private sessionId: string | null = null;
 
-  constructor(url: string, handlers: MessageHandler) {
+  constructor(url: string, handlers: MessageHandler, sessionId?: string | null) {
     this.url = url;
     this.handlers = handlers;
+    this.sessionId = sessionId || null;
   }
 
   connect() {
@@ -24,6 +26,13 @@ export class PlugoWebSocket {
 
       this.ws.onopen = () => {
         this.reconnectAttempts = 0;
+        // Send init message with session_id for resumption
+        this.ws?.send(
+          JSON.stringify({
+            type: "init",
+            session_id: this.sessionId,
+          })
+        );
       };
 
       this.ws.onmessage = (event) => {
@@ -31,6 +40,10 @@ export class PlugoWebSocket {
           const data = JSON.parse(event.data);
           switch (data.type) {
             case "connected":
+              // Store the session_id for future reconnections
+              if (data.session_id) {
+                this.sessionId = data.session_id;
+              }
               this.handlers.onConnected(data);
               break;
             case "start":
@@ -85,5 +98,9 @@ export class PlugoWebSocket {
 
   get isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  getSessionId(): string | null {
+    return this.sessionId;
   }
 }

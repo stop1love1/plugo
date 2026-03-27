@@ -38,22 +38,22 @@ export default function Sites() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Sites</h1>
-          <p className="text-gray-500 mt-1">Quản lý các website đã kết nối với Plugo</p>
+          <p className="text-gray-500 mt-1">Manage websites connected to Plugo</p>
         </div>
         <button
           onClick={() => setShowCreate(true)}
           className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors"
         >
-          <Plus className="w-4 h-4" /> Thêm Site
+          <Plus className="w-4 h-4" /> Add Site
         </button>
       </div>
 
       {showCreate && (
         <form onSubmit={handleCreate} className="bg-white p-6 rounded-xl border border-gray-200 mb-6">
-          <h3 className="font-semibold text-lg mb-4">Tạo Site mới</h3>
+          <h3 className="font-semibold text-lg mb-4">Create New Site</h3>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tên website</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Website Name</label>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -72,10 +72,10 @@ export default function Sites() {
             </div>
             <div className="flex gap-3">
               <button type="submit" disabled={mutation.isPending} className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700">
-                {mutation.isPending ? "Đang tạo..." : "Tạo Site"}
+                {mutation.isPending ? "Creating..." : "Create Site"}
               </button>
               <button type="button" onClick={() => setShowCreate(false)} className="text-gray-500 px-4 py-2">
-                Huỷ
+                Cancel
               </button>
             </div>
           </div>
@@ -83,11 +83,11 @@ export default function Sites() {
       )}
 
       {isLoading ? (
-        <div className="text-gray-400">Đang tải...</div>
+        <div className="text-gray-400">Loading...</div>
       ) : sites.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
           <Globe className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500">Chưa có site nào. Nhấn "Thêm Site" để bắt đầu.</p>
+          <p className="text-gray-500">No sites yet. Click "Add Site" to get started.</p>
         </div>
       ) : (
         <div className="grid gap-4">

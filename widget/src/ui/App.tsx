@@ -18,6 +18,24 @@ type AppProps = {
   getPageContext: () => any;
 };
 
+const SESSION_KEY = "plugo_session_";
+
+function getSavedSessionId(token: string): string | null {
+  try {
+    return sessionStorage.getItem(SESSION_KEY + token);
+  } catch {
+    return null;
+  }
+}
+
+function saveSessionId(token: string, sessionId: string) {
+  try {
+    sessionStorage.setItem(SESSION_KEY + token, sessionId);
+  } catch {
+    // sessionStorage unavailable — ignore
+  }
+}
+
 export function App({ token, serverUrl, primaryColor, greeting, position, getPageContext }: AppProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -30,10 +48,27 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
     const baseUrl = serverUrl || `${wsProtocol}//${window.location.host}`;
     const wsUrl = `${baseUrl.replace(/^http/, "ws")}/ws/chat/${token}`;
 
+    // Pass saved session_id for server-side session resumption
+    const savedSessionId = getSavedSessionId(token);
+
     const socket = new PlugoWebSocket(wsUrl, {
       onConnected: (data) => {
         setConnected(true);
-        if (data.greeting && messages.length === 0) {
+
+        // Save session_id for future reconnections
+        if (data.session_id) {
+          saveSessionId(token, data.session_id);
+        }
+
+        // Server returned previous messages — restore them
+        if (data.resumed && data.history && data.history.length > 0) {
+          const restored: Message[] = data.history.map((m: any) => ({
+            role: m.role === "user" ? "user" : "bot",
+            content: m.content,
+          }));
+          setMessages(restored);
+        } else if (data.greeting && messages.length === 0) {
+          // New session — show greeting
           setMessages([{ role: "bot", content: data.greeting }]);
         }
       },
@@ -64,7 +99,7 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
           { role: "bot", content: `⚠️ ${error}` },
         ]);
       },
-    });
+    }, savedSessionId);
 
     socket.connect();
     setWs(socket);

@@ -12,21 +12,21 @@ _active_crawlers: dict[str, WebCrawler] = {}
 
 
 class CrawlToggleRequest(BaseModel):
-    """Bật/tắt crawl cho site."""
+    """Enable or disable crawling for a site."""
     enabled: bool
-    auto_interval: Optional[int] = None   # Giờ. 0 = không tự động
+    auto_interval: Optional[int] = None   # Hours. 0 = disabled
     max_pages: Optional[int] = None
 
 
 class CrawlStartRequest(BaseModel):
-    """Trigger crawl thủ công."""
+    """Trigger a manual crawl."""
     site_id: str
-    url: Optional[str] = None             # Nếu không truyền, dùng site.url
+    url: Optional[str] = None             # If omitted, uses site.url
     max_pages: Optional[int] = None
 
 
 # ============================================================
-# 1. TOGGLE CRAWL — Bật/Tắt
+# 1. TOGGLE CRAWL — Enable / Disable
 # ============================================================
 
 @router.put("/toggle/{site_id}")
@@ -37,9 +37,9 @@ async def toggle_crawl(
     repos: Repositories = Depends(get_repos),
 ):
     """
-    Bật/tắt crawl cho site.
-    - Bật: bắt đầu crawl ngay nếu chưa chạy, lưu trạng thái.
-    - Tắt: dừng crawl đang chạy (nếu có), giữ lại data đã học trong DB.
+    Enable or disable crawling for a site.
+    - Enable: starts crawling immediately if not already running.
+    - Disable: stops active crawl (if any), retains all learned data in DB.
     """
     site = await repos.sites.get_by_id(site_id)
     if not site:
@@ -52,7 +52,7 @@ async def toggle_crawl(
         update_data["crawl_max_pages"] = data.max_pages
 
     if data.enabled:
-        # === BẬT CRAWL ===
+        # === ENABLE CRAWL ===
         update_data["crawl_status"] = "running"
         await repos.sites.update(site_id, update_data)
 
@@ -70,13 +70,13 @@ async def toggle_crawl(
         )
 
         return {
-            "message": f"Crawl đã BẬT cho {site['name']}",
+            "message": f"Crawl enabled for {site['name']}",
             "crawl_enabled": True,
             "crawl_status": "running",
             "job_id": job["id"],
         }
     else:
-        # === TẮT CRAWL ===
+        # === DISABLE CRAWL ===
         # Stop crawler if running
         if site_id in _active_crawlers:
             _active_crawlers[site_id].stop()
@@ -86,7 +86,7 @@ async def toggle_crawl(
         site_updated = await repos.sites.update(site_id, update_data)
 
         return {
-            "message": f"Crawl đã TẮT cho {site['name']}. Dữ liệu đã học được giữ nguyên ({site.get('knowledge_count', 0)} chunks).",
+            "message": f"Crawl disabled for {site['name']}. Existing data retained ({site.get('knowledge_count', 0)} chunks).",
             "crawl_enabled": False,
             "crawl_status": "idle",
             "knowledge_count": site.get("knowledge_count", 0),
@@ -94,7 +94,7 @@ async def toggle_crawl(
 
 
 # ============================================================
-# 2. START CRAWL — Chạy thủ công (không cần bật toggle)
+# 2. START CRAWL — Manual trigger (independent of toggle)
 # ============================================================
 
 @router.post("/start")
@@ -103,13 +103,13 @@ async def start_crawl(
     background_tasks: BackgroundTasks,
     repos: Repositories = Depends(get_repos),
 ):
-    """Trigger crawl thủ công, bất kể crawl_enabled."""
+    """Trigger a manual crawl, regardless of crawl_enabled state."""
     site = await repos.sites.get_by_id(data.site_id)
     if not site:
         raise HTTPException(status_code=404, detail="Site not found")
 
     if site.get("crawl_status") == "running":
-        raise HTTPException(status_code=409, detail="Crawl đang chạy. Hãy dừng trước khi bắt đầu lại.")
+        raise HTTPException(status_code=409, detail="Crawl already running. Stop it before starting a new one.")
 
     crawl_url = data.url or site["url"]
     max_pages = data.max_pages or site.get("crawl_max_pages", 50)
@@ -129,12 +129,12 @@ async def start_crawl(
     return {
         "job_id": job["id"],
         "status": "started",
-        "message": f"Đang crawl {crawl_url}",
+        "message": f"Crawling {crawl_url}",
     }
 
 
 # ============================================================
-# 3. STOP CRAWL — Dừng crawl đang chạy
+# 3. STOP CRAWL — Stop a running crawl
 # ============================================================
 
 @router.post("/stop/{site_id}")
@@ -142,7 +142,7 @@ async def stop_crawl(
     site_id: str,
     repos: Repositories = Depends(get_repos),
 ):
-    """Dừng crawl đang chạy. Dữ liệu đã crawl được giữ lại trong DB."""
+    """Stop a running crawl. Data already crawled is retained in the database."""
     site = await repos.sites.get_by_id(site_id)
     if not site:
         raise HTTPException(status_code=404, detail="Site not found")
@@ -154,14 +154,14 @@ async def stop_crawl(
     await repos.sites.update(site_id, {"crawl_status": "idle"})
 
     return {
-        "message": f"Đã dừng crawl. Giữ lại {site.get('knowledge_count', 0)} chunks đã học.",
+        "message": f"Crawl stopped. Retained {site.get('knowledge_count', 0)} existing chunks.",
         "crawl_status": "idle",
         "knowledge_count": site.get("knowledge_count", 0),
     }
 
 
 # ============================================================
-# 4. STATUS — Xem trạng thái crawl
+# 4. STATUS — Get current crawl status
 # ============================================================
 
 @router.get("/status/{site_id}")
@@ -169,7 +169,7 @@ async def get_crawl_status(
     site_id: str,
     repos: Repositories = Depends(get_repos),
 ):
-    """Xem trạng thái crawl hiện tại của site."""
+    """Get the current crawl status for a site."""
     site = await repos.sites.get_by_id(site_id)
     if not site:
         raise HTTPException(status_code=404, detail="Site not found")
@@ -187,7 +187,7 @@ async def get_crawl_status(
 
 
 # ============================================================
-# 5. JOBS — Lịch sử crawl
+# 5. JOBS — Crawl history
 # ============================================================
 
 @router.get("/jobs/{site_id}")
@@ -210,7 +210,7 @@ async def get_crawl_job(
 
 
 # ============================================================
-# 6. CLEAR KNOWLEDGE — Xóa toàn bộ data đã học
+# 6. CLEAR KNOWLEDGE — Delete all learned data
 # ============================================================
 
 @router.delete("/knowledge/{site_id}")
@@ -218,17 +218,17 @@ async def clear_knowledge(
     site_id: str,
     repos: Repositories = Depends(get_repos),
 ):
-    """Xóa toàn bộ knowledge đã crawl của site."""
+    """Delete all crawled knowledge for a site."""
     from agent.rag import rag_engine
 
     site = await repos.sites.get_by_id(site_id)
     if not site:
         raise HTTPException(status_code=404, detail="Site not found")
 
-    # Xóa từ vector store
+    # Delete from vector store
     await rag_engine.delete_site(site_id)
 
-    # Xóa từ DB — lấy tất cả chunks rồi xóa
+    # Delete from database
     data = await repos.knowledge.list_by_site(site_id, page=1, per_page=10000)
     for chunk in data.get("chunks", []):
         await repos.knowledge.delete(chunk["id"])
@@ -236,7 +236,7 @@ async def clear_knowledge(
     await repos.sites.update(site_id, {"knowledge_count": 0})
 
     return {
-        "message": f"Đã xóa toàn bộ knowledge của {site['name']}.",
+        "message": f"All knowledge deleted for {site['name']}.",
         "knowledge_count": 0,
     }
 

@@ -23,17 +23,17 @@ export default function ChatLog() {
   return (
     <div className="max-w-5xl">
       <h1 className="text-2xl font-bold text-gray-900 mb-2">Chat Log</h1>
-      <p className="text-gray-500 mb-8">Xem lịch sử chat của khách truy cập</p>
+      <p className="text-gray-500 mb-8">View chat history from website visitors</p>
 
       <div className="flex gap-6">
         {/* Session list */}
         <div className="w-80 flex-shrink-0">
           {isLoading ? (
-            <div className="text-gray-400">Đang tải...</div>
+            <div className="text-gray-400">Loading...</div>
           ) : sessions.length === 0 ? (
             <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
               <MessageCircle className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-              <p className="text-sm text-gray-500">Chưa có chat session nào</p>
+              <p className="text-sm text-gray-500">No chat sessions yet</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -48,10 +48,10 @@ export default function ChatLog() {
                   }`}
                 >
                   <div className="text-sm font-medium text-gray-900">
-                    {s.message_count} tin nhắn
+                    {s.message_count} messages
                   </div>
                   <div className="text-xs text-gray-400 mt-1">
-                    {s.started_at ? new Date(s.started_at).toLocaleString("vi-VN") : ""}
+                    {s.started_at ? new Date(s.started_at).toLocaleString() : ""}
                   </div>
                 </button>
               ))}
@@ -74,7 +74,7 @@ export default function ChatLog() {
                   </div>
                   <div className="flex-1">
                     <span className="text-xs font-medium text-gray-500">
-                      {msg.role === "user" ? "Khách" : "Bot"}
+                      {msg.role === "user" ? "Visitor" : "Bot"}
                     </span>
                     <p className="text-sm text-gray-800 mt-0.5 whitespace-pre-wrap">{msg.content}</p>
                   </div>
@@ -83,7 +83,7 @@ export default function ChatLog() {
             </div>
           ) : (
             <div className="text-center py-20 text-gray-400 text-sm">
-              Chọn một session để xem chi tiết
+              Select a session to view details
             </div>
           )}
         </div>

@@ -49,7 +49,7 @@ export default function Embed() {
     <div className="max-w-3xl">
       <h1 className="text-2xl font-bold text-gray-900 mb-2">Embed Code</h1>
       <p className="text-gray-500 mb-8">
-        Copy đoạn code bên dưới và dán vào website của bạn, trước thẻ &lt;/body&gt;
+        Copy the code below and paste it into your website, before the &lt;/body&gt; tag
       </p>
 
       {/* Development */}
@@ -93,40 +93,40 @@ export default function Embed() {
 
       {/* Config options */}
       <div className="bg-white p-6 rounded-xl border border-gray-200">
-        <h3 className="font-semibold mb-4">Tuỳ chọn cấu hình</h3>
+        <h3 className="font-semibold mb-4">Configuration Options</h3>
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-gray-500 border-b">
               <th className="pb-2">Option</th>
               <th className="pb-2">Type</th>
-              <th className="pb-2">Mô tả</th>
+              <th className="pb-2">Description</th>
             </tr>
           </thead>
           <tbody className="text-gray-700">
             <tr className="border-b border-gray-50">
               <td className="py-2 font-mono text-xs">token</td>
               <td className="py-2">string</td>
-              <td className="py-2">Token xác thực site (bắt buộc)</td>
+              <td className="py-2">Site authentication token (required)</td>
             </tr>
             <tr className="border-b border-gray-50">
               <td className="py-2 font-mono text-xs">serverUrl</td>
               <td className="py-2">string</td>
-              <td className="py-2">URL backend server</td>
+              <td className="py-2">Backend server URL</td>
             </tr>
             <tr className="border-b border-gray-50">
               <td className="py-2 font-mono text-xs">primaryColor</td>
               <td className="py-2">string</td>
-              <td className="py-2">Màu chủ đạo (hex)</td>
+              <td className="py-2">Primary theme color (hex)</td>
             </tr>
             <tr className="border-b border-gray-50">
               <td className="py-2 font-mono text-xs">greeting</td>
               <td className="py-2">string</td>
-              <td className="py-2">Lời chào khi mở chat</td>
+              <td className="py-2">Welcome message when chat opens</td>
             </tr>
             <tr>
               <td className="py-2 font-mono text-xs">position</td>
               <td className="py-2">string</td>
-              <td className="py-2">"bottom-right" hoặc "bottom-left"</td>
+              <td className="py-2">"bottom-right" or "bottom-left"</td>
             </tr>
           </tbody>
         </table>

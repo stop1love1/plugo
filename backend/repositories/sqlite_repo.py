@@ -8,13 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from repositories.base import (
     BaseSiteRepo, BaseKnowledgeRepo, BaseToolRepo,
-    BaseChatSessionRepo, BaseCrawlJobRepo,
+    BaseChatSessionRepo, BaseCrawlJobRepo, BaseUserRepo,
 )
 from models.site import Site
 from models.knowledge import KnowledgeChunk
 from models.tool import Tool
 from models.chat import ChatSession
 from models.crawl import CrawlJob
+from models.user import User
 
 
 def _site_to_dict(s: Site) -> dict:
@@ -286,3 +287,37 @@ class SQLiteCrawlJobRepo(BaseCrawlJobRepo):
             setattr(job, k, v)
         await self.db.commit()
         return True
+
+
+# --- User ---
+def _user_to_dict(u: User) -> dict:
+    return {
+        "id": u.id, "username": u.username,
+        "password_hash": u.password_hash, "role": u.role,
+        "created_at": u.created_at.isoformat() if u.created_at else None,
+    }
+
+
+class SQLiteUserRepo(BaseUserRepo):
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def create(self, data: dict) -> dict:
+        user = User(**data)
+        self.db.add(user)
+        await self.db.commit()
+        await self.db.refresh(user)
+        return _user_to_dict(user)
+
+    async def get_by_id(self, user_id: str) -> Optional[dict]:
+        user = await self.db.get(User, user_id)
+        return _user_to_dict(user) if user else None
+
+    async def get_by_username(self, username: str) -> Optional[dict]:
+        result = await self.db.execute(select(User).where(User.username == username))
+        user = result.scalar_one_or_none()
+        return _user_to_dict(user) if user else None
+
+    async def count(self) -> int:
+        result = await self.db.execute(select(func.count()).select_from(User))
+        return result.scalar() or 0

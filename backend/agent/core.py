@@ -6,24 +6,41 @@ from agent.rag import rag_engine
 from agent.tools import tool_executor
 
 
-SYSTEM_PROMPT_TEMPLATE = """Bạn là trợ lý AI cho website "{site_name}" ({site_url}).
-Nhiệm vụ của bạn là giúp người dùng tìm thông tin và thực hiện các thao tác trên website.
+SYSTEM_PROMPT_TEMPLATE = """You are an AI assistant for the website "{site_name}" ({site_url}).
 
-Quy tắc:
-- Trả lời bằng ngôn ngữ mà người dùng sử dụng
-- Chỉ sử dụng thông tin từ knowledge base được cung cấp
-- Nếu không biết, hãy nói rõ và gợi ý cách tìm thêm thông tin
-- Trả lời ngắn gọn, dễ hiểu
-- Khi cần thực hiện action, hãy giải thích trước và xin xác nhận
+## Your Role
+You operate in two modes:
+
+### 1. Knowledge Mode (Guidance)
+Based on content crawled from the website, you help users by:
+- Answering questions about the website, products, and services
+- Providing step-by-step instructions for using the website
+- Delivering accurate information from the knowledge base
+- If no relevant information is found, clearly state so and suggest alternatives
+
+### 2. Action Mode (Execute on behalf)
+When API tools are available, you perform actions for the user:
+- Search products, place orders, register accounts
+- Fill forms, look up information
+- ALWAYS explain the action before executing it
+- ALWAYS ask for confirmation before performing critical actions
+
+## Rules
+- Respond in the same language the user is using
+- Prioritize answering from the knowledge base first
+- If a suitable tool exists, suggest performing the action
+- Keep responses concise and friendly
 
 {context_section}
 
 {knowledge_section}
+
+{tools_section}
 """
 
 
 class ChatAgent:
-    """Main chat agent that orchestrates RAG, tools, and LLM."""
+    """Main chat agent — supports two modes: Knowledge (guidance) and Action (execute on behalf)."""
 
     def __init__(
         self,
@@ -43,14 +60,19 @@ class ChatAgent:
         self,
         query: str,
         page_context: Optional[dict] = None,
-    ) -> str:
+        repos=None,
+    ) -> tuple[str, list[dict]]:
+        """Build system prompt and return (prompt, tools)."""
+
+        # --- Page context ---
         context_section = ""
         if page_context:
-            context_section = f"""Người dùng đang xem trang:
+            context_section = f"""## Current Page
 - URL: {page_context.get('url', 'N/A')}
-- Tiêu đề: {page_context.get('title', 'N/A')}
-- Nội dung: {page_context.get('pageText', '')[:1500]}"""
+- Title: {page_context.get('title', 'N/A')}
+- Page content: {page_context.get('pageText', '')[:1500]}"""
 
+        # --- Knowledge (from crawl) ---
         knowledge_section = ""
         try:
             embedding_provider = get_llm_provider("openai")
@@ -66,18 +88,39 @@ class ChatAgent:
                         f"[{i+1}] {title} ({source})\n{chunk['content']}"
                     )
                 knowledge_section = (
-                    "Thông tin từ knowledge base:\n\n"
+                    "## Knowledge Base (crawled content)\n\n"
                     + "\n\n---\n\n".join(knowledge_parts)
                 )
+            else:
+                knowledge_section = "## Knowledge Base\n(No data available — direct the user to the main website page)"
         except Exception:
-            knowledge_section = "(Knowledge base chưa được thiết lập)"
+            knowledge_section = "## Knowledge Base\n(Not configured)"
 
-        return SYSTEM_PROMPT_TEMPLATE.format(
+        # --- Tools (API actions) ---
+        tools = []
+        tools_section = ""
+        if repos:
+            tools = await tool_executor.get_tools_for_site(repos, self.site_id)
+            if tools:
+                tool_names = [f"- {t['name']}: {t['description']}" for t in tools]
+                tools_section = (
+                    "## API Tools (you can perform actions on behalf of the user)\n"
+                    + "\n".join(tool_names)
+                    + "\n\nWhen the user needs to perform an action, use the appropriate tool. "
+                    + "Always explain before calling a tool."
+                )
+            else:
+                tools_section = "## API Tools\n(No tools configured — Knowledge/guidance mode only)"
+
+        prompt = SYSTEM_PROMPT_TEMPLATE.format(
             site_name=self.site_name,
             site_url=self.site_url,
             context_section=context_section,
             knowledge_section=knowledge_section,
+            tools_section=tools_section,
         )
+
+        return prompt, tools
 
     async def stream_response(
         self,
@@ -85,14 +128,10 @@ class ChatAgent:
         page_context: Optional[dict] = None,
         repos=None,
     ) -> AsyncGenerator[str, None]:
-        """Process a user message and stream the response."""
+        """Process user message → stream response."""
         self.messages.append({"role": "user", "content": message})
 
-        system_prompt = await self._build_system_prompt(message, page_context)
-
-        tools = []
-        if repos:
-            tools = await tool_executor.get_tools_for_site(repos, self.site_id)
+        system_prompt, tools = await self._build_system_prompt(message, page_context, repos)
 
         full_response = ""
         async for token in self.provider.stream(
@@ -111,13 +150,9 @@ class ChatAgent:
         page_context: Optional[dict] = None,
         repos=None,
     ) -> str:
-        """Process a user message and return the full response."""
+        """Process user message → full response with tool calling."""
         self.messages.append({"role": "user", "content": message})
-        system_prompt = await self._build_system_prompt(message, page_context)
-
-        tools = []
-        if repos:
-            tools = await tool_executor.get_tools_for_site(repos, self.site_id)
+        system_prompt, tools = await self._build_system_prompt(message, page_context, repos)
 
         result = await self.provider.chat(
             messages=self.messages,
@@ -125,7 +160,11 @@ class ChatAgent:
             tools=tools if tools else None,
         )
 
-        if result.get("tool_calls"):
+        # Handle tool calls (Action mode)
+        max_tool_rounds = 3  # Prevent infinite loops
+        round_count = 0
+        while result.get("tool_calls") and round_count < max_tool_rounds:
+            round_count += 1
             for tc in result["tool_calls"]:
                 tool_meta = next(
                     (t["_meta"] for t in tools if t["name"] == tc["name"]), None
@@ -136,17 +175,18 @@ class ChatAgent:
                     )
                     self.messages.append({
                         "role": "assistant",
-                        "content": f"Calling tool: {tc['name']}",
+                        "content": f"Executing: {tc['name']}({json.dumps(tc['arguments'], ensure_ascii=False)})",
                     })
                     self.messages.append({
                         "role": "user",
-                        "content": f"Tool result: {json.dumps(tool_result, ensure_ascii=False)}",
+                        "content": f"Tool result {tc['name']}: {json.dumps(tool_result, ensure_ascii=False)}",
                     })
-                    final = await self.provider.chat(
-                        messages=self.messages,
-                        system_prompt=system_prompt,
-                    )
-                    result = final
+
+            result = await self.provider.chat(
+                messages=self.messages,
+                system_prompt=system_prompt,
+                tools=tools if tools else None,
+            )
 
         self.messages.append({"role": "assistant", "content": result["content"]})
         return result["content"]

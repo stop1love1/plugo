@@ -14,8 +14,8 @@ from config import settings
 class WebCrawler:
     """Crawls websites, extracts text, chunks, and embeds content.
 
-    Supports graceful stop: khi admin tắt crawl, crawler dừng lại
-    nhưng vẫn lưu toàn bộ data đã crawl được vào DB.
+    Supports graceful stop: when an admin stops the crawl, the crawler
+    halts but still persists all data collected so far to the database.
     """
 
     def __init__(self, max_pages: int = 50, delay: float = 1.0):
@@ -25,7 +25,7 @@ class WebCrawler:
         self._stopped = False
 
     def stop(self):
-        """Gọi từ bên ngoài để dừng crawl. Data đã crawl vẫn được lưu."""
+        """Signal the crawler to stop. Data already crawled will be persisted."""
         self._stopped = True
 
     async def crawl_site(
@@ -50,7 +50,7 @@ class WebCrawler:
                 headers={"User-Agent": "PlugoBot/1.0 (+https://github.com/stop1love1/plugo)"},
             ) as client:
                 while queue and len(self.visited) < self.max_pages:
-                    # Check stop signal — lưu data đã crawl trước khi dừng
+                    # Check stop signal — persist crawled data before stopping
                     if self._stopped:
                         break
 
@@ -100,7 +100,7 @@ class WebCrawler:
                         await repos.crawl_jobs.update(job_id, {"error_log": error_log})
                         continue
 
-            # Luôn lưu data đã crawl, dù stopped hay hoàn thành
+            # Always persist crawled data, whether stopped or completed
             if all_chunks:
                 await self._embed_and_store(site_id, all_chunks, repos)
 

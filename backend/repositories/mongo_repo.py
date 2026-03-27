@@ -7,7 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from repositories.base import (
     BaseSiteRepo, BaseKnowledgeRepo, BaseToolRepo,
-    BaseChatSessionRepo, BaseCrawlJobRepo,
+    BaseChatSessionRepo, BaseCrawlJobRepo, BaseUserRepo,
 )
 
 
@@ -262,3 +262,31 @@ class MongoCrawlJobRepo(BaseCrawlJobRepo):
     async def update(self, job_id: str, data: dict) -> bool:
         result = await self.col.update_one({"_id": job_id}, {"$set": data})
         return result.modified_count > 0
+
+
+# --- User ---
+class MongoUserRepo(BaseUserRepo):
+    def __init__(self, db: AsyncIOMotorDatabase):
+        self.col = db["users"]
+
+    async def create(self, data: dict) -> dict:
+        doc = {
+            "_id": data.get("id", str(uuid.uuid4())),
+            "username": data["username"],
+            "password_hash": data["password_hash"],
+            "role": data.get("role", "admin"),
+            "created_at": datetime.utcnow(),
+        }
+        await self.col.insert_one(doc)
+        return _clean_doc(doc)
+
+    async def get_by_id(self, user_id: str) -> Optional[dict]:
+        doc = await self.col.find_one({"_id": user_id})
+        return _clean_doc(doc) if doc else None
+
+    async def get_by_username(self, username: str) -> Optional[dict]:
+        doc = await self.col.find_one({"username": username})
+        return _clean_doc(doc) if doc else None
+
+    async def count(self) -> int:
+        return await self.col.count_documents({})

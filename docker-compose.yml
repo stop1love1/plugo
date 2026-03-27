@@ -1,50 +1,90 @@
 version: "3.8"
 
+# ============================================
+# Plugo — Run everything with one command:
+#   docker compose up --build
+#
+# Services:
+#   - backend:   FastAPI (port 8000)
+#   - dashboard: React/Vite (port 3000)
+#   - widget:    Build widget.js → shared volume
+#   - mongodb:   MongoDB 7 (port 27017)
+# ============================================
+
 services:
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    ports:
-      - "${BACKEND_PORT:-8000}:8000"
-    volumes:
-      - ./backend:/app
-      - backend_data:/app/data
-    env_file:
-      - .env
-    depends_on:
-      - mongodb
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
 
-  dashboard:
-    build:
-      context: ./dashboard
-      dockerfile: Dockerfile
-    ports:
-      - "${DASHBOARD_PORT:-3000}:3000"
-    depends_on:
-      - backend
-    environment:
-      - VITE_API_URL=http://backend:8000
-    restart: unless-stopped
-
+  # --- MongoDB ---
   mongodb:
     image: mongo:7
+    container_name: plugo-mongodb
     ports:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
     restart: unless-stopped
-    # Uncomment below to enable authentication:
-    # environment:
-    #   MONGO_INITDB_ROOT_USERNAME: plugo
-    #   MONGO_INITDB_ROOT_PASSWORD: plugo_secret
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- Widget Builder ---
+  # Builds widget.js and copies it to a shared volume for the backend to serve
+  widget:
+    build:
+      context: ./widget
+      dockerfile: Dockerfile
+    container_name: plugo-widget
+    volumes:
+      - widget_dist:/app/dist
+
+  # --- Backend (FastAPI) ---
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: plugo-backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./backend:/app
+      - backend_data:/app/data
+      - widget_dist:/app/static_widget    # Widget JS from builder
+    env_file:
+      - .env
+    environment:
+      - DATABASE_PROVIDER=${DATABASE_PROVIDER:-mongodb}
+      - MONGODB_URL=mongodb://mongodb:27017
+      - MONGODB_DATABASE=plugo
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      widget:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # --- Dashboard (React + Vite) ---
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: plugo-dashboard
+    ports:
+      - "${DASHBOARD_PORT:-3000}:3000"
+    environment:
+      - VITE_API_URL=http://localhost:${BACKEND_PORT:-8000}
+      - VITE_BACKEND_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
-  backend_data:
   mongo_data:
+  backend_data:
+  widget_dist:

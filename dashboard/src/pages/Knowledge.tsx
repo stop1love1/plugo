@@ -64,44 +64,44 @@ export default function Knowledge() {
             onClick={() => setShowAdd(true)}
             className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700"
           >
-            <Plus className="w-4 h-4" /> Thêm thủ công
+            <Plus className="w-4 h-4" /> Add Manually
           </button>
         </div>
       </div>
 
       {showAdd && (
         <form onSubmit={handleAddManual} className="bg-white p-6 rounded-xl border border-gray-200 mb-6">
-          <h3 className="font-semibold mb-4">Thêm Knowledge mới</h3>
+          <h3 className="font-semibold mb-4">Add New Knowledge</h3>
           <div className="space-y-4">
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Tiêu đề"
+              placeholder="Title"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
             />
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder="Nội dung..."
+              placeholder="Content..."
               rows={5}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
             />
             <div className="flex gap-3">
               <button type="submit" disabled={addMutation.isPending} className="bg-primary-600 text-white px-4 py-2 rounded-lg">
-                {addMutation.isPending ? "Đang lưu..." : "Lưu"}
+                {addMutation.isPending ? "Saving..." : "Save"}
               </button>
-              <button type="button" onClick={() => setShowAdd(false)} className="text-gray-500 px-4 py-2">Huỷ</button>
+              <button type="button" onClick={() => setShowAdd(false)} className="text-gray-500 px-4 py-2">Cancel</button>
             </div>
           </div>
         </form>
       )}
 
       {isLoading ? (
-        <div className="text-gray-400">Đang tải...</div>
+        <div className="text-gray-400">Loading...</div>
       ) : !data?.chunks?.length ? (
         <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
           <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500">Chưa có dữ liệu. Hãy crawl website hoặc thêm thủ công.</p>
+          <p className="text-gray-500">No data yet. Crawl your website or add content manually.</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -134,17 +134,17 @@ export default function Knowledge() {
                 disabled={page === 1}
                 className="px-3 py-1 rounded border text-sm disabled:opacity-50"
               >
-                Trước
+                Previous
               </button>
               <span className="px-3 py-1 text-sm text-gray-500">
-                Trang {page} / {Math.ceil(data.total / data.per_page)}
+                Page {page} / {Math.ceil(data.total / data.per_page)}
               </span>
               <button
                 onClick={() => setPage((p) => p + 1)}
                 disabled={page >= Math.ceil(data.total / data.per_page)}
                 className="px-3 py-1 rounded border text-sm disabled:opacity-50"
               >
-                Sau
+                Next
               </button>
             </div>
           )}

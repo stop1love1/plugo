@@ -1,0 +1,20 @@
+{
+  "name": "plugo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Embeddable AI Chat Widget",
+  "scripts": {
+    "install:all": "npm install && cd dashboard && npm install && cd ../widget && npm install",
+    "dev": "concurrently -n backend,dashboard,widget -c blue,green,yellow \"npm run dev:backend\" \"npm run dev:dashboard\" \"npm run dev:widget\"",
+    "dev:backend": "cd backend && ../.venv/Scripts/python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000",
+    "dev:dashboard": "cd dashboard && npm run dev",
+    "dev:widget": "cd widget && npm run dev",
+    "build": "cd widget && npm run build && cd ../dashboard && npm run build",
+    "lint": "cd dashboard && npm run lint && cd ../widget && npm run lint",
+    "format": "cd dashboard && npm run format && cd ../widget && npm run format",
+    "test": "cd dashboard && npm run test && cd ../widget && npm run test"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

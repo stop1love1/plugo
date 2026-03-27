@@ -63,20 +63,20 @@ export default function Settings() {
   return (
     <div className="max-w-2xl">
       <h1 className="text-2xl font-bold text-gray-900 mb-2">Settings</h1>
-      <p className="text-gray-500 mb-8">Cấu hình site và widget</p>
+      <p className="text-gray-500 mb-8">Configure your site and widget</p>
 
       <form onSubmit={handleSave} className="space-y-6">
         {/* General */}
         <div className="bg-white p-6 rounded-xl border border-gray-200">
-          <h3 className="font-semibold mb-4">Thông tin chung</h3>
+          <h3 className="font-semibold mb-4">General</h3>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tên website</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Website Name</label>
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
                 className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Domain whitelist (comma-separated)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Domain Whitelist (comma-separated)</label>
               <input value={form.allowed_domains} onChange={(e) => setForm({ ...form, allowed_domains: e.target.value })}
                 placeholder="example.com, app.example.com"
                 className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
@@ -121,7 +121,7 @@ export default function Settings() {
           <div className="space-y-4">
             <div className="flex gap-4">
               <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Màu chủ đạo</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Primary Color</label>
                 <div className="flex items-center gap-2">
                   <input type="color" value={form.primary_color}
                     onChange={(e) => setForm({ ...form, primary_color: e.target.value })}
@@ -132,16 +132,16 @@ export default function Settings() {
                 </div>
               </div>
               <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Vị trí</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Position</label>
                 <select value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })}
                   className="w-full border rounded-lg px-3 py-2 outline-none">
-                  <option value="bottom-right">Dưới phải</option>
-                  <option value="bottom-left">Dưới trái</option>
+                  <option value="bottom-right">Bottom Right</option>
+                  <option value="bottom-left">Bottom Left</option>
                 </select>
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Lời chào</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Greeting Message</label>
               <input value={form.greeting} onChange={(e) => setForm({ ...form, greeting: e.target.value })}
                 className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
             </div>
@@ -151,7 +151,7 @@ export default function Settings() {
         <button type="submit" disabled={mutation.isPending}
           className="flex items-center gap-2 bg-primary-600 text-white px-6 py-2.5 rounded-lg hover:bg-primary-700 disabled:opacity-50">
           {saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-          {saved ? "Đã lưu!" : mutation.isPending ? "Đang lưu..." : "Lưu thay đổi"}
+          {saved ? "Saved!" : mutation.isPending ? "Saving..." : "Save Changes"}
         </button>
       </form>
     </div>

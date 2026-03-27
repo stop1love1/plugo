@@ -68,22 +68,22 @@ export default function Tools() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">API Tools</h1>
-          <p className="text-gray-500 mt-1">Cho bot gọi API website của bạn</p>
+          <p className="text-gray-500 mt-1">Let the bot call your website's APIs</p>
         </div>
         <button
           onClick={() => setShowAdd(true)}
           className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700"
         >
-          <Plus className="w-4 h-4" /> Thêm Tool
+          <Plus className="w-4 h-4" /> Add Tool
         </button>
       </div>
 
       {showAdd && (
         <form onSubmit={handleCreate} className="bg-white p-6 rounded-xl border border-gray-200 mb-6">
-          <h3 className="font-semibold mb-4">Thêm API Tool</h3>
+          <h3 className="font-semibold mb-4">Add API Tool</h3>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tên tool</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tool Name</label>
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
                 placeholder="search_products" className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
             </div>
@@ -95,9 +95,9 @@ export default function Tools() {
               </select>
             </div>
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Mô tả (bot dùng để quyết định khi nào gọi)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description (helps the bot decide when to call this tool)</label>
               <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
-                placeholder="Tìm sản phẩm theo tên hoặc danh mục" className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+                placeholder="Search products by name or category" className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
             </div>
             <div className="col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">URL</label>
@@ -108,7 +108,7 @@ export default function Tools() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Auth Type</label>
               <select value={form.auth_type} onChange={(e) => setForm({ ...form, auth_type: e.target.value })}
                 className="w-full border rounded-lg px-3 py-2 outline-none">
-                <option value="none">Không</option><option value="bearer">Bearer Token</option>
+                <option value="none">None</option><option value="bearer">Bearer Token</option>
                 <option value="api_key">API Key</option><option value="basic">Basic Auth</option>
               </select>
             </div>
@@ -126,19 +126,19 @@ export default function Tools() {
           </div>
           <div className="flex gap-3 mt-4">
             <button type="submit" disabled={createMutation.isPending} className="bg-primary-600 text-white px-4 py-2 rounded-lg">
-              {createMutation.isPending ? "Đang lưu..." : "Lưu Tool"}
+              {createMutation.isPending ? "Saving..." : "Save Tool"}
             </button>
-            <button type="button" onClick={() => setShowAdd(false)} className="text-gray-500 px-4 py-2">Huỷ</button>
+            <button type="button" onClick={() => setShowAdd(false)} className="text-gray-500 px-4 py-2">Cancel</button>
           </div>
         </form>
       )}
 
       {isLoading ? (
-        <div className="text-gray-400">Đang tải...</div>
+        <div className="text-gray-400">Loading...</div>
       ) : tools.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
           <Wrench className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500">Chưa có tool nào. Thêm API tool để bot có thể thực hiện action.</p>
+          <p className="text-gray-500">No tools yet. Add an API tool to enable the bot to perform actions.</p>
         </div>
       ) : (
         <div className="space-y-3">

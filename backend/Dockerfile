@@ -17,6 +17,8 @@ COPY . .
 # Create data directory
 RUN mkdir -p /app/data
 
+# Widget static files are mounted from the widget_dist volume at /app/static_widget
+
 EXPOSE 8000
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

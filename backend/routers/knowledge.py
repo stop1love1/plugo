@@ -1,21 +1,27 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from repositories import get_repos, Repositories
 from agent.rag import rag_engine
 from providers.factory import get_llm_provider
 from config import settings
+from auth import get_current_user, TokenData
+from logging_config import logger
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
+
+MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5MB
+MAX_PER_PAGE = 100
 
 
 @router.get("")
 async def list_knowledge(
     site_id: str,
-    page: int = 1,
-    per_page: int = 20,
+    page: int = Field(default=1, ge=1),
+    per_page: int = Field(default=20, ge=1, le=MAX_PER_PAGE),
     repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
 ):
     data = await repos.knowledge.list_by_site(site_id, page, per_page)
     # Truncate content for list view
@@ -26,7 +32,11 @@ async def list_knowledge(
 
 
 @router.get("/{chunk_id}")
-async def get_chunk(chunk_id: str, repos: Repositories = Depends(get_repos)):
+async def get_chunk(
+    chunk_id: str,
+    repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
+):
     chunk = await repos.knowledge.get_by_id(chunk_id)
     if not chunk:
         raise HTTPException(status_code=404, detail="Chunk not found")
@@ -34,7 +44,11 @@ async def get_chunk(chunk_id: str, repos: Repositories = Depends(get_repos)):
 
 
 @router.delete("/{chunk_id}")
-async def delete_chunk(chunk_id: str, repos: Repositories = Depends(get_repos)):
+async def delete_chunk(
+    chunk_id: str,
+    repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
+):
     chunk = await repos.knowledge.get_by_id(chunk_id)
     if not chunk:
         raise HTTPException(status_code=404, detail="Chunk not found")
@@ -46,14 +60,19 @@ async def delete_chunk(chunk_id: str, repos: Repositories = Depends(get_repos)):
 
 class ManualChunkCreate(BaseModel):
     site_id: str
-    title: str
-    content: str
+    title: str = Field(min_length=1, max_length=500)
+    content: str = Field(min_length=1, max_length=50000)
     source_url: Optional[str] = None
 
 
 @router.post("/manual")
-async def add_manual_chunk(data: ManualChunkCreate, repos: Repositories = Depends(get_repos)):
+async def add_manual_chunk(
+    data: ManualChunkCreate,
+    repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
+):
     chunk_id = str(uuid.uuid4())
+    embedding_ok = False
 
     try:
         embed_provider = get_llm_provider(settings.embedding_provider, settings.embedding_model)
@@ -63,8 +82,9 @@ async def add_manual_chunk(data: ManualChunkCreate, repos: Repositories = Depend
             [{"id": chunk_id, "content": data.content, "source_url": data.source_url or "", "title": data.title, "chunk_index": 0}],
             embeddings,
         )
-    except Exception:
-        pass
+        embedding_ok = True
+    except Exception as e:
+        logger.warning("Failed to generate embeddings for manual chunk", error=str(e), chunk_id=chunk_id)
 
     await repos.knowledge.create({
         "id": chunk_id,
@@ -75,7 +95,11 @@ async def add_manual_chunk(data: ManualChunkCreate, repos: Repositories = Depend
         "content": data.content,
         "embedding_id": chunk_id,
     })
-    return {"id": chunk_id, "message": "Chunk added"}
+    return {
+        "id": chunk_id,
+        "message": "Chunk added",
+        "embedding": "ok" if embedding_ok else "failed — chunk saved but may not appear in search",
+    }
 
 
 @router.post("/upload")
@@ -83,11 +107,15 @@ async def upload_file(
     site_id: str,
     file: UploadFile = File(...),
     repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
 ):
+    # Validate file size
     content = await file.read()
-    text = ""
+    if len(content) > MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=400, detail=f"File too large. Maximum size: {MAX_UPLOAD_SIZE // (1024*1024)}MB")
 
-    if file.filename.endswith(".txt") or file.filename.endswith(".md"):
+    text = ""
+    if file.filename and (file.filename.endswith(".txt") or file.filename.endswith(".md")):
         text = content.decode("utf-8", errors="ignore")
     else:
         raise HTTPException(status_code=400, detail="Supported formats: .txt, .md")
@@ -96,24 +124,33 @@ async def upload_file(
         raise HTTPException(status_code=400, detail="File is empty")
 
     chunk_id = str(uuid.uuid4())
+    truncated_text = text[:10000]
+
     await repos.knowledge.create({
         "id": chunk_id,
         "site_id": site_id,
         "source_type": "upload",
         "title": file.filename,
-        "content": text[:10000],
+        "content": truncated_text,
         "embedding_id": chunk_id,
     })
 
+    embedding_ok = False
     try:
         embed_provider = get_llm_provider(settings.embedding_provider, settings.embedding_model)
-        embeddings = await embed_provider.embed([text[:10000]])
+        embeddings = await embed_provider.embed([truncated_text])
         await rag_engine.add_chunks(
             site_id,
-            [{"id": chunk_id, "content": text[:10000], "source_url": "", "title": file.filename, "chunk_index": 0}],
+            [{"id": chunk_id, "content": truncated_text, "source_url": "", "title": file.filename, "chunk_index": 0}],
             embeddings,
         )
-    except Exception:
-        pass
+        embedding_ok = True
+    except Exception as e:
+        logger.warning("Failed to generate embeddings for uploaded file", error=str(e), filename=file.filename)
 
-    return {"id": chunk_id, "filename": file.filename, "message": "File uploaded"}
+    return {
+        "id": chunk_id,
+        "filename": file.filename,
+        "message": "File uploaded",
+        "embedding": "ok" if embedding_ok else "failed — file saved but may not appear in search",
+    }

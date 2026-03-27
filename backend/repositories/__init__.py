@@ -9,7 +9,7 @@ Usage in routes:
 
 from repositories.base import (
     BaseSiteRepo, BaseKnowledgeRepo, BaseToolRepo,
-    BaseChatSessionRepo, BaseCrawlJobRepo,
+    BaseChatSessionRepo, BaseCrawlJobRepo, BaseUserRepo,
 )
 
 
@@ -22,12 +22,14 @@ class Repositories:
         tools: BaseToolRepo,
         chat_sessions: BaseChatSessionRepo,
         crawl_jobs: BaseCrawlJobRepo,
+        users: BaseUserRepo,
     ):
         self.sites = sites
         self.knowledge = knowledge
         self.tools = tools
         self.chat_sessions = chat_sessions
         self.crawl_jobs = crawl_jobs
+        self.users = users
 
 
 # --- MongoDB connection (lazy init) ---
@@ -64,7 +66,7 @@ async def get_repos() -> Repositories:
     if settings.database_provider == "mongodb":
         from repositories.mongo_repo import (
             MongoSiteRepo, MongoKnowledgeRepo, MongoToolRepo,
-            MongoChatSessionRepo, MongoCrawlJobRepo,
+            MongoChatSessionRepo, MongoCrawlJobRepo, MongoUserRepo,
         )
         db = _get_mongo_db()
         return Repositories(
@@ -73,12 +75,13 @@ async def get_repos() -> Repositories:
             tools=MongoToolRepo(db),
             chat_sessions=MongoChatSessionRepo(db),
             crawl_jobs=MongoCrawlJobRepo(db),
+            users=MongoUserRepo(db),
         )
     else:
         # Default: SQLite
         from repositories.sqlite_repo import (
             SQLiteSiteRepo, SQLiteKnowledgeRepo, SQLiteToolRepo,
-            SQLiteChatSessionRepo, SQLiteCrawlJobRepo,
+            SQLiteChatSessionRepo, SQLiteCrawlJobRepo, SQLiteUserRepo,
         )
         session_factory = _get_sqlite_session()
         db = session_factory()
@@ -88,6 +91,7 @@ async def get_repos() -> Repositories:
             tools=SQLiteToolRepo(db),
             chat_sessions=SQLiteChatSessionRepo(db),
             crawl_jobs=SQLiteCrawlJobRepo(db),
+            users=SQLiteUserRepo(db),
         )
 
 

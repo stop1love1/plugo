@@ -51,7 +51,7 @@ export default function Layout() {
 
         {!siteId && (
           <div className="flex-1 p-4 text-sm text-gray-400">
-            Chọn một site để bắt đầu
+            Select a site to get started
           </div>
         )}
 

@@ -18,6 +18,7 @@ data/
 # Environment
 .env
 .env.local
+.env.production
 
 # IDE
 .vscode/
@@ -31,3 +32,12 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Testing & Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+coverage/
+
+# Ruff cache
+.ruff_cache/
