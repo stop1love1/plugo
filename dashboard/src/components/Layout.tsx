@@ -1,0 +1,69 @@
+import { Outlet, Link, useParams, useLocation } from "react-router-dom";
+import { MessageSquare, Database, Wrench, Code, Settings, LayoutDashboard, MessageCircle } from "lucide-react";
+
+const sidebarLinks = [
+  { to: "setup", label: "Crawl & Setup", icon: LayoutDashboard },
+  { to: "knowledge", label: "Knowledge Base", icon: Database },
+  { to: "tools", label: "API Tools", icon: Wrench },
+  { to: "embed", label: "Embed Code", icon: Code },
+  { to: "chat-log", label: "Chat Log", icon: MessageCircle },
+  { to: "settings", label: "Settings", icon: Settings },
+];
+
+export default function Layout() {
+  const { siteId } = useParams();
+  const location = useLocation();
+  const isHome = location.pathname === "/";
+
+  return (
+    <div className="min-h-screen flex">
+      {/* Sidebar */}
+      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
+        <div className="p-4 border-b border-gray-200">
+          <Link to="/" className="flex items-center gap-2 text-xl font-bold text-primary-600">
+            <MessageSquare className="w-6 h-6" />
+            Plugo
+          </Link>
+        </div>
+
+        {siteId && (
+          <nav className="flex-1 p-4 space-y-1">
+            {sidebarLinks.map(({ to, label, icon: Icon }) => {
+              const path = `/site/${siteId}/${to}`;
+              const isActive = location.pathname === path;
+              return (
+                <Link
+                  key={to}
+                  to={path}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                    isActive
+                      ? "bg-primary-50 text-primary-700 font-medium"
+                      : "text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {label}
+                </Link>
+              );
+            })}
+          </nav>
+        )}
+
+        {!siteId && (
+          <div className="flex-1 p-4 text-sm text-gray-400">
+            Chọn một site để bắt đầu
+          </div>
+        )}
+
+        <div className="p-4 border-t border-gray-200 text-xs text-gray-400">
+          Plugo v1.0 &middot; Open Source
+        </div>
+      </aside>
+
+      {/* Main content */}
+      <main className="flex-1 p-8 overflow-auto">
+        <Outlet />
+      </main>
+    </div>
+  );
+}

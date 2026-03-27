@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Plugo Demo - Embeddable AI Chat Widget">
+    <title>Plugo Demo - Website mẫu</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1a1a1a; }
+        .hero { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 80px 20px; text-align: center; }
+        .hero h1 { font-size: 3rem; margin-bottom: 16px; }
+        .hero p { font-size: 1.2rem; opacity: 0.9; max-width: 600px; margin: 0 auto; }
+        .content { max-width: 800px; margin: 0 auto; padding: 60px 20px; }
+        .content h2 { font-size: 1.8rem; margin-bottom: 16px; color: #1a1a1a; }
+        .content p { line-height: 1.7; color: #555; margin-bottom: 16px; }
+        .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 24px; margin: 40px 0; }
+        .feature { background: #f8f9fa; padding: 24px; border-radius: 12px; }
+        .feature h3 { margin-bottom: 8px; color: #6366f1; }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <h1>Plugo Demo</h1>
+        <p>Đây là website mẫu với Plugo chat widget. Nhấn vào bubble chat ở góc phải để thử!</p>
+    </div>
+
+    <div class="content">
+        <h2>Về Plugo</h2>
+        <p>Plugo là một embeddable AI chat widget cho phép bất kỳ website nào thêm trợ lý AI thông minh chỉ bằng 3 dòng code. Bot tự học nội dung website, hiểu context trang hiện tại và thực hiện action thực tế.</p>
+
+        <div class="features">
+            <div class="feature">
+                <h3>Tự động crawl</h3>
+                <p>Bot tự học toàn bộ nội dung website, không cần config thủ công.</p>
+            </div>
+            <div class="feature">
+                <h3>Multi-LLM</h3>
+                <p>Hỗ trợ Claude, GPT-4o, Gemini, Ollama. Tuỳ chọn theo nhu cầu.</p>
+            </div>
+            <div class="feature">
+                <h3>API Tools</h3>
+                <p>Bot gọi API website để thực hiện action: tìm kiếm, đặt hàng, đăng ký...</p>
+            </div>
+        </div>
+
+        <h2>Hướng dẫn sử dụng</h2>
+        <p>1. Tạo tài khoản tại Dashboard</p>
+        <p>2. Nhập URL website để crawl nội dung</p>
+        <p>3. Copy script tag và dán vào website</p>
+        <p>4. Widget chat tự động xuất hiện!</p>
+    </div>
+
+    <!-- Plugo Chat Widget -->
+    <script>
+        window.PlugoConfig = {
+            token: "DEMO_TOKEN",
+            serverUrl: "ws://localhost:8000",
+            primaryColor: "#6366f1",
+            greeting: "Xin chào! Tôi là trợ lý AI của Plugo. Bạn cần giúp gì?"
+        };
+    </script>
+    <script src="http://localhost:8000/static/widget.js" async></script>
+</body>
+</html>

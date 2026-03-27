@@ -1,0 +1,155 @@
+import { useState } from "react";
+import { useParams } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getKnowledge, deleteChunk, addManualChunk, uploadFile } from "../lib/api";
+import { Trash2, Plus, Upload, FileText } from "lucide-react";
+
+export default function Knowledge() {
+  const { siteId } = useParams<{ siteId: string }>();
+  const queryClient = useQueryClient();
+  const [page, setPage] = useState(1);
+  const [showAdd, setShowAdd] = useState(false);
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["knowledge", siteId, page],
+    queryFn: () => getKnowledge(siteId!, page),
+    enabled: !!siteId,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteChunk,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["knowledge", siteId] }),
+  });
+
+  const addMutation = useMutation({
+    mutationFn: addManualChunk,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["knowledge", siteId] });
+      setShowAdd(false);
+      setTitle("");
+      setContent("");
+    },
+  });
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !siteId) return;
+    await uploadFile(siteId, file);
+    queryClient.invalidateQueries({ queryKey: ["knowledge", siteId] });
+  };
+
+  const handleAddManual = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title || !content || !siteId) return;
+    addMutation.mutate({ site_id: siteId, title, content });
+  };
+
+  return (
+    <div className="max-w-4xl">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Knowledge Base</h1>
+          <p className="text-gray-500 mt-1">
+            {data?.total || 0} chunks
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <label className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">
+            <Upload className="w-4 h-4" /> Upload File
+            <input type="file" accept=".txt,.md" onChange={handleUpload} className="hidden" />
+          </label>
+          <button
+            onClick={() => setShowAdd(true)}
+            className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700"
+          >
+            <Plus className="w-4 h-4" /> Thêm thủ công
+          </button>
+        </div>
+      </div>
+
+      {showAdd && (
+        <form onSubmit={handleAddManual} className="bg-white p-6 rounded-xl border border-gray-200 mb-6">
+          <h3 className="font-semibold mb-4">Thêm Knowledge mới</h3>
+          <div className="space-y-4">
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Tiêu đề"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Nội dung..."
+              rows={5}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <div className="flex gap-3">
+              <button type="submit" disabled={addMutation.isPending} className="bg-primary-600 text-white px-4 py-2 rounded-lg">
+                {addMutation.isPending ? "Đang lưu..." : "Lưu"}
+              </button>
+              <button type="button" onClick={() => setShowAdd(false)} className="text-gray-500 px-4 py-2">Huỷ</button>
+            </div>
+          </div>
+        </form>
+      )}
+
+      {isLoading ? (
+        <div className="text-gray-400">Đang tải...</div>
+      ) : !data?.chunks?.length ? (
+        <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
+          <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+          <p className="text-gray-500">Chưa có dữ liệu. Hãy crawl website hoặc thêm thủ công.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {data.chunks.map((chunk: any) => (
+            <div key={chunk.id} className="bg-white p-4 rounded-xl border border-gray-200">
+              <div className="flex items-start justify-between">
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-medium text-gray-900 truncate">{chunk.title || "Untitled"}</h4>
+                  <p className="text-sm text-gray-500 mt-1">{chunk.content}</p>
+                  <div className="flex gap-3 mt-2 text-xs text-gray-400">
+                    <span>{chunk.source_type}</span>
+                    {chunk.source_url && <span className="truncate max-w-xs">{chunk.source_url}</span>}
+                  </div>
+                </div>
+                <button
+                  onClick={() => deleteMutation.mutate(chunk.id)}
+                  className="text-gray-400 hover:text-red-500 p-1 ml-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {/* Pagination */}
+          {data.total > data.per_page && (
+            <div className="flex justify-center gap-2 pt-4">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3 py-1 rounded border text-sm disabled:opacity-50"
+              >
+                Trước
+              </button>
+              <span className="px-3 py-1 text-sm text-gray-500">
+                Trang {page} / {Math.ceil(data.total / data.per_page)}
+              </span>
+              <button
+                onClick={() => setPage((p) => p + 1)}
+                disabled={page >= Math.ceil(data.total / data.per_page)}
+                className="px-3 py-1 rounded border text-sm disabled:opacity-50"
+              >
+                Sau
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
