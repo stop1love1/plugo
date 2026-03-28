@@ -80,7 +80,7 @@ export default function Layout() {
       <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-200 flex flex-col transform transition-transform lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="p-4 border-b border-gray-200">
           <Link to="/" onClick={handleNavClick} className="flex items-center gap-2 text-xl font-bold text-primary-600">
-            <MessageSquare className="w-6 h-6" />
+            <img src="/src/assets/images/logo.png" alt="Plugo" className="w-8 h-8" />
             Plugo
           </Link>
         </div>

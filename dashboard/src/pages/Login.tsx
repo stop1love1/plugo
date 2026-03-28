@@ -64,7 +64,7 @@ export default function Login() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 text-2xl font-bold text-primary-600 mb-2">
-            <MessageSquare className="w-8 h-8" />
+            <img src="/src/assets/images/logo.png" alt="Plugo" className="w-10 h-10" />
             Plugo
           </div>
           <p className="text-gray-500">Sign in to your dashboard</p>
