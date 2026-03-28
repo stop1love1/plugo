@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from repositories.base import (
     BaseSiteRepo, BaseKnowledgeRepo, BaseToolRepo,
     BaseChatSessionRepo, BaseCrawlJobRepo, BaseUserRepo,
+    BaseVisitorMemoryRepo, BaseConversationSummaryRepo,
 )
 from models.site import Site
 from models.knowledge import KnowledgeChunk
@@ -16,6 +17,7 @@ from models.tool import Tool
 from models.chat import ChatSession
 from models.crawl import CrawlJob
 from models.user import User
+from models.memory import VisitorMemory, ConversationSummary
 
 
 def _site_to_dict(s: Site) -> dict:
@@ -24,6 +26,7 @@ def _site_to_dict(s: Site) -> dict:
         "llm_provider": s.llm_provider, "llm_model": s.llm_model,
         "primary_color": s.primary_color, "greeting": s.greeting,
         "position": s.position, "allowed_domains": s.allowed_domains or "",
+        "suggestions": s.suggestions or [],
         # Crawl management
         "crawl_enabled": s.crawl_enabled,
         "crawl_auto_interval": s.crawl_auto_interval,
@@ -74,6 +77,27 @@ def _job_to_dict(j: CrawlJob) -> dict:
         "pages_done": j.pages_done, "error_log": j.error_log,
         "started_at": j.started_at.isoformat() if j.started_at else None,
         "finished_at": j.finished_at.isoformat() if j.finished_at else None,
+    }
+
+
+def _memory_to_dict(m: VisitorMemory) -> dict:
+    return {
+        "id": m.id, "visitor_id": m.visitor_id, "site_id": m.site_id,
+        "category": m.category, "key": m.key, "value": m.value,
+        "confidence": m.confidence, "source_session_id": m.source_session_id,
+        "created_at": m.created_at.isoformat() if m.created_at else None,
+        "updated_at": m.updated_at.isoformat() if m.updated_at else None,
+    }
+
+
+def _summary_to_dict(s: ConversationSummary) -> dict:
+    return {
+        "id": s.id, "session_id": s.session_id, "site_id": s.site_id,
+        "summary_text": s.summary_text,
+        "message_count_summarized": s.message_count_summarized,
+        "total_message_count": s.total_message_count,
+        "created_at": s.created_at.isoformat() if s.created_at else None,
+        "updated_at": s.updated_at.isoformat() if s.updated_at else None,
     }
 
 
@@ -321,3 +345,123 @@ class SQLiteUserRepo(BaseUserRepo):
     async def count(self) -> int:
         result = await self.db.execute(select(func.count()).select_from(User))
         return result.scalar() or 0
+
+
+# --- Visitor Memory ---
+class SQLiteVisitorMemoryRepo(BaseVisitorMemoryRepo):
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def create(self, data: dict) -> dict:
+        memory = VisitorMemory(**data)
+        self.db.add(memory)
+        await self.db.commit()
+        return _memory_to_dict(memory)
+
+    async def get_by_id(self, memory_id: str) -> Optional[dict]:
+        result = await self.db.execute(select(VisitorMemory).where(VisitorMemory.id == memory_id))
+        m = result.scalar_one_or_none()
+        return _memory_to_dict(m) if m else None
+
+    async def list_by_visitor(self, visitor_id: str, site_id: str) -> list[dict]:
+        result = await self.db.execute(
+            select(VisitorMemory)
+            .where(VisitorMemory.visitor_id == visitor_id, VisitorMemory.site_id == site_id)
+            .order_by(VisitorMemory.updated_at.desc())
+        )
+        return [_memory_to_dict(m) for m in result.scalars().all()]
+
+    async def upsert(self, visitor_id: str, site_id: str, key: str, data: dict) -> dict:
+        result = await self.db.execute(
+            select(VisitorMemory).where(
+                VisitorMemory.visitor_id == visitor_id,
+                VisitorMemory.site_id == site_id,
+                VisitorMemory.key == key,
+            )
+        )
+        existing = result.scalar_one_or_none()
+        if existing:
+            for k, v in data.items():
+                if v is not None:
+                    setattr(existing, k, v)
+            existing.updated_at = datetime.utcnow()
+            await self.db.commit()
+            return _memory_to_dict(existing)
+        else:
+            memory = VisitorMemory(
+                visitor_id=visitor_id, site_id=site_id, key=key, **data
+            )
+            self.db.add(memory)
+            await self.db.commit()
+            return _memory_to_dict(memory)
+
+    async def delete(self, memory_id: str) -> bool:
+        result = await self.db.execute(select(VisitorMemory).where(VisitorMemory.id == memory_id))
+        m = result.scalar_one_or_none()
+        if m:
+            await self.db.delete(m)
+            await self.db.commit()
+            return True
+        return False
+
+    async def delete_by_visitor(self, visitor_id: str, site_id: str) -> int:
+        result = await self.db.execute(
+            select(VisitorMemory).where(
+                VisitorMemory.visitor_id == visitor_id,
+                VisitorMemory.site_id == site_id,
+            )
+        )
+        memories = result.scalars().all()
+        count = len(memories)
+        for m in memories:
+            await self.db.delete(m)
+        await self.db.commit()
+        return count
+
+
+# --- Conversation Summary ---
+class SQLiteConversationSummaryRepo(BaseConversationSummaryRepo):
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def create(self, data: dict) -> dict:
+        summary = ConversationSummary(**data)
+        self.db.add(summary)
+        await self.db.commit()
+        return _summary_to_dict(summary)
+
+    async def get_by_session(self, session_id: str) -> Optional[dict]:
+        result = await self.db.execute(
+            select(ConversationSummary).where(ConversationSummary.session_id == session_id)
+        )
+        s = result.scalar_one_or_none()
+        return _summary_to_dict(s) if s else None
+
+    async def upsert_by_session(self, session_id: str, data: dict) -> dict:
+        result = await self.db.execute(
+            select(ConversationSummary).where(ConversationSummary.session_id == session_id)
+        )
+        existing = result.scalar_one_or_none()
+        if existing:
+            for k, v in data.items():
+                if v is not None:
+                    setattr(existing, k, v)
+            existing.updated_at = datetime.utcnow()
+            await self.db.commit()
+            return _summary_to_dict(existing)
+        else:
+            summary = ConversationSummary(session_id=session_id, **data)
+            self.db.add(summary)
+            await self.db.commit()
+            return _summary_to_dict(summary)
+
+    async def delete(self, summary_id: str) -> bool:
+        result = await self.db.execute(
+            select(ConversationSummary).where(ConversationSummary.id == summary_id)
+        )
+        s = result.scalar_one_or_none()
+        if s:
+            await self.db.delete(s)
+            await self.db.commit()
+            return True
+        return False

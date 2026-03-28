@@ -1,0 +1,45 @@
+{
+  "llm": {
+    "provider": "claude",
+    "model": "claude-sonnet-4-20250514"
+  },
+  "ollama": {
+    "base_url": "http://localhost:11434",
+    "model": "llama3"
+  },
+  "embedding": {
+    "provider": "openai",
+    "model": "text-embedding-3-small",
+    "cache_size": 1000,
+    "cache_ttl": 3600
+  },
+  "database": {
+    "provider": "sqlite",
+    "url": "sqlite+aiosqlite:///./data/plugo.db",
+    "mongodb_url": "mongodb://localhost:27017",
+    "mongodb_database": "plugo"
+  },
+  "vector_store": {
+    "chroma_path": "./data/chroma"
+  },
+  "rag": {
+    "min_score": 0.3,
+    "max_chunks": 7
+  },
+  "server": {
+    "backend_port": 8000,
+    "cors_origins": [
+      "http://localhost:3000",
+      "http://localhost:5173"
+    ],
+    "widget_cdn_url": "http://localhost:8000/static/widget.js"
+  },
+  "auth": {
+    "enabled": true
+  },
+  "rate_limit": {
+    "default": "60/minute",
+    "chat": "30/minute",
+    "crawl": "5/minute"
+  }
+}

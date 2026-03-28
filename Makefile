@@ -2,9 +2,10 @@
 # Plugo — Development Commands
 # ============================================
 #
-# All dependencies are installed locally:
-#   - Python: .venv/ (project-local virtualenv)
-#   - Node.js: node_modules/ (per package)
+# Each app manages its own dependencies:
+#   - backend/  → Python (.venv/)
+#   - dashboard/ → pnpm (node_modules/)
+#   - widget/   → pnpm (node_modules/)
 #
 # Quick start:
 #   make setup    # One-time setup
@@ -36,18 +37,18 @@ help: ## Show this help message
 	@echo ""
 
 # ============================================================
-# Setup & Install (one-time)
+# Setup & Install
 # ============================================================
 
 setup: ## Full project setup (venv + all deps + env file)
 	@echo "==> Creating Python virtual environment..."
 	python -m venv .venv
-	@echo "==> Installing Python dependencies..."
+	@echo "==> Installing backend dependencies..."
 	$(PIP) install -r backend/requirements-dev.txt
-	@echo "==> Installing Node.js dependencies..."
-	npm install
-	cd dashboard && npm install
-	cd widget && npm install
+	@echo "==> Installing dashboard dependencies..."
+	cd dashboard && pnpm install
+	@echo "==> Installing widget dependencies..."
+	cd widget && pnpm install
 	@echo "==> Creating .env file..."
 	@test -f .env || cp .env.example .env
 	@echo ""
@@ -56,35 +57,33 @@ setup: ## Full project setup (venv + all deps + env file)
 
 install: ## Install all dependencies (assumes venv exists)
 	$(PIP) install -r backend/requirements.txt
-	npm install
-	cd dashboard && npm install
-	cd widget && npm install
+	cd dashboard && pnpm install
+	cd widget && pnpm install
 
 install-dev: ## Install all dependencies including dev tools
 	$(PIP) install -r backend/requirements-dev.txt
-	npm install
-	cd dashboard && npm install
-	cd widget && npm install
+	cd dashboard && pnpm install
+	cd widget && pnpm install
 	$(VENV_BIN)/pre-commit install
 
 # ============================================================
-# Development (single commands)
+# Development
 # ============================================================
 
 dev: ## Start all services (backend + dashboard + widget)
 	npx concurrently -n backend,dashboard,widget -c blue,green,yellow \
 		"cd backend && ../$(PYTHON) -m uvicorn main:app --reload --host 0.0.0.0 --port 8000" \
-		"cd dashboard && npm run dev" \
-		"cd widget && npm run dev"
+		"cd dashboard && pnpm dev" \
+		"cd widget && pnpm dev"
 
 dev-backend: ## Start backend only
 	cd backend && ../$(PYTHON) -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 dev-dashboard: ## Start dashboard only
-	cd dashboard && npm run dev
+	cd dashboard && pnpm dev
 
 dev-widget: ## Start widget dev server
-	cd widget && npm run dev
+	cd widget && pnpm dev
 
 # ============================================================
 # Docker
@@ -114,39 +113,39 @@ clean: ## Stop services and remove volumes (WARNING: deletes data)
 # ============================================================
 
 build: ## Build all production assets
-	cd widget && npm run build
-	cd dashboard && npm run build
+	cd widget && pnpm build
+	cd dashboard && pnpm build
 
 build-widget: ## Build widget only
-	cd widget && npm run build
+	cd widget && pnpm build
 
 # ============================================================
 # Code Quality
 # ============================================================
 
 lint: ## Run all linters
-	cd backend && ../$(VENV_BIN)/ruff check .
-	cd dashboard && npm run lint
-	cd widget && npm run lint
+	cd backend && ../$(VENV_BIN)/ruff check --config pyproject.toml .
+	cd dashboard && pnpm lint
+	cd widget && pnpm lint
 
 lint-fix: ## Run all linters with auto-fix
-	cd backend && ../$(VENV_BIN)/ruff check --fix .
-	cd dashboard && npm run lint:fix
-	cd widget && npm run lint:fix
+	cd backend && ../$(VENV_BIN)/ruff check --config pyproject.toml --fix .
+	cd dashboard && pnpm lint:fix
+	cd widget && pnpm lint:fix
 
 format: ## Format all code
-	cd backend && ../$(VENV_BIN)/ruff format .
-	cd dashboard && npm run format
-	cd widget && npm run format
+	cd backend && ../$(VENV_BIN)/ruff format --config pyproject.toml .
+	cd dashboard && pnpm format
+	cd widget && pnpm format
 
 format-check: ## Check formatting without changes
-	cd backend && ../$(VENV_BIN)/ruff format --check .
-	cd dashboard && npm run format:check
-	cd widget && npm run format:check
+	cd backend && ../$(VENV_BIN)/ruff format --config pyproject.toml --check .
+	cd dashboard && pnpm format:check
+	cd widget && pnpm format:check
 
 typecheck: ## Run type checking
-	cd dashboard && npm run typecheck
-	cd widget && npm run typecheck
+	cd dashboard && pnpm typecheck
+	cd widget && pnpm typecheck
 
 check: ## Run all checks (lint + format + typecheck)
 	@echo "==> Linting..."
@@ -163,8 +162,8 @@ check: ## Run all checks (lint + format + typecheck)
 
 test: ## Run all tests
 	cd backend && ../$(PYTHON) -m pytest tests/ -v
-	cd dashboard && npm run test
-	cd widget && npm run test
+	cd dashboard && pnpm test
+	cd widget && pnpm test
 
 test-backend: ## Run backend tests only
 	cd backend && ../$(PYTHON) -m pytest tests/ -v
@@ -173,10 +172,10 @@ test-backend-cov: ## Run backend tests with coverage report
 	cd backend && ../$(PYTHON) -m pytest tests/ --cov=. --cov-report=term-missing
 
 test-dashboard: ## Run dashboard tests only
-	cd dashboard && npm run test
+	cd dashboard && pnpm test
 
 test-widget: ## Run widget tests only
-	cd widget && npm run test
+	cd widget && pnpm test
 
 # ============================================================
 # Utilities
@@ -185,3 +184,6 @@ test-widget: ## Run widget tests only
 env: ## Create .env from example
 	cp .env.example .env
 	@echo "Created .env — please fill in your API keys"
+
+commit: ## AI-powered commit (uses Claude CLI)
+	node scripts/ai-commit.mjs --all

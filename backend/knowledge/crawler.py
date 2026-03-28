@@ -8,6 +8,7 @@ import httpx
 from bs4 import BeautifulSoup
 from agent.rag import rag_engine
 from providers.factory import get_llm_provider
+from knowledge.chunker import SemanticChunker
 from config import settings
 
 
@@ -23,6 +24,7 @@ class WebCrawler:
         self.delay = delay
         self.visited: set[str] = set()
         self._stopped = False
+        self.chunker = SemanticChunker()
 
     def stop(self):
         """Signal the crawler to stop. Data already crawled will be persisted."""
@@ -70,11 +72,15 @@ class WebCrawler:
                         soup = BeautifulSoup(html, "html.parser")
 
                         title = soup.title.string if soup.title else ""
-                        text = self._extract_text(soup)
 
-                        if text.strip():
-                            chunks = self._chunk_text(text, title, url, site_id)
-                            all_chunks.extend(chunks)
+                        # Use semantic chunker for better quality
+                        chunks = self.chunker.chunk_page(soup, title, url, site_id)
+                        if not chunks:
+                            # Fallback to simple text extraction
+                            text = self._extract_text(soup)
+                            if text.strip():
+                                chunks = self._chunk_text(text, title, url, site_id)
+                        all_chunks.extend(chunks)
 
                         for link in soup.find_all("a", href=True):
                             href = urljoin(url, link["href"])
@@ -193,11 +199,19 @@ class WebCrawler:
 
         contents = [c["content"] for c in chunks]
 
-        all_embeddings = []
-        for i in range(0, len(contents), 100):
-            batch = contents[i : i + 100]
-            embeddings = await embed_provider.embed(batch)
-            all_embeddings.extend(embeddings)
+        # Parallel embedding with semaphore to respect rate limits
+        semaphore = asyncio.Semaphore(3)
+
+        async def _embed_batch(batch):
+            async with semaphore:
+                return await embed_provider.embed(batch)
+
+        batches = [contents[i : i + 100] for i in range(0, len(contents), 100)]
+        if len(batches) <= 1:
+            all_embeddings = await embed_provider.embed(contents) if contents else []
+        else:
+            results = await asyncio.gather(*[_embed_batch(b) for b in batches])
+            all_embeddings = [e for batch_result in results for e in batch_result]
 
         await rag_engine.add_chunks(site_id, chunks, all_embeddings)
 

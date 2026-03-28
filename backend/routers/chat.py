@@ -1,8 +1,11 @@
 import json
+import asyncio
 from datetime import datetime
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from repositories import get_repos
 from agent.core import ChatAgent
+from agent.memory import MemoryExtractor, ConversationSummarizer
+from providers.factory import get_llm_provider
 from logging_config import logger
 
 router = APIRouter()
@@ -31,12 +34,13 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
         return
 
     # Wait for the first message to check for session resumption
-    # The client sends {"type": "init", "session_id": "..."} or just starts chatting
+    # The client sends {"type": "init", "session_id": "...", "visitor_id": "..."} or just starts chatting
     first_data = await websocket.receive_json()
 
     session_id = None
     messages = []
     resumed = False
+    visitor_id = first_data.get("visitor_id")
 
     # Check if client wants to resume an existing session
     if first_data.get("type") == "init" and first_data.get("session_id"):
@@ -45,11 +49,17 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
             session_id = existing_session["id"]
             messages = existing_session.get("messages", [])
             resumed = True
+            # Use visitor_id from existing session if not provided
+            if not visitor_id:
+                visitor_id = existing_session.get("visitor_id")
             logger.info("Session resumed", session_id=session_id, message_count=len(messages))
 
     # Create new session if not resuming
     if not session_id:
-        chat_session = await repos.chat_sessions.create({"site_id": site["id"]})
+        session_data = {"site_id": site["id"]}
+        if visitor_id:
+            session_data["visitor_id"] = visitor_id
+        chat_session = await repos.chat_sessions.create(session_data)
         session_id = chat_session["id"]
 
     # Create or restore agent
@@ -69,6 +79,16 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
 
     active_agents[session_id] = agent
 
+    # Fetch conversation summary for resumed sessions
+    conversation_summary = None
+    if resumed:
+        try:
+            existing_summary = await repos.conversation_summaries.get_by_session(session_id)
+            if existing_summary:
+                conversation_summary = existing_summary["summary_text"]
+        except Exception:
+            pass  # conversation_summaries repo may not exist yet
+
     # Send welcome with session info and previous messages
     await websocket.send_json({
         "type": "connected",
@@ -80,6 +100,7 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
             "primaryColor": site["primary_color"],
             "position": site["position"],
         },
+        "suggestions": site.get("suggestions") or [],
     })
 
     # If the first message was a chat message (not init), process it
@@ -87,6 +108,7 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
         await _handle_message(
             websocket, agent, repos, session_id, messages,
             first_data["message"], first_data.get("pageContext"),
+            visitor_id, conversation_summary,
         )
 
     try:
@@ -100,12 +122,24 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
 
             await _handle_message(
                 websocket, agent, repos, session_id, messages,
-                message, page_context,
+                message, page_context, visitor_id, conversation_summary,
             )
+
+            # Periodic summarization (every 20 messages)
+            if len(messages) > 0 and len(messages) % 20 == 0:
+                asyncio.create_task(
+                    _maybe_summarize(repos, session_id, site, messages)
+                )
 
     except WebSocketDisconnect:
         await repos.chat_sessions.set_ended(session_id)
         active_agents.pop(session_id, None)
+
+        # Background: extract memories from this conversation
+        if visitor_id and messages and len(messages) >= 4:
+            asyncio.create_task(
+                _extract_and_save_memories(repos, visitor_id, site, session_id, messages)
+            )
 
 
 async def _handle_message(
@@ -116,6 +150,8 @@ async def _handle_message(
     messages: list[dict],
     message: str,
     page_context: dict | None,
+    visitor_id: str | None = None,
+    conversation_summary: str | None = None,
 ):
     """Process a single user message and stream the response."""
     messages.append({
@@ -132,6 +168,8 @@ async def _handle_message(
             message=message,
             page_context=page_context,
             repos=repos,
+            visitor_id=visitor_id,
+            conversation_summary=conversation_summary,
         ):
             full_response += token
             await websocket.send_json({"type": "token", "content": token})
@@ -151,3 +189,61 @@ async def _handle_message(
     await repos.chat_sessions.update_messages(session_id, messages)
 
     await websocket.send_json({"type": "end"})
+
+
+async def _extract_and_save_memories(repos, visitor_id, site, session_id, messages):
+    """Background task: extract and save visitor memories after session ends."""
+    try:
+        extractor = MemoryExtractor()
+        provider = get_llm_provider(site["llm_provider"], site["llm_model"])
+        extracted = await extractor.extract_memories(messages, provider)
+
+        for mem in extracted:
+            await repos.visitor_memories.upsert(
+                visitor_id=visitor_id,
+                site_id=site["id"],
+                key=mem["key"],
+                data={
+                    "category": mem["category"],
+                    "value": mem["value"],
+                    "confidence": mem.get("confidence", "medium"),
+                    "source_session_id": session_id,
+                },
+            )
+        if extracted:
+            logger.info(
+                "Memories extracted",
+                count=len(extracted),
+                visitor_id=visitor_id,
+                session_id=session_id,
+            )
+    except Exception as e:
+        logger.error("Memory extraction failed", error=str(e), session_id=session_id)
+
+
+async def _maybe_summarize(repos, session_id, site, messages):
+    """Background task: summarize long conversations."""
+    try:
+        summarizer = ConversationSummarizer()
+        if not await summarizer.should_summarize(messages):
+            return
+
+        existing = await repos.conversation_summaries.get_by_session(session_id)
+        existing_text = existing["summary_text"] if existing else None
+
+        provider = get_llm_provider(site["llm_provider"], site["llm_model"])
+        summary_text, count = await summarizer.summarize(messages, provider, existing_text)
+
+        if summary_text:
+            await repos.conversation_summaries.upsert_by_session(
+                session_id=session_id,
+                data={
+                    "site_id": site["id"],
+                    "summary_text": summary_text,
+                    "message_count_summarized": count,
+                    "total_message_count": len(messages),
+                },
+            )
+            logger.info("Conversation summarized", session_id=session_id, messages_summarized=count)
+    except Exception as e:
+        logger.error("Summarization failed", error=str(e), session_id=session_id)

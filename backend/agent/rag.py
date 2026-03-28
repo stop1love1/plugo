@@ -46,9 +46,13 @@ class RAGEngine:
         self,
         site_id: str,
         query_embedding: list[float],
-        top_k: int = 5,
+        top_k: int = 10,
+        min_score: Optional[float] = None,
     ) -> list[dict]:
-        """Search for the most relevant chunks."""
+        """Search for the most relevant chunks with optional relevance filtering."""
+        if min_score is None:
+            min_score = settings.rag_min_score
+
         collection = self.get_collection(site_id)
 
         if collection.count() == 0:
@@ -62,13 +66,19 @@ class RAGEngine:
 
         chunks = []
         for i in range(len(results["ids"][0])):
+            score = 1 - results["distances"][0][i]  # Convert distance to similarity
+            if score < min_score:
+                continue
             chunks.append({
                 "id": results["ids"][0][i],
                 "content": results["documents"][0][i],
                 "metadata": results["metadatas"][0][i],
-                "score": 1 - results["distances"][0][i],  # Convert distance to similarity
+                "score": score,
             })
-        return chunks
+
+        # Cap at max_chunks
+        max_chunks = settings.rag_max_chunks
+        return chunks[:max_chunks]
 
     async def delete_chunks(self, site_id: str, chunk_ids: list[str]):
         """Delete specific chunks from vector store."""

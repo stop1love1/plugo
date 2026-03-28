@@ -13,7 +13,7 @@ load_dotenv()
 
 from config import settings, validate_settings
 from logging_config import logger
-from routers import chat, sites, crawl, knowledge, tools, sessions
+from routers import chat, sites, crawl, knowledge, tools, sessions, memory, analytics
 from routers import auth as auth_router
 
 
@@ -104,6 +104,8 @@ app.include_router(crawl.router)
 app.include_router(knowledge.router)
 app.include_router(tools.router)
 app.include_router(sessions.router)
+app.include_router(memory.router)
+app.include_router(analytics.router)
 
 
 @app.get("/")

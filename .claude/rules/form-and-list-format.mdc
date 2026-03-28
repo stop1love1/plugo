@@ -1,0 +1,83 @@
+---
+alwaysApply: true
+---
+
+# Form & List Format (Center / Admission style)
+
+When creating or editing **forms** (Modal, page form) or **list with table** in `apps/center`, follow the format below to stay consistent with the admission module.
+
+---
+
+## 1. List page (filter + table + pagination)
+
+### Filter bar
+- Layout: `mb-3 flex flex-wrap items-center justify-between gap-4`
+- Left: `flex flex-wrap items-center gap-2` — in order:
+  - `Input.Search`: `placeholder` from i18n, `className="max-w-xs"`, `onSearch` updates keyword + set page to 1, `allowClear`
+  - Filter `Select`s: i18n `placeholder`, `allowClear`, `className="min-w-[180px]"` (or similar), `value`/`onChange` state
+- Right: `Tooltip` + `Button` icon `ReloadOutlined`: `title={t('refresh')}`, `onClick={() => refetch()}`, `loading={isLoading}`
+
+### Table
+- `rowKey="_id"` (or standard id field)
+- `loading={isLoading}`
+- `scroll={{ x: 'max-content' }}`
+- Standard columns (in order when present):
+  1. **No.**: `title: t('columnStt')`, `key: 'index'`, `width: 60`, `render: (_, __, index) => index + (page - 1) * pageSize + 1`
+  2. Data columns: `ellipsis: true` for long text, render `-` when no value
+  3. **Status**: use `Badge` with `getStatusConfig(status)` returning `{ status, text }` (warning/processing/success/error/default)
+  4. **Assigned to**: `columnAssignedTo`, map id → name via Map (userIdToName or similar)
+  5. **Created at**: `dayjs(date).format('DD/MM/YYYY HH:mm')`
+  6. **Action**: `align: 'end'`, `fixed: 'right'`, `width: 100` or 120. View detail button: `<Link><Button icon={<EyeOutlined />} /></Link>`. For extra actions (delete, etc.) use `flex items-center justify-end gap-2` and `Popconfirm` when needed.
+
+### Pagination
+- `current: page`, `pageSize`, `total: result?.total ?? 0`
+- `showSizeChanger: true`, `showTotal: (total) => t('paginationShowTotal', { total })`
+- `onChange: (newPage, newPageSize) => { setPage(newPage); if (newPageSize) setPageSize(newPageSize); }`
+- `showPrevNextJumpers: true`, `showQuickJumper: true`
+- `pageSizeOptions: [10, 20, 50, 100]`
+
+### Data & API
+- Use `useApiQuery` with `queryKey` including all dependencies (keyword, page, pageSize, filter…). After successful mutation use `queryClient.invalidateQueries({ queryKey: [...] })` — get `queryClient` from `@packages/utils/tanstack-query`, do not use `useQueryClient` from `@tanstack/react-query`.
+- User list shares `queryKey: ['center-users-all']`, type as `UserOption[]` and `userIdToName` Map to avoid `_id` on `{}` errors.
+
+---
+
+## 2. Modal form (add/edit)
+
+### Structure
+- `Modal`: i18n `title`, `open`, `onCancel`, `footer={null}`, `centered`, `width={560}`, `destroyOnHidden`
+- Inside: `<div className="max-h-[85vh] overflow-y-auto">` then `<Form>`
+
+### Form
+- `Form`: `layout="vertical"`, `onFinish={handleSubmit}`, `autoComplete="off"`
+- `Form.useForm()`; handlers: `handleSubmit`, `handleCancel` (reset form + call `onCancel`)
+- Each field: `Form.Item` with `name`, `label` (i18n), `rules` (required, validator if needed). Input/Select: i18n `placeholder`, `allowClear` when appropriate.
+
+### Buttons
+- `Form.Item` without `name`, `className="mt-6"`: Primary submit `Button` (`htmlType="submit"`, `loading={mutation.isPending}`), Cancel `Button` (`onClick={handleCancel}`), Cancel has `className="ml-2"`.
+
+### After successful submit
+- `message.success(t('...'))`
+- `queryClient.invalidateQueries({ queryKey: [...] })` for related list
+- `form.resetFields()`, `onCancel()`
+
+---
+
+## 3. Index page (card grid)
+
+- Layout: `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4`
+- Each item: `Card` with column-style content (text + link). Icon in square/circle: `flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-gray-200` (or use `AppLink` if available).
+
+---
+
+## 4. i18n & accessibility
+
+- All user-visible strings come from `useTranslations(...)`; no hardcoding.
+- **Do NOT use `aria-label`** on elements. For icon-only buttons use `Tooltip` with `title` when a hint is needed.
+- **Modal / Drawer:** use `destroyOnHidden` (not `destroyOnClose`).
+
+---
+
+## 5. Align with existing code
+
+- Reference: `PotentialCustomersList.tsx`, `AdmissionActivities.tsx`, `AddPotentialCustomerModal.tsx`, `AdmissionStats.tsx` (table + Badge), `Admission.tsx` (grid index).

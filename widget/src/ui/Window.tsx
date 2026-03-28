@@ -11,11 +11,12 @@ type WindowProps = {
   messages: ChatMessage[];
   isTyping: boolean;
   position: "bottom-right" | "bottom-left";
+  suggestions: string[];
   onSend: (message: string) => void;
   onClose: () => void;
 };
 
-export function ChatWindow({ messages, isTyping, position, onSend, onClose }: WindowProps) {
+export function ChatWindow({ messages, isTyping, position, suggestions, onSend, onClose }: WindowProps) {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -23,12 +24,21 @@ export function ChatWindow({ messages, isTyping, position, onSend, onClose }: Wi
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isTyping]);
+  }, [messages, isTyping, suggestions]);
 
   // Focus input when opened
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
 
   const handleSubmit = (e: Event) => {
     e.preventDefault();
@@ -44,7 +54,7 @@ export function ChatWindow({ messages, isTyping, position, onSend, onClose }: Wi
         <button onClick={onClose} aria-label="Close">&times;</button>
       </div>
 
-      <div class="plugo-messages">
+      <div class="plugo-messages" role="log" aria-live="polite" aria-label="Chat messages">
         {messages.map((msg, i) => (
           <Message key={i} role={msg.role} content={msg.content} />
         ))}
@@ -55,6 +65,22 @@ export function ChatWindow({ messages, isTyping, position, onSend, onClose }: Wi
             <span />
           </div>
         )}
+
+        {/* Suggestion buttons */}
+        {suggestions.length > 0 && !isTyping && (
+          <div class="plugo-suggestions">
+            {suggestions.map((s, i) => (
+              <button
+                key={i}
+                class="plugo-suggestion-btn"
+                onClick={() => onSend(s)}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -64,11 +90,11 @@ export function ChatWindow({ messages, isTyping, position, onSend, onClose }: Wi
           type="text"
           value={input}
           onInput={(e) => setInput((e.target as HTMLInputElement).value)}
-          placeholder="Nhập tin nhắn..."
+          placeholder="Type a message..."
           disabled={isTyping}
         />
         <button type="submit" disabled={!input.trim() || isTyping}>
-          Gửi
+          Send
         </button>
       </form>
     </div>

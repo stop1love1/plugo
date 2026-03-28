@@ -1,14 +1,13 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
 import { getSite, updateSite, getProviders } from "../lib/api";
-import { Save, Check } from "lucide-react";
+import { Save } from "lucide-react";
 
 export default function Settings() {
   const { siteId } = useParams<{ siteId: string }>();
   const queryClient = useQueryClient();
-  const [saved, setSaved] = useState(false);
-
   const { data: site } = useQuery({
     queryKey: ["site", siteId],
     queryFn: () => getSite(siteId!),
@@ -28,6 +27,7 @@ export default function Settings() {
     greeting: "",
     position: "bottom-right",
     allowed_domains: "",
+    suggestions: "",
   });
 
   useEffect(() => {
@@ -40,6 +40,7 @@ export default function Settings() {
         greeting: site.greeting,
         position: site.position,
         allowed_domains: site.allowed_domains,
+        suggestions: (site.suggestions || []).join(", "),
       });
     }
   }, [site]);
@@ -48,14 +49,19 @@ export default function Settings() {
     mutationFn: (data: any) => updateSite(siteId!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["site", siteId] });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      toast.success("Settings saved");
     },
+    onError: () => toast.error("Failed to save settings"),
   });
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    mutation.mutate(form);
+    const { suggestions: suggestionsStr, ...rest } = form;
+    const suggestions = suggestionsStr
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    mutation.mutate({ ...rest, suggestions });
   };
 
   const currentProvider = providers.find((p: any) => p.id === form.llm_provider);
@@ -145,13 +151,20 @@ export default function Settings() {
               <input value={form.greeting} onChange={(e) => setForm({ ...form, greeting: e.target.value })}
                 className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Default Suggestions (comma-separated)</label>
+              <input value={form.suggestions} onChange={(e) => setForm({ ...form, suggestions: e.target.value })}
+                placeholder="What can you do?, Tell me about your products, How to get started?"
+                className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+              <p className="text-xs text-gray-400 mt-1">Quick reply buttons shown to visitors in the chat widget</p>
+            </div>
           </div>
         </div>
 
         <button type="submit" disabled={mutation.isPending}
           className="flex items-center gap-2 bg-primary-600 text-white px-6 py-2.5 rounded-lg hover:bg-primary-700 disabled:opacity-50">
-          {saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-          {saved ? "Saved!" : mutation.isPending ? "Saving..." : "Save Changes"}
+          <Save className="w-4 h-4" />
+          {mutation.isPending ? "Saving..." : "Save Changes"}
         </button>
       </form>
     </div>

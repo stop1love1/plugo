@@ -1,5 +1,5 @@
 import { h } from "preact";
-import { useState, useCallback } from "preact/hooks";
+import { useState, useCallback, useRef } from "preact/hooks";
 import { Bubble } from "./Bubble";
 import { ChatWindow } from "./Window";
 import { PlugoWebSocket } from "../lib/websocket";
@@ -19,6 +19,7 @@ type AppProps = {
 };
 
 const SESSION_KEY = "plugo_session_";
+const VISITOR_KEY = "plugo_visitor_";
 
 function getSavedSessionId(token: string): string | null {
   try {
@@ -36,20 +37,36 @@ function saveSessionId(token: string, sessionId: string) {
   }
 }
 
+function getOrCreateVisitorId(token: string): string {
+  try {
+    const existing = localStorage.getItem(VISITOR_KEY + token);
+    if (existing) return existing;
+    const id = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36);
+    localStorage.setItem(VISITOR_KEY + token, id);
+    return id;
+  } catch {
+    return Math.random().toString(36).slice(2) + Date.now().toString(36);
+  }
+}
+
 export function App({ token, serverUrl, primaryColor, greeting, position, getPageContext }: AppProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [ws, setWs] = useState<PlugoWebSocket | null>(null);
   const [connected, setConnected] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const isOpenRef = useRef(false);
 
   const initWebSocket = useCallback(() => {
     const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const baseUrl = serverUrl || `${wsProtocol}//${window.location.host}`;
     const wsUrl = `${baseUrl.replace(/^http/, "ws")}/ws/chat/${token}`;
 
-    // Pass saved session_id for server-side session resumption
+    // Pass saved session_id and visitor_id for server-side session resumption
     const savedSessionId = getSavedSessionId(token);
+    const visitorId = getOrCreateVisitorId(token);
 
     const socket = new PlugoWebSocket(wsUrl, {
       onConnected: (data) => {
@@ -58,6 +75,11 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
         // Save session_id for future reconnections
         if (data.session_id) {
           saveSessionId(token, data.session_id);
+        }
+
+        // Set initial suggestions from server
+        if (data.suggestions && data.suggestions.length > 0) {
+          setSuggestions(data.suggestions);
         }
 
         // Server returned previous messages — restore them
@@ -74,6 +96,7 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
       },
       onStart: () => {
         setIsTyping(true);
+        setSuggestions([]); // Clear suggestions during response
         setMessages((prev) => [...prev, { role: "bot", content: "" }]);
       },
       onToken: (token) => {
@@ -89,8 +112,16 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
           return updated;
         });
       },
-      onEnd: () => {
+      onEnd: (data) => {
         setIsTyping(false);
+        // Set follow-up suggestions if provided
+        if (data?.suggestions && data.suggestions.length > 0) {
+          setSuggestions(data.suggestions);
+        }
+        // Increment unread count if chat window is closed
+        if (!isOpenRef.current) {
+          setUnreadCount(prev => prev + 1);
+        }
       },
       onError: (error) => {
         setIsTyping(false);
@@ -99,7 +130,7 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
           { role: "bot", content: `⚠️ ${error}` },
         ]);
       },
-    }, savedSessionId);
+    }, savedSessionId, visitorId);
 
     socket.connect();
     setWs(socket);
@@ -107,6 +138,8 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
 
   const handleOpen = useCallback(() => {
     setIsOpen(true);
+    isOpenRef.current = true;
+    setUnreadCount(0);
     if (!ws) {
       initWebSocket();
     }
@@ -114,12 +147,14 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
 
   const handleClose = useCallback(() => {
     setIsOpen(false);
+    isOpenRef.current = false;
   }, []);
 
   const handleSend = useCallback(
     (message: string) => {
       if (!ws || !message.trim()) return;
 
+      setSuggestions([]); // Clear suggestions when user sends
       setMessages((prev) => [...prev, { role: "user", content: message }]);
       ws.send(message, getPageContext());
     },
@@ -133,6 +168,7 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
           messages={messages}
           isTyping={isTyping}
           position={position}
+          suggestions={suggestions}
           onSend={handleSend}
           onClose={handleClose}
         />
@@ -140,6 +176,7 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
       <Bubble
         position={position}
         isOpen={isOpen}
+        unreadCount={unreadCount}
         onClick={isOpen ? handleClose : handleOpen}
       />
     </div>

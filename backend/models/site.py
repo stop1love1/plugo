@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, Text, Boolean, Integer
+from sqlalchemy import Column, String, DateTime, Text, Boolean, Integer, JSON
 from database import Base
 
 
@@ -20,6 +20,9 @@ class Site(Base):
     primary_color = Column(String(7), default="#6366f1")
     greeting = Column(Text, default="Hello! How can I help you?")
     position = Column(String(20), default="bottom-right")
+
+    # Default suggestions for the widget
+    suggestions = Column(JSON, default=list)
 
     # Domain whitelist (comma-separated)
     allowed_domains = Column(Text, default="")

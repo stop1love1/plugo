@@ -18,6 +18,25 @@ make format         # Format all code
 make check          # Run lint + format-check + typecheck
 ```
 
+## User Management (CLI)
+
+Admin accounts are managed via CLI — there is no registration page on the dashboard.
+
+```bash
+cd backend
+
+# First-time setup: create admin account
+python manage.py create-admin
+python manage.py create-admin -u admin -p yourpassword
+
+# Reset forgotten password
+python manage.py reset-password -u admin
+python manage.py reset-password -u admin -p newpassword
+
+# List all users
+python manage.py list-users
+```
+
 ## Code Style
 
 ### Python (backend/)
@@ -57,9 +76,34 @@ make check          # Run lint + format-check + typecheck
 - `widget/src/ui/App.tsx` — Widget entry point
 - `dashboard/src/App.tsx` — Dashboard router
 
+## Configuration
+
+Two config files at project root:
+
+- **`config.json`** — all project settings (LLM, database, RAG, server, rate limits). Committed to repo.
+- **`.env`** — secrets only (API keys, SECRET_KEY). Never committed.
+
+```
+config.json          ← project config (safe to commit)
+├── llm.provider/model
+├── embedding.provider/model/cache_size/cache_ttl
+├── database.provider/url
+├── rag.min_score/max_chunks
+├── server.backend_port/cors_origins
+├── auth.enabled
+└── rate_limit.default/chat/crawl
+
+.env                 ← secrets only
+├── ANTHROPIC_API_KEY
+├── OPENAI_API_KEY
+├── GEMINI_API_KEY
+└── SECRET_KEY
+```
+
+Environment variables override both (for Docker/CI).
+
 ## Environment
 
 - Python deps in `.venv/` (project-local)
 - Node deps in `node_modules/` (per package)
-- Config via `.env` (never commit this file)
-- Database: SQLite (dev) or MongoDB (prod) — set `DATABASE_PROVIDER`
+- Database: SQLite (dev) or MongoDB (prod) — set in `config.json → database.provider`

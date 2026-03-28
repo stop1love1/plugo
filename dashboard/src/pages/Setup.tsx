@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
 import { getSite } from "../lib/api";
 import {
   Globe, Play, Square, RefreshCw, CheckCircle, XCircle,
@@ -50,11 +51,13 @@ export default function Setup() {
   const toggleMutation = useMutation({
     mutationFn: (enabled: boolean) =>
       toggleCrawl(siteId!, { enabled, max_pages: maxPages }),
-    onSuccess: () => {
+    onSuccess: (_data, enabled) => {
       refetchStatus();
       refetchJobs();
       queryClient.invalidateQueries({ queryKey: ["site", siteId] });
+      toast.success(enabled ? "Crawl enabled" : "Crawl disabled");
     },
+    onError: () => toast.error("Failed to toggle crawl"),
   });
 
   const startMutation = useMutation({
@@ -67,7 +70,9 @@ export default function Setup() {
     onSuccess: () => {
       refetchStatus();
       refetchJobs();
+      toast.success("Crawl started");
     },
+    onError: () => toast.error("Failed to start crawl"),
   });
 
   const stopMutation = useMutation({
@@ -75,7 +80,9 @@ export default function Setup() {
     onSuccess: () => {
       refetchStatus();
       refetchJobs();
+      toast.success("Crawl stopped");
     },
+    onError: () => toast.error("Failed to stop crawl"),
   });
 
   const clearMutation = useMutation({
@@ -83,7 +90,9 @@ export default function Setup() {
     onSuccess: () => {
       refetchStatus();
       queryClient.invalidateQueries({ queryKey: ["site", siteId] });
+      toast.success("All knowledge cleared");
     },
+    onError: () => toast.error("Failed to clear knowledge"),
   });
 
   const isRunning = crawlStatus?.crawl_status === "running";

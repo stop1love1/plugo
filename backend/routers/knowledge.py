@@ -20,12 +20,26 @@ async def list_knowledge(
     site_id: str,
     page: int = Field(default=1, ge=1),
     per_page: int = Field(default=20, ge=1, le=MAX_PER_PAGE),
+    search: Optional[str] = None,
     repos: Repositories = Depends(get_repos),
     _user: TokenData = Depends(get_current_user),
 ):
     data = await repos.knowledge.list_by_site(site_id, page, per_page)
+    chunks = data.get("chunks", [])
+
+    # Filter by search query (client-side filter for now, works for SQLite)
+    if search:
+        search_lower = search.lower()
+        chunks = [
+            c for c in chunks
+            if search_lower in (c.get("title") or "").lower()
+            or search_lower in (c.get("content") or "").lower()
+        ]
+        data["chunks"] = chunks
+        data["total"] = len(chunks)
+
     # Truncate content for list view
-    for chunk in data.get("chunks", []):
+    for chunk in chunks:
         if len(chunk.get("content", "")) > 200:
             chunk["content"] = chunk["content"][:200] + "..."
     return data
@@ -56,6 +70,27 @@ async def delete_chunk(
     await rag_engine.delete_chunks(chunk["site_id"], [chunk.get("embedding_id") or chunk["id"]])
     await repos.knowledge.delete(chunk_id)
     return {"message": "Chunk deleted"}
+
+
+class BulkDeleteRequest(BaseModel):
+    chunk_ids: list[str] = Field(min_length=1, max_length=100)
+
+
+@router.post("/bulk-delete")
+async def bulk_delete_chunks(
+    data: BulkDeleteRequest,
+    repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
+):
+    """Delete multiple chunks at once."""
+    deleted = 0
+    for chunk_id in data.chunk_ids:
+        chunk = await repos.knowledge.get_by_id(chunk_id)
+        if chunk:
+            await rag_engine.delete_chunks(chunk["site_id"], [chunk.get("embedding_id") or chunk["id"]])
+            await repos.knowledge.delete(chunk_id)
+            deleted += 1
+    return {"deleted": deleted}
 
 
 class ManualChunkCreate(BaseModel):

@@ -4,6 +4,7 @@ from providers.base import BaseLLMProvider
 from providers.factory import get_llm_provider
 from agent.rag import rag_engine
 from agent.tools import tool_executor
+from knowledge.embed_cache import embed_cache
 
 
 SYSTEM_PROMPT_TEMPLATE = """You are an AI assistant for the website "{site_name}" ({site_url}).
@@ -30,6 +31,8 @@ When API tools are available, you perform actions for the user:
 - Prioritize answering from the knowledge base first
 - If a suitable tool exists, suggest performing the action
 - Keep responses concise and friendly
+
+{memory_section}
 
 {context_section}
 
@@ -61,8 +64,31 @@ class ChatAgent:
         query: str,
         page_context: Optional[dict] = None,
         repos=None,
+        visitor_id: Optional[str] = None,
+        conversation_summary: Optional[str] = None,
     ) -> tuple[str, list[dict]]:
         """Build system prompt and return (prompt, tools)."""
+
+        # --- Visitor memory ---
+        memory_section = ""
+        if visitor_id and repos:
+            try:
+                memories = await repos.visitor_memories.list_by_visitor(visitor_id, self.site_id)
+                if memories:
+                    memory_parts = []
+                    for mem in memories:
+                        memory_parts.append(f"- {mem['key']}: {mem['value']}")
+                    memory_section = (
+                        "## What you know about this visitor (from previous conversations)\n"
+                        + "\n".join(memory_parts)
+                        + "\n\nUse this information naturally. Don't explicitly mention that you "
+                        + "'remember' unless the visitor asks. Just apply the knowledge contextually."
+                    )
+            except Exception:
+                pass  # visitor_memories repo may not exist yet
+
+        if conversation_summary:
+            memory_section += f"\n\n## Earlier in this conversation\n{conversation_summary}"
 
         # --- Page context ---
         context_section = ""
@@ -75,20 +101,27 @@ class ChatAgent:
         # --- Knowledge (from crawl) ---
         knowledge_section = ""
         try:
-            embedding_provider = get_llm_provider("openai")
-            query_embedding = (await embedding_provider.embed([query]))[0]
-            chunks = await rag_engine.search(self.site_id, query_embedding, top_k=5)
+            # Check embedding cache first
+            query_embedding = embed_cache.get(query)
+            if query_embedding is None:
+                embedding_provider = get_llm_provider("openai")
+                query_embedding = (await embedding_provider.embed([query]))[0]
+                embed_cache.put(query, query_embedding)
+
+            chunks = await rag_engine.search(self.site_id, query_embedding, top_k=10)
 
             if chunks:
                 knowledge_parts = []
                 for i, chunk in enumerate(chunks):
                     source = chunk["metadata"].get("source_url", "")
                     title = chunk["metadata"].get("title", "")
+                    score = chunk.get("score", 0)
                     knowledge_parts.append(
-                        f"[{i+1}] {title} ({source})\n{chunk['content']}"
+                        f"[{i+1}] {title} ({source}) [relevance: {score:.0%}]\n{chunk['content']}"
                     )
                 knowledge_section = (
-                    "## Knowledge Base (crawled content)\n\n"
+                    "## Knowledge Base (crawled content)\n"
+                    "When answering from the knowledge base, cite sources using [1], [2] etc.\n\n"
                     + "\n\n---\n\n".join(knowledge_parts)
                 )
             else:
@@ -115,6 +148,7 @@ class ChatAgent:
         prompt = SYSTEM_PROMPT_TEMPLATE.format(
             site_name=self.site_name,
             site_url=self.site_url,
+            memory_section=memory_section,
             context_section=context_section,
             knowledge_section=knowledge_section,
             tools_section=tools_section,
@@ -127,11 +161,15 @@ class ChatAgent:
         message: str,
         page_context: Optional[dict] = None,
         repos=None,
+        visitor_id: Optional[str] = None,
+        conversation_summary: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """Process user message → stream response."""
         self.messages.append({"role": "user", "content": message})
 
-        system_prompt, tools = await self._build_system_prompt(message, page_context, repos)
+        system_prompt, tools = await self._build_system_prompt(
+            message, page_context, repos, visitor_id, conversation_summary,
+        )
 
         full_response = ""
         async for token in self.provider.stream(
@@ -149,10 +187,14 @@ class ChatAgent:
         message: str,
         page_context: Optional[dict] = None,
         repos=None,
+        visitor_id: Optional[str] = None,
+        conversation_summary: Optional[str] = None,
     ) -> str:
         """Process user message → full response with tool calling."""
         self.messages.append({"role": "user", "content": message})
-        system_prompt, tools = await self._build_system_prompt(message, page_context, repos)
+        system_prompt, tools = await self._build_system_prompt(
+            message, page_context, repos, visitor_id, conversation_summary,
+        )
 
         result = await self.provider.chat(
             messages=self.messages,

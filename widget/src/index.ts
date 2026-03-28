@@ -10,6 +10,7 @@ declare global {
       greeting?: string;
       position?: "bottom-right" | "bottom-left";
       language?: string;
+      darkMode?: boolean;
     };
   }
 }
@@ -48,6 +49,9 @@ function init() {
   // Render app into shadow DOM
   const container = document.createElement("div");
   container.id = "plugo-root";
+  if (config.darkMode) {
+    container.classList.add("plugo-dark");
+  }
   shadow.appendChild(container);
 
   render(
@@ -240,6 +244,92 @@ function getWidgetStyles(primaryColor: string): string {
         border-radius: 0;
       }
     }
+
+    /* Markdown styles */
+    .plugo-markdown p { margin: 0 0 8px 0; }
+    .plugo-markdown p:last-child { margin-bottom: 0; }
+    .plugo-markdown strong { font-weight: 600; }
+    .plugo-markdown em { font-style: italic; }
+    .plugo-markdown a { color: #4f46e5; text-decoration: underline; }
+    .plugo-markdown a:hover { color: #3730a3; }
+    .plugo-markdown ul, .plugo-markdown ol { margin: 4px 0 8px 0; padding-left: 20px; }
+    .plugo-markdown li { margin: 2px 0; }
+    .plugo-markdown h1, .plugo-markdown h2, .plugo-markdown h3, .plugo-markdown h4 {
+      font-weight: 600; margin: 8px 0 4px 0;
+    }
+    .plugo-markdown h1 { font-size: 1.25em; }
+    .plugo-markdown h2 { font-size: 1.15em; }
+    .plugo-markdown h3 { font-size: 1.05em; }
+    .plugo-markdown code {
+      background: #e8e8e8; padding: 1px 4px; border-radius: 3px;
+      font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.85em;
+    }
+    .plugo-markdown pre.plugo-code {
+      background: #1e1e2e; color: #cdd6f4; padding: 12px; border-radius: 8px;
+      overflow-x: auto; margin: 8px 0; font-size: 0.82em; line-height: 1.5;
+    }
+    .plugo-markdown pre.plugo-code code {
+      background: none; padding: 0; color: inherit; font-size: inherit;
+    }
+    .plugo-markdown blockquote {
+      border-left: 3px solid #d0d0d0; padding-left: 12px; margin: 8px 0;
+      color: #666; font-style: italic;
+    }
+    .plugo-markdown hr { border: none; border-top: 1px solid #e0e0e0; margin: 12px 0; }
+    /* highlight.js theme (Catppuccin-inspired) */
+    .hljs-keyword, .hljs-selector-tag { color: #cba6f7; }
+    .hljs-string, .hljs-attr { color: #a6e3a1; }
+    .hljs-number, .hljs-literal { color: #fab387; }
+    .hljs-comment { color: #6c7086; font-style: italic; }
+    .hljs-built_in, .hljs-type { color: #89dceb; }
+    .hljs-function .hljs-title, .hljs-title.function_ { color: #89b4fa; }
+    .hljs-variable, .hljs-template-variable { color: #f38ba8; }
+    .hljs-tag { color: #cba6f7; }
+    .hljs-name { color: #89b4fa; }
+    .hljs-attribute { color: #f9e2af; }
+    .hljs-meta { color: #fab387; }
+    .hljs-punctuation { color: #bac2de; }
+
+    /* Unread badge */
+    .plugo-badge {
+      position: absolute; top: -4px; right: -4px;
+      background: #ef4444; color: #fff;
+      font-size: 11px; font-weight: 600;
+      min-width: 18px; height: 18px;
+      border-radius: 9px; display: flex;
+      align-items: center; justify-content: center;
+      padding: 0 4px; line-height: 1;
+      border: 2px solid #fff;
+      animation: plugo-badge-pop 0.3s ease;
+    }
+    @keyframes plugo-badge-pop {
+      0% { transform: scale(0); }
+      50% { transform: scale(1.2); }
+      100% { transform: scale(1); }
+    }
+
+    /* Dark mode */
+    .plugo-dark .plugo-window { background: #1a1a2e; }
+    .plugo-dark .plugo-header { background: #16213e; }
+    .plugo-dark .plugo-messages { background: #1a1a2e; }
+    .plugo-dark .plugo-msg.bot { background: #2d2d44; color: #e0e0e0; }
+    .plugo-dark .plugo-msg.user { color: #fff; }
+    .plugo-dark .plugo-input-area { background: #1a1a2e; border-top-color: #2d2d44; }
+    .plugo-dark .plugo-input-area input {
+      background: #2d2d44; color: #e0e0e0;
+      border-color: #3d3d5c;
+    }
+    .plugo-dark .plugo-input-area input::placeholder { color: #888; }
+    .plugo-dark .plugo-typing span { background: #888; }
+    .plugo-dark .plugo-suggestion-btn {
+      background: #2d2d44; color: #ccc;
+      border-color: #3d3d5c;
+    }
+    .plugo-dark .plugo-suggestion-btn:hover { background: #3d3d5c; }
+
+    /* Accessibility */
+    .plugo-messages { -webkit-overflow-scrolling: touch; }
+    .plugo-bubble { position: relative; }
   `;
 }
 

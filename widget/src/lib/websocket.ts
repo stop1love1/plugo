@@ -1,7 +1,7 @@
 export type MessageHandler = {
   onToken: (token: string) => void;
   onStart: () => void;
-  onEnd: () => void;
+  onEnd: (data?: any) => void;
   onError: (error: string) => void;
   onConnected: (data: any) => void;
 };
@@ -13,11 +13,13 @@ export class PlugoWebSocket {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private sessionId: string | null = null;
+  private visitorId: string | null = null;
 
-  constructor(url: string, handlers: MessageHandler, sessionId?: string | null) {
+  constructor(url: string, handlers: MessageHandler, sessionId?: string | null, visitorId?: string | null) {
     this.url = url;
     this.handlers = handlers;
     this.sessionId = sessionId || null;
+    this.visitorId = visitorId || null;
   }
 
   connect() {
@@ -26,11 +28,12 @@ export class PlugoWebSocket {
 
       this.ws.onopen = () => {
         this.reconnectAttempts = 0;
-        // Send init message with session_id for resumption
+        // Send init message with session_id and visitor_id
         this.ws?.send(
           JSON.stringify({
             type: "init",
             session_id: this.sessionId,
+            visitor_id: this.visitorId,
           })
         );
       };
@@ -53,7 +56,7 @@ export class PlugoWebSocket {
               this.handlers.onToken(data.content);
               break;
             case "end":
-              this.handlers.onEnd();
+              this.handlers.onEnd(data);
               break;
             case "error":
               this.handlers.onError(data.message);

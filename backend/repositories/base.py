@@ -84,3 +84,47 @@ class BaseUserRepo(ABC):
     async def get_by_username(self, username: str) -> Optional[dict]: ...
     @abstractmethod
     async def count(self) -> int: ...
+
+
+class BaseVisitorMemoryRepo(ABC):
+    @abstractmethod
+    async def create(self, data: dict) -> dict:
+        ...
+
+    @abstractmethod
+    async def get_by_id(self, memory_id: str) -> Optional[dict]:
+        ...
+
+    @abstractmethod
+    async def list_by_visitor(self, visitor_id: str, site_id: str) -> list[dict]:
+        ...
+
+    @abstractmethod
+    async def upsert(self, visitor_id: str, site_id: str, key: str, data: dict) -> dict:
+        ...
+
+    @abstractmethod
+    async def delete(self, memory_id: str) -> bool:
+        ...
+
+    @abstractmethod
+    async def delete_by_visitor(self, visitor_id: str, site_id: str) -> int:
+        ...
+
+
+class BaseConversationSummaryRepo(ABC):
+    @abstractmethod
+    async def create(self, data: dict) -> dict:
+        ...
+
+    @abstractmethod
+    async def get_by_session(self, session_id: str) -> Optional[dict]:
+        ...
+
+    @abstractmethod
+    async def upsert_by_session(self, session_id: str, data: dict) -> dict:
+        ...
+
+    @abstractmethod
+    async def delete(self, summary_id: str) -> bool:
+        ...

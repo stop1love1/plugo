@@ -10,6 +10,7 @@ Usage in routes:
 from repositories.base import (
     BaseSiteRepo, BaseKnowledgeRepo, BaseToolRepo,
     BaseChatSessionRepo, BaseCrawlJobRepo, BaseUserRepo,
+    BaseVisitorMemoryRepo, BaseConversationSummaryRepo,
 )
 
 
@@ -23,6 +24,8 @@ class Repositories:
         chat_sessions: BaseChatSessionRepo,
         crawl_jobs: BaseCrawlJobRepo,
         users: BaseUserRepo,
+        visitor_memories: BaseVisitorMemoryRepo,
+        conversation_summaries: BaseConversationSummaryRepo,
     ):
         self.sites = sites
         self.knowledge = knowledge
@@ -30,6 +33,8 @@ class Repositories:
         self.chat_sessions = chat_sessions
         self.crawl_jobs = crawl_jobs
         self.users = users
+        self.visitor_memories = visitor_memories
+        self.conversation_summaries = conversation_summaries
 
 
 # --- MongoDB connection (lazy init) ---
@@ -76,12 +81,15 @@ async def get_repos() -> Repositories:
             chat_sessions=MongoChatSessionRepo(db),
             crawl_jobs=MongoCrawlJobRepo(db),
             users=MongoUserRepo(db),
+            visitor_memories=None,  # TODO: implement MongoVisitorMemoryRepo
+            conversation_summaries=None,  # TODO: implement MongoConversationSummaryRepo
         )
     else:
         # Default: SQLite
         from repositories.sqlite_repo import (
             SQLiteSiteRepo, SQLiteKnowledgeRepo, SQLiteToolRepo,
             SQLiteChatSessionRepo, SQLiteCrawlJobRepo, SQLiteUserRepo,
+            SQLiteVisitorMemoryRepo, SQLiteConversationSummaryRepo,
         )
         session_factory = _get_sqlite_session()
         db = session_factory()
@@ -92,6 +100,8 @@ async def get_repos() -> Repositories:
             chat_sessions=SQLiteChatSessionRepo(db),
             crawl_jobs=SQLiteCrawlJobRepo(db),
             users=SQLiteUserRepo(db),
+            visitor_memories=SQLiteVisitorMemoryRepo(db),
+            conversation_summaries=SQLiteConversationSummaryRepo(db),
         )
 
 

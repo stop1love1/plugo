@@ -1,53 +1,88 @@
+"""
+Plugo configuration loader.
+
+Priority: config.json (project settings) + .env (secrets only)
+- config.json  → all non-secret configuration (committed as config.example.json)
+- .env         → API keys, SECRET_KEY (never committed)
+- Environment variables override both (for Docker/CI)
+"""
+
+import json
 import os
 import warnings
-from pydantic_settings import BaseSettings
+from pathlib import Path
 from typing import Optional
+
+from pydantic_settings import BaseSettings
+
+# --- Load config.json ---
+_CONFIG_PATHS = [
+    Path(__file__).parent.parent / "config.json",   # project root
+    Path(__file__).parent / "config.json",           # backend/
+    Path("config.json"),                             # cwd
+]
+
+_json_config: dict = {}
+for _path in _CONFIG_PATHS:
+    if _path.exists():
+        with open(_path, "r", encoding="utf-8") as f:
+            _json_config = json.load(f)
+        break
+
+
+def _get(section: str, key: str, default=None):
+    """Get a value from the nested config.json structure."""
+    return _json_config.get(section, {}).get(key, default)
 
 
 class Settings(BaseSettings):
-    # LLM
-    llm_provider: str = "claude"
-    llm_model: str = "claude-sonnet-4-20250514"
+    # --- LLM (from config.json → llm) ---
+    llm_provider: str = _get("llm", "provider", "claude")
+    llm_model: str = _get("llm", "model", "claude-sonnet-4-20250514")
 
-    # API Keys
+    # --- API Keys (from .env only — secrets) ---
     anthropic_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
     gemini_api_key: Optional[str] = None
 
-    # Ollama
-    ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "llama3"
+    # --- Ollama (from config.json → ollama) ---
+    ollama_base_url: str = _get("ollama", "base_url", "http://localhost:11434")
+    ollama_model: str = _get("ollama", "model", "llama3")
 
-    # Embedding
-    embedding_provider: str = "openai"
-    embedding_model: str = "text-embedding-3-small"
+    # --- Embedding (from config.json → embedding) ---
+    embedding_provider: str = _get("embedding", "provider", "openai")
+    embedding_model: str = _get("embedding", "model", "text-embedding-3-small")
+    embedding_cache_size: int = _get("embedding", "cache_size", 1000)
+    embedding_cache_ttl: int = _get("embedding", "cache_ttl", 3600)
 
-    # Database
-    database_provider: str = "sqlite"  # sqlite | mongodb
-    database_url: str = "sqlite+aiosqlite:///./data/plugo.db"
+    # --- Database (from config.json → database) ---
+    database_provider: str = _get("database", "provider", "sqlite")
+    database_url: str = _get("database", "url", "sqlite+aiosqlite:///./data/plugo.db")
+    mongodb_url: str = _get("database", "mongodb_url", "mongodb://localhost:27017")
+    mongodb_database: str = _get("database", "mongodb_database", "plugo")
 
-    # MongoDB (when database_provider = "mongodb")
-    mongodb_url: str = "mongodb://localhost:27017"
-    mongodb_database: str = "plugo"
+    # --- Vector Store (from config.json → vector_store) ---
+    chroma_path: str = _get("vector_store", "chroma_path", "./data/chroma")
 
-    # Vector Store
-    chroma_path: str = "./data/chroma"
+    # --- RAG Pipeline (from config.json → rag) ---
+    rag_min_score: float = _get("rag", "min_score", 0.3)
+    rag_max_chunks: int = _get("rag", "max_chunks", 7)
 
-    # Security
+    # --- Security (SECRET_KEY from .env only, cors from config.json) ---
     secret_key: str = "change-me-to-a-random-string"
-    cors_origins: str = "http://localhost:3000,http://localhost:5173"
+    cors_origins: str = ",".join(_get("server", "cors_origins", ["http://localhost:3000", "http://localhost:5173"]))
 
-    # Rate limiting
-    rate_limit_default: str = "60/minute"
-    rate_limit_chat: str = "30/minute"
-    rate_limit_crawl: str = "5/minute"
+    # --- Rate Limiting (from config.json → rate_limit) ---
+    rate_limit_default: str = _get("rate_limit", "default", "60/minute")
+    rate_limit_chat: str = _get("rate_limit", "chat", "30/minute")
+    rate_limit_crawl: str = _get("rate_limit", "crawl", "5/minute")
 
-    # Server
-    backend_port: int = 8000
-    widget_cdn_url: str = "http://localhost:8000/static/widget.js"
+    # --- Server (from config.json → server) ---
+    backend_port: int = _get("server", "backend_port", 8000)
+    widget_cdn_url: str = _get("server", "widget_cdn_url", "http://localhost:8000/static/widget.js")
 
-    # Auth
-    auth_enabled: bool = True  # Set False to disable auth (for initial setup)
+    # --- Auth (from config.json → auth) ---
+    auth_enabled: bool = _get("auth", "enabled", True)
 
     class Config:
         env_file = ".env"

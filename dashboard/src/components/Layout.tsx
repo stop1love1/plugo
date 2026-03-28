@@ -1,19 +1,28 @@
-import { Outlet, Link, useParams, useLocation } from "react-router-dom";
-import { MessageSquare, Database, Wrench, Code, Settings, LayoutDashboard, MessageCircle } from "lucide-react";
+import { Outlet, Link, useParams, useLocation, useNavigate } from "react-router-dom";
+import { MessageSquare, Database, Wrench, Code, Settings, LayoutDashboard, MessageCircle, LogOut, User, Brain, BarChart3 } from "lucide-react";
+import { useStore } from "../lib/store";
 
 const sidebarLinks = [
+  { to: "analytics", label: "Analytics", icon: BarChart3 },
   { to: "setup", label: "Crawl & Setup", icon: LayoutDashboard },
   { to: "knowledge", label: "Knowledge Base", icon: Database },
   { to: "tools", label: "API Tools", icon: Wrench },
   { to: "embed", label: "Embed Code", icon: Code },
   { to: "chat-log", label: "Chat Log", icon: MessageCircle },
+  { to: "visitors", label: "Visitor Memory", icon: Brain },
   { to: "settings", label: "Settings", icon: Settings },
 ];
 
 export default function Layout() {
   const { siteId } = useParams();
   const location = useLocation();
-  const isHome = location.pathname === "/";
+  const navigate = useNavigate();
+  const { user, logout } = useStore();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
 
   return (
     <div className="min-h-screen flex">
@@ -55,8 +64,27 @@ export default function Layout() {
           </div>
         )}
 
-        <div className="p-4 border-t border-gray-200 text-xs text-gray-400">
-          Plugo v1.0 &middot; Open Source
+        {/* User menu */}
+        <div className="p-4 border-t border-gray-200">
+          {user && (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 min-w-0">
+                <User className="w-4 h-4 text-gray-400 shrink-0" />
+                <span className="text-sm text-gray-600 truncate">{user.username}</span>
+                <span className="text-xs bg-primary-50 text-primary-600 px-1.5 py-0.5 rounded shrink-0">
+                  {user.role}
+                </span>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="text-gray-400 hover:text-red-500 p-1"
+                title="Logout"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+          <div className="text-xs text-gray-400 mt-2">Plugo v1.0 &middot; Open Source</div>
         </div>
       </aside>
 

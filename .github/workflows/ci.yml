@@ -73,37 +73,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
-          cache: npm
-          cache-dependency-path: dashboard/package-lock.json
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: dashboard/pnpm-lock.yaml
 
       - name: Install dependencies
-        run: |
-          cd dashboard
-          npm ci || npm install
+        run: cd dashboard && pnpm install --frozen-lockfile
 
       - name: Lint
-        run: |
-          cd dashboard
-          npm run lint
+        run: cd dashboard && pnpm lint
 
       - name: Format check
-        run: |
-          cd dashboard
-          npm run format:check
+        run: cd dashboard && pnpm format:check
 
       - name: Test
-        run: |
-          cd dashboard
-          npm run test
+        run: cd dashboard && pnpm test
 
       - name: Build
-        run: |
-          cd dashboard
-          npm run build
+        run: cd dashboard && pnpm build
 
   widget:
     name: Widget
@@ -111,37 +106,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
-          cache: npm
-          cache-dependency-path: widget/package-lock.json
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: widget/pnpm-lock.yaml
 
       - name: Install dependencies
-        run: |
-          cd widget
-          npm ci || npm install
+        run: cd widget && pnpm install --frozen-lockfile
 
       - name: Lint
-        run: |
-          cd widget
-          npm run lint
+        run: cd widget && pnpm lint
 
       - name: Format check
-        run: |
-          cd widget
-          npm run format:check
+        run: cd widget && pnpm format:check
 
       - name: Test
-        run: |
-          cd widget
-          npm run test
+        run: cd widget && pnpm test
 
       - name: Build
-        run: |
-          cd widget
-          npm run build
+        run: cd widget && pnpm build
 
   docker:
     name: Docker Build

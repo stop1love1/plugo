@@ -1,8 +1,7 @@
 """
-Authentication router — login, register, token management.
+Authentication router — login, token management.
 
-For initial setup, the first user registered becomes admin.
-Subsequent users need an admin to create their account.
+Admin accounts are created via CLI: python manage.py create-admin
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -21,17 +20,18 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
 
 
-class RegisterRequest(BaseModel):
-    username: str = Field(min_length=3, max_length=50)
-    password: str = Field(min_length=8, max_length=128)
-    role: str = Field(default="admin", pattern="^(admin|viewer)$")
-
-
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     role: str
     username: str
+
+
+@router.get("/setup-status")
+async def setup_status(repos: Repositories = Depends(get_repos)):
+    """Check if any users exist (public endpoint for login page)."""
+    count = await repos.users.count()
+    return {"has_users": count > 0}
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -48,38 +48,6 @@ async def login(data: LoginRequest, repos: Repositories = Depends(get_repos)):
     return TokenResponse(
         access_token=token,
         role=user["role"],
-        username=user["username"],
-    )
-
-
-@router.post("/register", response_model=TokenResponse, status_code=201)
-async def register(data: RegisterRequest, repos: Repositories = Depends(get_repos)):
-    """
-    Register a new user.
-    First user is always admin. Subsequent users require no auth for now
-    (in production, lock this down to admin-only).
-    """
-    existing = await repos.users.get_by_username(data.username)
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Username already exists",
-        )
-
-    # First user is always admin
-    user_count = await repos.users.count()
-    role = "admin" if user_count == 0 else data.role
-
-    user = await repos.users.create({
-        "username": data.username,
-        "password_hash": hash_password(data.password),
-        "role": role,
-    })
-
-    token = create_access_token(subject=user["id"], role=role)
-    return TokenResponse(
-        access_token=token,
-        role=role,
         username=user["username"],
     )
 

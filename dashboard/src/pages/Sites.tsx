@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
 import { getSites, createSite } from "../lib/api";
 import { Plus, Globe, ArrowRight } from "lucide-react";
 
@@ -23,8 +24,10 @@ export default function Sites() {
       setShowCreate(false);
       setName("");
       setUrl("");
+      toast.success("Site created");
       navigate(`/site/${data.id}/setup`);
     },
+    onError: () => toast.error("Failed to create site"),
   });
 
   const handleCreate = (e: React.FormEvent) => {

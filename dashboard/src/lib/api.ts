@@ -5,6 +5,34 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+// Auth interceptor — attach JWT token to all requests
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("plugo_token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// 401 interceptor — redirect to login on auth failure
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && !error.config.url?.includes("/auth/")) {
+      localStorage.removeItem("plugo_token");
+      localStorage.removeItem("plugo_user");
+      window.location.href = "/login";
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Auth
+export const login = (data: { username: string; password: string }) =>
+  api.post("/auth/login", data).then((r) => r.data);
+export const getMe = () => api.get("/auth/me").then((r) => r.data);
+export const getSetupStatus = () => api.get("/auth/setup-status").then((r) => r.data);
+
 // Sites
 export const getSites = () => api.get("/sites").then((r) => r.data);
 export const getSite = (id: string) => api.get(`/sites/${id}`).then((r) => r.data);
@@ -19,8 +47,11 @@ export const getCrawlStatus = (jobId: string) => api.get(`/crawl/${jobId}`).then
 export const getSiteCrawlJobs = (siteId: string) => api.get(`/crawl/site/${siteId}`).then((r) => r.data);
 
 // Knowledge
-export const getKnowledge = (siteId: string, page = 1) =>
-  api.get(`/knowledge?site_id=${siteId}&page=${page}`).then((r) => r.data);
+export const getKnowledge = (siteId: string, page = 1, search?: string) => {
+  let url = `/knowledge?site_id=${siteId}&page=${page}`;
+  if (search) url += `&search=${encodeURIComponent(search)}`;
+  return api.get(url).then((r) => r.data);
+};
 export const deleteChunk = (id: string) => api.delete(`/knowledge/${id}`).then((r) => r.data);
 export const addManualChunk = (data: any) => api.post("/knowledge/manual", data).then((r) => r.data);
 export const uploadFile = (siteId: string, file: File) => {

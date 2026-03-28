@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
 import { getTools, createTool, deleteTool, testTool } from "../lib/api";
 import { Wrench, Plus, Trash2, Play, CheckCircle } from "lucide-react";
 
@@ -33,12 +34,18 @@ export default function Tools() {
       queryClient.invalidateQueries({ queryKey: ["tools", siteId] });
       setShowAdd(false);
       setForm({ name: "", description: "", method: "GET", url: "", auth_type: "none", auth_value: "", params_schema: "{}" });
+      toast.success("Tool created");
     },
+    onError: () => toast.error("Failed to create tool"),
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteTool,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tools", siteId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tools", siteId] });
+      toast.success("Tool deleted");
+    },
+    onError: () => toast.error("Failed to delete tool"),
   });
 
   const handleCreate = (e: React.FormEvent) => {
@@ -59,8 +66,13 @@ export default function Tools() {
   };
 
   const handleTest = async (toolId: string) => {
-    const result = await testTool(toolId, {});
-    setTestResults((prev) => ({ ...prev, [toolId]: result }));
+    try {
+      const result = await testTool(toolId, {});
+      setTestResults((prev) => ({ ...prev, [toolId]: result }));
+      toast.success("Test completed");
+    } catch {
+      toast.error("Test failed");
+    }
   };
 
   return (
