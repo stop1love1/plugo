@@ -13,7 +13,9 @@ async def _load_db_key(provider: str) -> str | None:
         if key:
             _key_cache[provider] = key
         return key
-    except Exception:
+    except Exception as e:
+        from logging_config import logger
+        logger.warning("Failed to load DB key for provider", provider=provider, error=str(e))
         return _key_cache.get(provider)
 
 

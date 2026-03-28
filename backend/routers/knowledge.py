@@ -35,6 +35,31 @@ async def list_knowledge(
     return data
 
 
+# NOTE: Static path routes (/urls, /url/*, /bulk-delete) MUST be defined
+# BEFORE dynamic path routes (/{chunk_id}) to avoid FastAPI route conflicts.
+
+@router.get("/urls")
+async def list_crawled_urls(
+    site_id: str,
+    repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
+):
+    """List all unique crawled URLs for a site with chunk counts."""
+    return await repos.knowledge.list_crawled_urls(site_id)
+
+
+@router.get("/url/chunks")
+async def get_chunks_by_url(
+    site_id: str,
+    source_url: str,
+    repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
+):
+    """Get all chunks from a specific crawled URL."""
+    chunks = await repos.knowledge.list_by_url(site_id, source_url)
+    return {"chunks": chunks, "total": len(chunks), "source_url": source_url}
+
+
 @router.get("/{chunk_id}")
 async def get_chunk(
     chunk_id: str,
@@ -112,13 +137,23 @@ async def bulk_delete_chunks(
     user: TokenData = Depends(get_current_user),
 ):
     """Delete multiple chunks at once."""
-    deleted = 0
-    for chunk_id in data.chunk_ids:
-        chunk = await repos.knowledge.get_by_id(chunk_id)
-        if chunk:
-            await rag_engine.delete_chunks(chunk["site_id"], [chunk.get("embedding_id") or chunk["id"]])
-            await repos.knowledge.delete(chunk_id)
-            deleted += 1
+    # Batch fetch all chunks in a single query
+    chunks = await repos.knowledge.get_many(data.chunk_ids)
+
+    # Batch delete from vector store grouped by site_id
+    site_embedding_ids: dict[str, list[str]] = {}
+    for chunk in chunks:
+        sid = chunk["site_id"]
+        eid = chunk.get("embedding_id") or chunk["id"]
+        site_embedding_ids.setdefault(sid, []).append(eid)
+    for sid, eids in site_embedding_ids.items():
+        await rag_engine.delete_chunks(sid, eids)
+
+    # Batch delete from database
+    chunk_ids_to_delete = [c["id"] for c in chunks]
+    if chunk_ids_to_delete:
+        await repos.knowledge.delete_many(chunk_ids_to_delete)
+    deleted = len(chunks)
     try:
         await repos.audit_logs.create({
             "user_id": user.sub,
@@ -131,6 +166,93 @@ async def bulk_delete_chunks(
     except Exception as e:
         logger.warning("Failed to create audit log", error=str(e))
     return {"deleted": deleted}
+
+
+class DeleteByUrlRequest(BaseModel):
+    site_id: str
+    source_url: str
+
+
+@router.post("/url/delete")
+async def delete_by_url(
+    data: DeleteByUrlRequest,
+    repos: Repositories = Depends(get_repos),
+    user: TokenData = Depends(get_current_user),
+):
+    """Delete all chunks from a specific URL (and from vector store)."""
+    chunks = await repos.knowledge.list_by_url(data.site_id, data.source_url)
+    if not chunks:
+        raise HTTPException(status_code=404, detail="No chunks found for this URL")
+
+    # Delete from vector store
+    embedding_ids = [c.get("embedding_id") or c["id"] for c in chunks]
+    await rag_engine.delete_chunks(data.site_id, embedding_ids)
+
+    # Delete from database
+    deleted = await repos.knowledge.delete_by_url(data.site_id, data.source_url)
+
+    # Update site knowledge count
+    knowledge_data = await repos.knowledge.list_by_site(data.site_id, page=1, per_page=1)
+    await repos.sites.update(data.site_id, {"knowledge_count": knowledge_data.get("total", 0)})
+
+    try:
+        await repos.audit_logs.create({
+            "user_id": user.sub, "username": user.sub,
+            "action": "delete", "resource_type": "knowledge",
+            "resource_id": None,
+            "details": json.dumps({"source_url": data.source_url, "deleted_count": deleted}),
+        })
+    except Exception as e:
+        logger.warning("Failed to create audit log", error=str(e))
+
+    return {"deleted": deleted, "source_url": data.source_url}
+
+
+class RecrawlUrlRequest(BaseModel):
+    site_id: str
+    source_url: str
+
+
+@router.post("/url/recrawl")
+async def recrawl_url(
+    data: RecrawlUrlRequest,
+    repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
+):
+    """Delete existing chunks for a URL, then re-crawl that single page."""
+    from knowledge.crawler import WebCrawler
+
+    # Delete old chunks for this URL first
+    old_chunks = await repos.knowledge.list_by_url(data.site_id, data.source_url)
+    if old_chunks:
+        embedding_ids = [c.get("embedding_id") or c["id"] for c in old_chunks]
+        await rag_engine.delete_chunks(data.site_id, embedding_ids)
+        await repos.knowledge.delete_by_url(data.site_id, data.source_url)
+
+    # Crawl single page
+    crawler = WebCrawler(max_pages=1, delay=0)
+    job = await repos.crawl_jobs.create({
+        "site_id": data.site_id,
+        "start_url": data.source_url,
+    })
+
+    try:
+        await crawler.crawl_site(data.site_id, data.source_url, job["id"], repos)
+
+        # Update site knowledge count
+        knowledge_data = await repos.knowledge.list_by_site(data.site_id, page=1, per_page=1)
+        await repos.sites.update(data.site_id, {"knowledge_count": knowledge_data.get("total", 0)})
+
+        new_chunks = await repos.knowledge.list_by_url(data.site_id, data.source_url)
+        return {
+            "message": f"Re-crawled {data.source_url}",
+            "old_chunks": len(old_chunks),
+            "new_chunks": len(new_chunks),
+            "job_id": job["id"],
+        }
+    except Exception as e:
+        logger.error("Recrawl failed", url=data.source_url, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Recrawl failed: {str(e)}")
 
 
 class ManualChunkCreate(BaseModel):

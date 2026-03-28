@@ -19,7 +19,7 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
         logout();
         setChecking(false);
       });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user, logout]);
 
   if (checking) {
     return (

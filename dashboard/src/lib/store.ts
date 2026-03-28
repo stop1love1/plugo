@@ -1,16 +1,5 @@
 import { create } from "zustand";
 
-type Site = {
-  id: string;
-  name: string;
-  url: string;
-  token: string;
-  llm_provider: string;
-  llm_model: string;
-  primary_color: string;
-  greeting: string;
-};
-
 type User = {
   username: string;
   role: string;
@@ -18,8 +7,6 @@ type User = {
 };
 
 type Store = {
-  currentSite: Site | null;
-  setCurrentSite: (site: Site | null) => void;
   user: User | null;
   setUser: (user: User | null) => void;
   logout: () => void;
@@ -36,8 +23,6 @@ try {
 }
 
 export const useStore = create<Store>((set) => ({
-  currentSite: null,
-  setCurrentSite: (site) => set({ currentSite: site }),
   user: initialUser,
   setUser: (user) => {
     if (user) {

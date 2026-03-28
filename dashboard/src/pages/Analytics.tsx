@@ -247,7 +247,7 @@ export default function Analytics() {
           ) : (
             <div className="space-y-2">
               {questions.map((q: any, i: number) => (
-                <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                <div key={`${q.question}-${i}`} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                   <p className="text-sm text-gray-700 truncate flex-1">{q.question}</p>
                   <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full ml-2 shrink-0">
                     {q.count}x
@@ -266,7 +266,7 @@ export default function Analytics() {
           ) : (
             <div className="space-y-2">
               {knowledgeGaps.map((q: any, i: number) => (
-                <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                <div key={`${q.question}-${i}`} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                   <p className="text-sm text-gray-700 truncate flex-1">{q.question}</p>
                   <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full ml-2 shrink-0">
                     {q.count}x
@@ -293,8 +293,8 @@ export default function Analytics() {
                 </tr>
               </thead>
               <tbody>
-                {toolUsage.map((tool: any, i: number) => (
-                  <tr key={i} className="border-t border-gray-50">
+                {toolUsage.map((tool: any) => (
+                  <tr key={tool.name} className="border-t border-gray-50">
                     <td className="px-4 py-2 font-medium text-gray-700">{tool.name}</td>
                     <td className="px-4 py-2 text-right text-gray-600">{tool.calls}</td>
                     <td className="px-4 py-2 text-right">

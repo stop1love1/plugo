@@ -229,7 +229,7 @@ export default function ChatLog() {
 
               <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4 max-h-[600px] overflow-y-auto">
                 {sessionDetail.messages.map((msg: any, i: number) => (
-                  <div key={i} className="flex gap-3">
+                  <div key={`${msg.role}-${msg.timestamp ?? i}`} className="flex gap-3">
                     <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
                       msg.role === "user" ? "bg-blue-100" : "bg-purple-100"
                     }`}>

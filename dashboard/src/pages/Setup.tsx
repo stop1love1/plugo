@@ -6,16 +6,16 @@ import { getSite } from "../lib/api";
 import {
   Globe, Play, Square, RefreshCw, CheckCircle, XCircle,
   Clock, Database, Trash2, Power, PowerOff, Settings2,
-  ChevronDown, ChevronUp, Terminal,
+  ChevronDown, ChevronUp, Terminal, Link, FileText, AlertTriangle,
 } from "lucide-react";
 import api from "../lib/api";
 import { useLocale } from "../lib/useLocale";
 import { OnboardingChecklist } from "../components/OnboardingChecklist";
 import { pushNotification } from "../components/NotificationBell";
 
-const toggleCrawl = (siteId: string, data: any) =>
+const toggleCrawl = (siteId: string, data: { enabled: boolean; max_pages?: number; auto_interval?: number }) =>
   api.put(`/crawl/toggle/${siteId}`, data).then((r) => r.data);
-const startCrawl = (data: any) =>
+const startCrawl = (data: { site_id: string; url?: string; max_pages?: number }) =>
   api.post("/crawl/start", data).then((r) => r.data);
 const stopCrawl = (siteId: string) =>
   api.post(`/crawl/stop/${siteId}`).then((r) => r.data);
@@ -28,12 +28,24 @@ const clearKnowledge = (siteId: string) =>
 const getCrawlLogs = (jobId: string) =>
   api.get(`/crawl/job/${jobId}/logs`).then((r) => r.data);
 
+type LogEntry = {
+  url: string;
+  status: "success" | "skipped" | "error";
+  title?: string;
+  chunks: number;
+  error?: string | null;
+  action?: string;
+  page_number?: number;
+  timestamp: string;
+};
+
 export default function Setup() {
   const { siteId } = useParams<{ siteId: string }>();
   const queryClient = useQueryClient();
   const { t } = useLocale();
   const [maxPages, setMaxPages] = useState(50);
   const [customUrl, setCustomUrl] = useState("");
+  const [autoInterval, setAutoInterval] = useState(0);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [selectedLogJobId, setSelectedLogJobId] = useState<string | null>(null);
@@ -53,6 +65,13 @@ export default function Setup() {
     refetchInterval: (query) => query.state.data?.crawl_status === "running" ? 2000 : false,
   });
 
+  // Sync auto_interval from server
+  useEffect(() => {
+    if (crawlStatus?.crawl_auto_interval !== undefined) {
+      setAutoInterval(crawlStatus.crawl_auto_interval);
+    }
+  }, [crawlStatus?.crawl_auto_interval]);
+
   // Tick every second while crawl is running so elapsed time updates
   useEffect(() => {
     if (crawlStatus?.crawl_status !== "running") return;
@@ -60,7 +79,13 @@ export default function Setup() {
     return () => clearInterval(interval);
   }, [crawlStatus?.crawl_status]);
 
-  // Detect crawl completion/failure and push notification
+  const { data: jobs = [], refetch: refetchJobs } = useQuery({
+    queryKey: ["crawl-jobs", siteId],
+    queryFn: () => getCrawlJobs(siteId!),
+    enabled: !!siteId,
+  });
+
+  // Detect crawl completion/failure and push notification + refresh jobs
   const prevCrawlStatus = useRef<string | null>(null);
   useEffect(() => {
     const current = crawlStatus?.crawl_status;
@@ -78,20 +103,15 @@ export default function Setup() {
           title: t("notifications.crawlFailed"),
         });
       }
+      refetchJobs();
     }
     prevCrawlStatus.current = current ?? null;
-  }, [crawlStatus?.crawl_status]);
+  }, [crawlStatus?.crawl_status, crawlStatus?.knowledge_count, t, refetchJobs]);
 
-  const { data: jobs = [], refetch: refetchJobs } = useQuery({
-    queryKey: ["crawl-jobs", siteId],
-    queryFn: () => getCrawlJobs(siteId!),
-    enabled: !!siteId,
-  });
+  // Find the running job
+  const runningJob = jobs.find((j: { status: string }) => j.status === "running");
 
-  // Find the running job (used for progress + logs)
-  const runningJob = jobs.find((j: any) => j.status === "running");
-
-  // Determine which job to show logs for: running job or user-selected historical job
+  // Determine which job to show logs for
   const activeLogJobId = runningJob?.id || selectedLogJobId;
 
   const { data: logData } = useQuery({
@@ -101,7 +121,7 @@ export default function Setup() {
     refetchInterval: runningJob?.id === activeLogJobId && runningJob?.status === "running" ? 2000 : false,
   });
 
-  // Auto-scroll log container when new entries appear
+  // Auto-scroll log container
   useEffect(() => {
     if (logContainerRef.current && logsExpanded) {
       logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
@@ -116,15 +136,19 @@ export default function Setup() {
   }, [runningJob?.id]);
 
   const toggleMutation = useMutation({
-    mutationFn: (enabled: boolean) =>
-      toggleCrawl(siteId!, { enabled, max_pages: maxPages }),
+    mutationFn: (enabled: boolean) => {
+      // When enabling, set a default auto-interval of 24h if not already set
+      const interval = enabled && autoInterval === 0 ? 24 : autoInterval;
+      if (enabled && autoInterval === 0) setAutoInterval(24);
+      return toggleCrawl(siteId!, { enabled, max_pages: maxPages, auto_interval: interval });
+    },
     onSuccess: (_data, enabled) => {
       refetchStatus();
       refetchJobs();
       queryClient.invalidateQueries({ queryKey: ["site", siteId] });
-      toast.success(enabled ? "Crawl enabled" : "Crawl disabled");
+      toast.success(enabled ? t("setup.crawlEnabled") : t("setup.crawlDisabled"));
     },
-    onError: () => toast.error("Failed to toggle crawl"),
+    onError: () => toast.error(t("setup.toggleFailed")),
   });
 
   const startMutation = useMutation({
@@ -133,9 +157,9 @@ export default function Setup() {
     onSuccess: () => {
       refetchStatus();
       refetchJobs();
-      toast.success("Crawl started");
+      toast.success(t("setup.crawlStarted"));
     },
-    onError: () => toast.error("Failed to start crawl"),
+    onError: () => toast.error(t("setup.startFailed")),
   });
 
   const stopMutation = useMutation({
@@ -143,9 +167,9 @@ export default function Setup() {
     onSuccess: () => {
       refetchStatus();
       refetchJobs();
-      toast.success("Crawl stopped");
+      toast.success(t("setup.crawlStopped"));
     },
-    onError: () => toast.error("Failed to stop crawl"),
+    onError: () => toast.error(t("setup.stopFailed")),
   });
 
   const clearMutation = useMutation({
@@ -154,15 +178,14 @@ export default function Setup() {
       refetchStatus();
       queryClient.invalidateQueries({ queryKey: ["site", siteId] });
       setShowClearConfirm(false);
-      toast.success("All knowledge cleared");
+      toast.success(t("setup.knowledgeCleared"));
     },
-    onError: () => toast.error("Failed to clear knowledge"),
+    onError: () => toast.error(t("setup.clearFailed")),
   });
 
   const isRunning = crawlStatus?.crawl_status === "running";
   const isEnabled = crawlStatus?.crawl_enabled ?? false;
 
-  // Progress estimate for running crawls
   const progressPercent = runningJob && maxPages > 0
     ? Math.min(100, Math.round((runningJob.pages_done / maxPages) * 100))
     : 0;
@@ -177,12 +200,51 @@ export default function Setup() {
     }
   };
 
+  const renderLogEntry = (log: LogEntry) => {
+    const isSystem = !log.url;
+    return (
+      <div className="flex items-start gap-2 py-1 border-b border-gray-800 last:border-0">
+        <span className="text-gray-500 shrink-0 w-[70px]">
+          {new Date(log.timestamp).toLocaleTimeString()}
+        </span>
+        {isSystem ? (
+          <span className="text-cyan-400 shrink-0">SYS</span>
+        ) : log.status === "success" ? (
+          <span className="text-green-400 shrink-0">OK </span>
+        ) : log.status === "skipped" ? (
+          <span className="text-yellow-400 shrink-0">SKP</span>
+        ) : (
+          <span className="text-red-400 shrink-0">ERR</span>
+        )}
+        {isSystem ? (
+          <span className="text-cyan-300 flex-1">{log.action}</span>
+        ) : (
+          <>
+            <span className="text-gray-300 truncate flex-1" title={`${log.url}\n${log.title || ""}`}>
+              {log.title ? `${log.title} — ` : ""}{log.url}
+            </span>
+            {log.status === "success" && log.chunks > 0 && (
+              <span className="text-blue-400 shrink-0">{log.chunks} chunks</span>
+            )}
+            {log.action && !log.error && log.status !== "success" && (
+              <span className="text-gray-500 shrink-0 text-[10px]">{log.action}</span>
+            )}
+            {log.error && (
+              <span className="text-red-400 shrink-0 truncate max-w-[200px]" title={log.error}>
+                {log.error}
+              </span>
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-2">{t("setup.title")}</h1>
       <p className="text-gray-500 mb-6">{t("setup.subtitle")}</p>
 
-      {/* Onboarding Checklist */}
       <OnboardingChecklist />
 
       {/* ===== SECTION 1: Auto Crawl Settings ===== */}
@@ -201,7 +263,7 @@ export default function Setup() {
             )}
             <div>
               <p className="font-medium">
-                Crawl: {isEnabled ? "ON" : "OFF"}
+                {t("setup.crawlToggle")}: {isEnabled ? "ON" : "OFF"}
               </p>
               <p className="text-sm text-gray-500">
                 {isEnabled ? t("setup.autoCrawlDesc") : t("setup.autoCrawlOff")}
@@ -224,8 +286,40 @@ export default function Setup() {
           </button>
         </div>
 
+        {/* Auto-crawl interval setting */}
+        {isEnabled && (
+          <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
+            <label className="block text-sm font-medium text-blue-800 mb-1">
+              {t("setup.autoInterval")}
+            </label>
+            <div className="flex items-center gap-3">
+              <select
+                value={autoInterval}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value);
+                  setAutoInterval(val);
+                  toggleCrawl(siteId!, { enabled: true, auto_interval: val });
+                }}
+                className="border border-blue-200 rounded-lg px-3 py-1.5 text-sm outline-none bg-white"
+              >
+                <option value={0}>{t("setup.intervalDisabled")}</option>
+                <option value={6}>6h</option>
+                <option value={12}>12h</option>
+                <option value={24}>24h</option>
+                <option value={48}>48h</option>
+                <option value={168}>{t("setup.intervalWeekly")}</option>
+              </select>
+              {autoInterval > 0 && (
+                <span className="text-xs text-blue-600">
+                  {t("setup.autoIntervalDesc")}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
+        <div className="grid grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
           <div className="text-center">
             <div className="text-2xl font-bold text-primary-600">
               {crawlStatus?.knowledge_count ?? 0}
@@ -237,10 +331,17 @@ export default function Setup() {
               {isRunning ? (
                 <RefreshCw className="w-6 h-6 text-blue-500 animate-spin mx-auto" />
               ) : (
-                crawlStatus?.crawl_status ?? "idle"
+                <span className="capitalize">{crawlStatus?.crawl_status ?? "idle"}</span>
               )}
             </div>
             <div className="text-xs text-gray-500">{t("setup.status")}</div>
+          </div>
+          <div className="text-center">
+            <div className="text-sm font-medium text-gray-700">
+              {runningJob ? `${runningJob.pages_done}` : "—"}
+              {runningJob && <span className="text-gray-400 text-xs">/{maxPages}</span>}
+            </div>
+            <div className="text-xs text-gray-500">{t("setup.pagesCrawled")}</div>
           </div>
           <div className="text-center">
             <div className="text-sm font-medium text-gray-700">
@@ -252,12 +353,31 @@ export default function Setup() {
           </div>
         </div>
 
-        {/* Progress bar when running */}
+        {/* Live progress when running */}
         {isRunning && (
           <div className="mt-4">
+            {/* Current URL indicator */}
+            {crawlStatus?.current_url && (
+              <div className="flex items-center gap-2 mb-2 px-1">
+                <Link className="w-3.5 h-3.5 text-blue-500 animate-pulse shrink-0" />
+                <span className="text-xs text-blue-600 truncate" title={crawlStatus.current_url}>
+                  {t("setup.crawlingNow")}: {crawlStatus.current_url}
+                </span>
+              </div>
+            )}
+
+            {/* Progress bar */}
             <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
               <span>{t("setup.crawlProgress")}</span>
-              <span>{runningJob?.pages_done ?? 0} / {maxPages} {t("setup.pages")}</span>
+              <span>
+                {runningJob?.pages_done ?? 0} / {maxPages} {t("setup.pages")}
+                {runningJob?.pages_skipped > 0 && (
+                  <span className="text-yellow-500 ml-2">({runningJob.pages_skipped} {t("setup.skipped")})</span>
+                )}
+                {runningJob?.pages_failed > 0 && (
+                  <span className="text-red-500 ml-2">({runningJob.pages_failed} {t("setup.failed")})</span>
+                )}
+              </span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2.5">
               <div
@@ -269,7 +389,7 @@ export default function Setup() {
               <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
                 <span className="flex items-center gap-1">
                   <Clock className="w-3 h-3" />
-                  Elapsed: {(() => {
+                  {t("setup.elapsed")}: {(() => {
                     const elapsed = Math.max(0, Math.floor((now - new Date(runningJob.started_at).getTime()) / 1000));
                     const mins = Math.floor(elapsed / 60);
                     const secs = elapsed % 60;
@@ -277,56 +397,42 @@ export default function Setup() {
                   })()}
                 </span>
                 <span>
-                  Speed: {(() => {
+                  {t("setup.speed")}: {(() => {
                     const elapsedMin = Math.max(0, (now - new Date(runningJob.started_at).getTime()) / 60000);
-                    if (elapsedMin < 0.1) return "calculating...";
-                    return `${(runningJob.pages_done / elapsedMin).toFixed(1)} pages/min`;
+                    if (elapsedMin < 0.1) return t("setup.calculating");
+                    return `${(runningJob.pages_done / elapsedMin).toFixed(1)} ${t("setup.pagesPerMin")}`;
                   })()}
                 </span>
+                {runningJob?.chunks_created > 0 && (
+                  <span className="flex items-center gap-1">
+                    <FileText className="w-3 h-3" />
+                    {runningJob.chunks_created} {t("setup.chunksCreated")}
+                  </span>
+                )}
               </div>
             )}
           </div>
         )}
 
-        {/* Crawl Log Panel (visible during running crawl) */}
-        {isRunning && logData?.logs?.length > 0 && (
+        {/* Crawl Log Panel */}
+        {(isRunning || selectedLogJobId) && logData?.logs?.length > 0 && (
           <div className="mt-4">
             <button
               onClick={() => setLogsExpanded(!logsExpanded)}
               className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-2"
             >
               <Terminal className="w-4 h-4" />
-              <span className="font-medium">Crawl Log ({logData.logs.length} entries)</span>
+              <span className="font-medium">{t("setup.crawlLog")} ({logData.logs.length} {t("setup.entries")})</span>
               {logsExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
             {logsExpanded && (
               <div
                 ref={logContainerRef}
-                className="bg-gray-900 rounded-lg p-4 max-h-64 overflow-y-auto font-mono text-xs"
+                className="bg-gray-900 rounded-lg p-4 max-h-80 overflow-y-auto font-mono text-xs"
               >
-                {logData.logs.map((log: any, i: number) => (
-                  <div key={i} className="flex items-start gap-2 py-1 border-b border-gray-800 last:border-0">
-                    <span className="text-gray-500 shrink-0">
-                      {new Date(log.timestamp).toLocaleTimeString()}
-                    </span>
-                    {log.status === "success" ? (
-                      <span className="text-green-400 shrink-0">OK</span>
-                    ) : log.status === "skipped" ? (
-                      <span className="text-yellow-400 shrink-0">--</span>
-                    ) : (
-                      <span className="text-red-400 shrink-0">ERR</span>
-                    )}
-                    <span className="text-gray-300 truncate flex-1" title={log.url}>
-                      {log.url}
-                    </span>
-                    {log.status === "success" && (
-                      <span className="text-blue-400 shrink-0">{log.chunks} chunks</span>
-                    )}
-                    {log.error && (
-                      <span className="text-red-400 shrink-0 truncate max-w-[200px]" title={log.error}>
-                        {log.error}
-                      </span>
-                    )}
+                {logData.logs.map((log: LogEntry, i: number) => (
+                  <div key={`${log.timestamp}-${log.url || i}`}>
+                    {renderLogEntry(log)}
                   </div>
                 ))}
               </div>
@@ -335,18 +441,29 @@ export default function Setup() {
         )}
       </div>
 
-      {/* ===== SECTION 2: Manual Actions ===== */}
+      {/* ===== SECTION 2: Manual Scan ===== */}
       <div className="bg-white p-6 rounded-xl border border-gray-200 mb-6">
         <h3 className="font-semibold mb-4 flex items-center gap-2">
           <Globe className="w-5 h-5" /> {t("setup.manualActions")}
         </h3>
+
+        {/* Site URL info */}
+        <div className="flex items-center gap-2 p-3 mb-4 bg-gray-50 rounded-lg border border-gray-100">
+          <Globe className="w-4 h-4 text-gray-400 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <div className="text-xs text-gray-500">{t("setup.siteUrl")}</div>
+            <div className="text-sm font-medium text-gray-900 truncate">{site?.url || "—"}</div>
+          </div>
+          <span className="text-[10px] text-gray-400 shrink-0">{t("setup.autoTarget")}</span>
+        </div>
+
         <p className="text-sm text-gray-500 mb-4">
-          Manually trigger a crawl or clear learned data.
+          {t("setup.manualActionsDesc")}
         </p>
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              {t("setup.crawlUrl").replace("{url}", site?.url || "")}
+              {t("setup.scanUrl")}
             </label>
             <input
               value={customUrl}
@@ -354,6 +471,7 @@ export default function Setup() {
               placeholder={site?.url || "https://example.com"}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
             />
+            <p className="text-xs text-gray-400 mt-1">{t("setup.scanUrlHint")}</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -386,7 +504,7 @@ export default function Setup() {
                 className="flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 disabled:opacity-50"
               >
                 <Square className="w-4 h-4" />
-                {stopMutation.isPending ? "Stopping..." : t("setup.stopCrawl")}
+                {stopMutation.isPending ? t("setup.stopping") : t("setup.stopCrawl")}
               </button>
             ) : (
               <button
@@ -395,7 +513,7 @@ export default function Setup() {
                 className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50"
               >
                 <Play className="w-4 h-4" />
-                {startMutation.isPending ? "Starting..." : t("setup.startCrawl")}
+                {startMutation.isPending ? t("setup.starting") : t("setup.startCrawl")}
               </button>
             )}
 
@@ -437,7 +555,7 @@ export default function Setup() {
             <Database className="w-5 h-5" /> {t("setup.crawlHistory")}
           </h3>
           <div className="space-y-1">
-            {jobs.map((job: any) => {
+            {jobs.map((job: { id: string; status: string; pages_done: number; pages_skipped?: number; pages_failed?: number; chunks_created?: number; started_at?: string }) => {
               const isSelected = selectedLogJobId === job.id;
               const isJobRunning = job.status === "running";
               return (
@@ -460,14 +578,16 @@ export default function Setup() {
                         <span className="text-sm font-medium capitalize">{job.status}</span>
                         <span className="text-xs text-gray-400 ml-2">
                           {job.pages_done} {t("setup.pages")}
+                          {job.chunks_created ? ` · ${job.chunks_created} chunks` : ""}
+                          {job.pages_failed ? (
+                            <span className="text-red-400 ml-1">· {job.pages_failed} {t("setup.failed")}</span>
+                          ) : null}
                         </span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-400">
-                        {job.started_at
-                          ? new Date(job.started_at).toLocaleString()
-                          : ""}
+                        {job.started_at ? new Date(job.started_at).toLocaleString() : ""}
                       </span>
                       {!isJobRunning && (
                         isSelected
@@ -477,33 +597,13 @@ export default function Setup() {
                     </div>
                   </button>
 
-                  {/* Expanded log view for selected historical job */}
+                  {/* Expanded log view */}
                   {isSelected && logData?.logs?.length > 0 && (
                     <div className="mt-2 mb-3 ml-2">
-                      <div className="bg-gray-900 rounded-lg p-4 max-h-64 overflow-y-auto font-mono text-xs">
-                        {logData.logs.map((log: any, i: number) => (
-                          <div key={i} className="flex items-start gap-2 py-1 border-b border-gray-800 last:border-0">
-                            <span className="text-gray-500 shrink-0">
-                              {new Date(log.timestamp).toLocaleTimeString()}
-                            </span>
-                            {log.status === "success" ? (
-                              <span className="text-green-400 shrink-0">OK</span>
-                            ) : log.status === "skipped" ? (
-                              <span className="text-yellow-400 shrink-0">--</span>
-                            ) : (
-                              <span className="text-red-400 shrink-0">ERR</span>
-                            )}
-                            <span className="text-gray-300 truncate flex-1" title={log.url}>
-                              {log.url}
-                            </span>
-                            {log.status === "success" && (
-                              <span className="text-blue-400 shrink-0">{log.chunks} chunks</span>
-                            )}
-                            {log.error && (
-                              <span className="text-red-400 shrink-0 truncate max-w-[200px]" title={log.error}>
-                                {log.error}
-                              </span>
-                            )}
+                      <div className="bg-gray-900 rounded-lg p-4 max-h-80 overflow-y-auto font-mono text-xs">
+                        {logData.logs.map((log: LogEntry, i: number) => (
+                          <div key={`${log.timestamp}-${log.url || i}`}>
+                            {renderLogEntry(log)}
                           </div>
                         ))}
                       </div>
@@ -511,8 +611,9 @@ export default function Setup() {
                   )}
                   {isSelected && (!logData?.logs || logData.logs.length === 0) && (
                     <div className="mt-2 mb-3 ml-2">
-                      <div className="bg-gray-900 rounded-lg p-4 font-mono text-xs text-gray-500">
-                        No crawl logs available for this job.
+                      <div className="bg-gray-900 rounded-lg p-4 font-mono text-xs text-gray-500 flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4" />
+                        {t("setup.noLogs")}
                       </div>
                     </div>
                   )}

@@ -18,19 +18,22 @@ type WindowProps = {
   position: "bottom-right" | "bottom-left";
   suggestions: string[];
   connectionState: ConnectionState;
+  widgetTitle?: string;
+  showBranding?: boolean;
   onSend: (message: string) => void;
   onClose: () => void;
+  onMinimize?: () => void;
   onFeedback?: (index: number, rating: "up" | "down") => void;
   onRetry?: (errorIndex: number) => void;
 };
 
-export function ChatWindow({ messages, isTyping, position, suggestions, connectionState, onSend, onClose, onFeedback, onRetry }: WindowProps) {
+export function ChatWindow({ messages, isTyping, position, suggestions, connectionState, widgetTitle, showBranding = true, onSend, onClose, onMinimize, onFeedback, onRetry }: WindowProps) {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const windowRef = useRef<HTMLDivElement>(null);
-  const lang = detectLanguage();
+  const [lang] = useState(() => detectLanguage());
   const [userScrolledUp, setUserScrolledUp] = useState(false);
   const [newMessageCount, setNewMessageCount] = useState(0);
 
@@ -47,7 +50,7 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isTyping]);
+  }, [messages, isTyping, scrollToBottom]);
 
   // Detect manual scroll
   const handleScroll = useCallback(() => {
@@ -68,9 +71,9 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // Focus input when opened
+  // Focus textarea when opened
   useEffect(() => {
-    inputRef.current?.focus();
+    textareaRef.current?.focus();
   }, []);
 
   // Close on Escape key
@@ -85,9 +88,9 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
   // Focus trap: keep Tab cycling within the widget window
   useEffect(() => {
     const handleTab = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab') return;
+      if (e.key !== "Tab") return;
       const focusable = windowRef.current?.querySelectorAll<HTMLElement>(
-        'button, input, [tabindex]:not([tabindex="-1"])'
+        'button, textarea, [tabindex]:not([tabindex="-1"])'
       );
       if (!focusable?.length) return;
       const first = focusable[0];
@@ -100,8 +103,8 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
         first.focus();
       }
     };
-    document.addEventListener('keydown', handleTab);
-    return () => document.removeEventListener('keydown', handleTab);
+    document.addEventListener("keydown", handleTab);
+    return () => document.removeEventListener("keydown", handleTab);
   }, []);
 
   const handleSubmit = (e: Event) => {
@@ -109,20 +112,64 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
     if (!input.trim() || isTyping || isOffline) return;
     onSend(input.trim());
     setInput("");
+    // Reset textarea height
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
+  };
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    // Enter sends, Shift+Enter adds newline
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e);
+    }
   };
 
   const handleInput = (e: Event) => {
-    const val = (e.target as HTMLInputElement).value;
+    const el = e.target as HTMLTextAreaElement;
+    const val = el.value;
     if (val.length <= MAX_INPUT_LENGTH) {
       setInput(val);
     }
+    // Auto-resize textarea
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 100) + "px";
+  };
+
+  // Determine message grouping
+  const isLastInGroup = (i: number) => {
+    if (i >= messages.length - 1) return true;
+    return messages[i].role !== messages[i + 1].role;
+  };
+
+  const isSameRoleAsPrev = (i: number) => {
+    if (i === 0) return false;
+    return messages[i].role === messages[i - 1].role;
   };
 
   return (
     <div class={`plugo-window ${position}`} ref={windowRef} role="dialog" aria-modal="true">
       <div class="plugo-header">
-        <h3>{getWidgetString("chatTitle", lang)}</h3>
-        <button onClick={onClose} aria-label="Close">&times;</button>
+        <div class="plugo-header-left">
+          <div class="plugo-header-avatar">{"\u{1F4AC}"}</div>
+          <div class="plugo-header-info">
+            <h3>{widgetTitle || getWidgetString("chatTitle", lang)}</h3>
+            <div class="plugo-header-status">
+              <span
+                class={`plugo-header-status-dot${connectionState === "connected" ? " online" : ""}`}
+                style={connectionState !== "connected" ? "background:#f59e0b" : ""}
+              />
+              {connectionState === "connected" ? "Online" : getWidgetString(connectionState as any, lang)}
+            </div>
+          </div>
+        </div>
+        <div class="plugo-header-actions">
+          {onMinimize && (
+            <button onClick={onMinimize} aria-label="Minimize" title="Minimize">&minus;</button>
+          )}
+          <button onClick={onClose} aria-label="Close" title="Close">&times;</button>
+        </div>
       </div>
 
       {/* Connection status banner */}
@@ -148,23 +195,33 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
           const msgIsError = msg.role === "bot" && msg.content.startsWith("\u26a0\ufe0f");
           return (
             <Message
-              key={i}
+              key={`${msg.role}-${msg.timestamp}-${i}`}
               role={msg.role}
               content={msg.content}
               timestamp={msg.timestamp}
               index={i}
               isError={msgIsError}
+              isLastInGroup={isLastInGroup(i)}
               onFeedback={msg.role === "bot" && msg.content && !msgIsError ? onFeedback : undefined}
               onRetry={msgIsError && onRetry ? () => onRetry(i) : undefined}
             />
           );
         })}
         {isTyping && (
-          <div class="plugo-typing">
-            <span />
-            <span />
-            <span />
-            <span class="plugo-typing-text">{getWidgetString("typing", lang)}</span>
+          <div class="plugo-msg-row bot">
+            <div class="plugo-avatar" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                <path d="M2 17l10 5 10-5" />
+                <path d="M2 12l10 5 10-5" />
+              </svg>
+            </div>
+            <div class="plugo-typing">
+              <span />
+              <span />
+              <span />
+              <span class="plugo-typing-text">{getWidgetString("typing", lang)}</span>
+            </div>
           </div>
         )}
 
@@ -192,28 +249,37 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
       {/* New message indicator when scrolled up */}
       {userScrolledUp && newMessageCount > 0 && (
         <button class="plugo-new-msg-btn" onClick={jumpToBottom}>
-          ↓ {getWidgetString("newMessages", lang)} ({newMessageCount})
+          {"\u2193"} {getWidgetString("newMessages", lang)} ({newMessageCount})
         </button>
       )}
 
       <form class="plugo-input-area" onSubmit={handleSubmit}>
-        <input
-          ref={inputRef}
-          type="text"
+        <textarea
+          ref={textareaRef}
           value={input}
           onInput={handleInput}
+          onKeyDown={handleKeyDown}
           placeholder={getWidgetString("placeholder", lang)}
           disabled={isTyping || isOffline}
           maxLength={MAX_INPUT_LENGTH}
+          rows={1}
         />
         <button type="submit" disabled={!input.trim() || isTyping || isOffline} aria-label={getWidgetString("send", lang)}>
-          {getWidgetString("send", lang)}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+          </svg>
         </button>
       </form>
       {/* Character counter */}
       {input.length > MAX_INPUT_LENGTH * 0.6 && (
         <div class={`plugo-char-counter${input.length > MAX_INPUT_LENGTH * 0.95 ? " danger" : input.length > MAX_INPUT_LENGTH * 0.8 ? " warning" : ""}`}>
           {input.length}/{MAX_INPUT_LENGTH}
+        </div>
+      )}
+      {showBranding && (
+        <div class="plugo-branding">
+          Powered by <a href="https://plugo.dev" target="_blank" rel="noopener">Plugo</a>
         </div>
       )}
     </div>

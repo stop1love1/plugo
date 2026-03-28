@@ -71,7 +71,8 @@ export default function Sites() {
 
   const handleOpenDemo = (e: React.MouseEvent, token: string) => {
     e.stopPropagation();
-    window.open(`http://localhost:8000/demo/${token}`, "_blank");
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || __BACKEND_URL__;
+    window.open(`${backendUrl}/demo/${token}`, "_blank");
   };
 
   return (

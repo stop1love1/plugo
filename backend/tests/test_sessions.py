@@ -1,7 +1,7 @@
 """Tests for Sessions & Feedback flow."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -11,17 +11,17 @@ async def test_session(db_repos, test_site):
     """Create a test chat session with messages."""
     session_id = str(uuid.uuid4())
     messages = [
-        {"role": "user", "content": "Hello", "timestamp": datetime.utcnow().isoformat()},
-        {"role": "assistant", "content": "Hi there! How can I help?", "timestamp": datetime.utcnow().isoformat()},
-        {"role": "user", "content": "Tell me about your product", "timestamp": datetime.utcnow().isoformat()},
-        {"role": "assistant", "content": "Our product is great!", "timestamp": datetime.utcnow().isoformat()},
+        {"role": "user", "content": "Hello", "timestamp": datetime.now(timezone.utc).isoformat()},
+        {"role": "assistant", "content": "Hi there! How can I help?", "timestamp": datetime.now(timezone.utc).isoformat()},
+        {"role": "user", "content": "Tell me about your product", "timestamp": datetime.now(timezone.utc).isoformat()},
+        {"role": "assistant", "content": "Our product is great!", "timestamp": datetime.now(timezone.utc).isoformat()},
     ]
     session = await db_repos.chat_sessions.create({
         "id": session_id,
         "site_id": test_site["id"],
         "visitor_id": f"visitor_{uuid.uuid4().hex[:8]}",
         "messages": messages,
-        "started_at": datetime.utcnow(),
+        "started_at": datetime.now(timezone.utc),
     })
     yield session
     try:

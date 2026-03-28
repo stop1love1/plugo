@@ -7,7 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from repositories.base import (
     BaseSiteRepo, BaseKnowledgeRepo, BaseToolRepo,
-    BaseChatSessionRepo, BaseCrawlJobRepo, BaseUserRepo,
+    BaseChatSessionRepo, BaseCrawlJobRepo, BaseUserRepo, BaseLLMKeyRepo,
     BaseVisitorMemoryRepo, BaseConversationSummaryRepo,
     BaseAuditLogRepo,
 )
@@ -40,7 +40,11 @@ class MongoSiteRepo(BaseSiteRepo):
             "primary_color": data.get("primary_color", "#6366f1"),
             "greeting": data.get("greeting", "Xin chào! Tôi có thể giúp gì cho bạn?"),
             "position": data.get("position", "bottom-right"),
+            "widget_title": data.get("widget_title", ""),
+            "dark_mode": data.get("dark_mode", "auto"),
+            "show_branding": data.get("show_branding", True),
             "allowed_domains": data.get("allowed_domains", ""),
+            "suggestions": data.get("suggestions", []),
             # Crawl management
             "crawl_enabled": data.get("crawl_enabled", False),
             "crawl_auto_interval": data.get("crawl_auto_interval", 0),
@@ -106,11 +110,18 @@ class MongoKnowledgeRepo(BaseKnowledgeRepo):
         doc = await self.col.find_one({"_id": chunk_id})
         return _clean_doc(doc) if doc else None
 
-    async def list_by_site(self, site_id: str, page: int = 1, per_page: int = 20) -> dict:
+    async def list_by_site(self, site_id: str, page: int = 1, per_page: int = 20, search: Optional[str] = None) -> dict:
         skip = (page - 1) * per_page
-        cursor = self.col.find({"site_id": site_id}).sort("crawled_at", -1).skip(skip).limit(per_page)
+        query: dict = {"site_id": site_id}
+        if search:
+            query["$or"] = [
+                {"title": {"$regex": search, "$options": "i"}},
+                {"content": {"$regex": search, "$options": "i"}},
+                {"source_url": {"$regex": search, "$options": "i"}},
+            ]
+        cursor = self.col.find(query).sort("crawled_at", -1).skip(skip).limit(per_page)
         chunks = [_clean_doc(doc) async for doc in cursor]
-        total = await self.col.count_documents({"site_id": site_id})
+        total = await self.col.count_documents(query)
         return {"chunks": chunks, "total": total, "page": page, "per_page": per_page}
 
     async def update(self, chunk_id: str, data: dict) -> Optional[dict]:
@@ -163,6 +174,50 @@ class MongoKnowledgeRepo(BaseKnowledgeRepo):
         if docs:
             await self.col.insert_many(docs)
         return ids
+
+    async def delete_many(self, chunk_ids: list[str]) -> int:
+        if not chunk_ids:
+            return 0
+        result = await self.col.delete_many({"_id": {"$in": chunk_ids}})
+        return result.deleted_count
+
+    async def get_many(self, chunk_ids: list[str]) -> list[dict]:
+        if not chunk_ids:
+            return []
+        cursor = self.col.find({"_id": {"$in": chunk_ids}})
+        return [_clean_doc(doc) async for doc in cursor]
+
+    async def list_crawled_urls(self, site_id: str) -> list[dict]:
+        pipeline = [
+            {"$match": {"site_id": site_id, "source_url": {"$ne": None}}},
+            {"$group": {
+                "_id": "$source_url",
+                "chunk_count": {"$sum": 1},
+                "title": {"$max": "$title"},
+                "last_crawled_at": {"$max": "$crawled_at"},
+                "source_type": {"$min": "$source_type"},
+            }},
+            {"$sort": {"last_crawled_at": -1}},
+            {"$project": {
+                "_id": 0,
+                "source_url": "$_id",
+                "chunk_count": 1,
+                "title": 1,
+                "last_crawled_at": 1,
+                "source_type": 1,
+            }},
+        ]
+        return [doc async for doc in self.col.aggregate(pipeline)]
+
+    async def list_by_url(self, site_id: str, source_url: str) -> list[dict]:
+        cursor = self.col.find(
+            {"site_id": site_id, "source_url": source_url}
+        ).sort("chunk_index", 1)
+        return [_clean_doc(doc) async for doc in cursor]
+
+    async def delete_by_url(self, site_id: str, source_url: str) -> int:
+        result = await self.col.delete_many({"site_id": site_id, "source_url": source_url})
+        return result.deleted_count
 
 
 # --- Tool ---
@@ -282,6 +337,10 @@ class MongoCrawlJobRepo(BaseCrawlJobRepo):
             "start_url": data["start_url"],
             "pages_found": 0,
             "pages_done": 0,
+            "pages_skipped": 0,
+            "pages_failed": 0,
+            "chunks_created": 0,
+            "current_url": None,
             "error_log": None,
             "crawl_log": None,
             "started_at": datetime.now(timezone.utc),
@@ -415,6 +474,10 @@ class MongoVisitorMemoryRepo(BaseVisitorMemoryRepo):
         result = await self.col.delete_many({"visitor_id": visitor_id, "site_id": site_id})
         return result.deleted_count
 
+    async def list_by_site(self, site_id: str) -> list[dict]:
+        cursor = self.col.find({"site_id": site_id}).sort("updated_at", -1)
+        return [_clean_doc(doc) async for doc in cursor]
+
 
 # --- Conversation Summary ---
 class MongoConversationSummaryRepo(BaseConversationSummaryRepo):
@@ -492,3 +555,42 @@ class MongoAuditLogRepo(BaseAuditLogRepo):
         logs = [_clean_doc(doc) async for doc in cursor]
         total = await self.col.count_documents({})
         return {"logs": logs, "total": total, "page": page, "per_page": per_page}
+
+
+# --- LLM Key ---
+class MongoLLMKeyRepo(BaseLLMKeyRepo):
+    def __init__(self, db: AsyncIOMotorDatabase):
+        self.col = db["llm_keys"]
+
+    async def list_all(self) -> list[dict]:
+        cursor = self.col.find()
+        return [_clean_doc(doc) async for doc in cursor]
+
+    async def get_by_provider(self, provider: str) -> Optional[dict]:
+        doc = await self.col.find_one({"provider": provider})
+        return _clean_doc(doc) if doc else None
+
+    async def upsert(self, provider: str, data: dict) -> dict:
+        existing = await self.col.find_one({"provider": provider})
+        if existing:
+            update_data = {k: v for k, v in data.items() if v is not None}
+            update_data["updated_at"] = datetime.now(timezone.utc)
+            result = await self.col.find_one_and_update(
+                {"provider": provider}, {"$set": update_data}, return_document=True,
+            )
+            return _clean_doc(result)
+        else:
+            doc = {
+                "_id": str(uuid.uuid4()),
+                "provider": provider,
+                "api_key": data["api_key"],
+                "label": data.get("label", ""),
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc),
+            }
+            await self.col.insert_one(doc)
+            return _clean_doc(doc)
+
+    async def delete_by_provider(self, provider: str) -> bool:
+        result = await self.col.delete_one({"provider": provider})
+        return result.deleted_count > 0

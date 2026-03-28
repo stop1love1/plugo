@@ -33,26 +33,36 @@ export default function Embed() {
     }
   }, [site]);
 
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || __BACKEND_URL__;
+
+  const buildConfigStr = (s: typeof site, includeServerUrl: boolean) => {
+    if (!s) return "";
+    const lines = [`    token: "${s.token}"`];
+    if (includeServerUrl) lines.push(`    serverUrl: "${backendUrl.replace(/^http/, "ws")}"`);
+    lines.push(`    primaryColor: "${s.primary_color}"`);
+    if (s.greeting) lines.push(`    greeting: "${s.greeting}"`);
+    lines.push(`    position: "${s.position || "bottom-right"}"`);
+    if (s.dark_mode && s.dark_mode !== "auto") lines.push(`    darkMode: ${s.dark_mode === "dark"}`);
+    if (s.widget_title) lines.push(`    widgetTitle: "${s.widget_title}"`);
+    if (s.show_branding === false) lines.push(`    showBranding: false`);
+    return lines.join(",\n");
+  };
+
   const embedCode = site
     ? `<!-- Plugo Chat Widget -->
 <script>
   window.PlugoConfig = {
-    token: "${site.token}",
-    serverUrl: "ws://localhost:8000",
-    primaryColor: "${site.primary_color}",
-    greeting: "${site.greeting}"
+${buildConfigStr(site, true)}
   };
 </script>
-<script src="http://localhost:8000/static/widget.js" async></script>`
+<script src="${backendUrl}/static/widget.js" async></script>`
     : "";
 
   const productionCode = site
     ? `<!-- Plugo Chat Widget -->
 <script>
   window.PlugoConfig = {
-    token: "${site.token}",
-    primaryColor: "${site.primary_color}",
-    greeting: "${site.greeting}"
+${buildConfigStr(site, false)}
   };
 </script>
 <script src="https://cdn.plugo.dev/widget.js" async></script>`
@@ -64,8 +74,8 @@ export default function Embed() {
 <style>body{margin:0;font-family:system-ui,sans-serif;background:#f9fafb;display:flex;align-items:center;justify-content:center;height:100vh;color:#6b7280;}
 p{text-align:center;font-size:14px;}</style></head>
 <body><p>Widget preview — click the chat bubble to test</p>
-<script>window.PlugoConfig={token:"${site.token}",serverUrl:"ws://"+window.location.hostname+":8000",primaryColor:"${previewColor}",greeting:"${previewGreeting}",position:"${previewPosition}",darkMode:${previewDarkMode}};</script>
-<script src="http://localhost:8000/static/widget.js" async></script>
+<script>window.PlugoConfig={token:"${site.token}",serverUrl:"${backendUrl.replace(/^http/, "ws")}",primaryColor:"${previewColor}",greeting:"${previewGreeting}",position:"${previewPosition}",darkMode:${previewDarkMode}};</script>
+<script src="${backendUrl}/static/widget.js" async></script>
 </body></html>`
     : "";
 
@@ -245,7 +255,7 @@ p{text-align:center;font-size:14px;}</style></head>
             <p className="text-xs text-gray-500 mt-1">{t("embed.demoPageDesc")}</p>
           </div>
           <a
-            href={`http://localhost:8000/demo/${site.token}`}
+            href={`${backendUrl}/demo/${site.token}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700 font-medium border border-primary-200 px-3 py-1.5 rounded-lg"

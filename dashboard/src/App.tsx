@@ -14,6 +14,7 @@ import Analytics from "./pages/Analytics";
 import UsersPage from "./pages/Users";
 import AuditLog from "./pages/AuditLog";
 import Playground from "./pages/Playground";
+import CrawledPages from "./pages/CrawledPages";
 
 export default function App() {
   return (
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="analytics" element={<Analytics />} />
           <Route path="setup" element={<Setup />} />
           <Route path="knowledge" element={<Knowledge />} />
+          <Route path="crawled-pages" element={<CrawledPages />} />
           <Route path="tools" element={<Tools />} />
           <Route path="embed" element={<Embed />} />
           <Route path="playground" element={<Playground />} />

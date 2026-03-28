@@ -3,9 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional
-from sqlalchemy import select
-from database import async_session
-from models.llm_key import LLMKey
+from repositories import get_repos, Repositories
 from auth import get_current_user, TokenData
 from utils.crypto import encrypt_value, decrypt_value
 
@@ -30,29 +28,6 @@ def _mask_key(key: str) -> str:
     return "****" + key[-4:]
 
 
-@router.get("")
-async def list_keys(
-    user: TokenData = Depends(get_current_user),
-):
-    """List all saved LLM keys (masked)."""
-    if user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin only")
-
-    async with async_session() as db:
-        result = await db.execute(select(LLMKey))
-        keys = result.scalars().all()
-        return [
-            {
-                "id": k.id,
-                "provider": k.provider,
-                "api_key_masked": _mask_key(_decrypt_key_safe(k.api_key)),
-                "label": k.label,
-                "updated_at": k.updated_at.isoformat() if k.updated_at else None,
-            }
-            for k in keys
-        ]
-
-
 def _decrypt_key_safe(encrypted_key: str) -> str:
     """Decrypt a key, falling back to raw value for legacy unencrypted data."""
     try:
@@ -61,27 +36,40 @@ def _decrypt_key_safe(encrypted_key: str) -> str:
         return encrypted_key
 
 
+@router.get("")
+async def list_keys(
+    user: TokenData = Depends(get_current_user),
+    repos: Repositories = Depends(get_repos),
+):
+    """List all saved LLM keys (masked)."""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    keys = await repos.llm_keys.list_all()
+    return [
+        {
+            "id": k["id"],
+            "provider": k["provider"],
+            "api_key_masked": _mask_key(_decrypt_key_safe(k["api_key"])),
+            "label": k.get("label", ""),
+            "updated_at": k.get("updated_at"),
+        }
+        for k in keys
+    ]
+
+
 @router.post("")
 async def save_key(
     data: KeySave,
     user: TokenData = Depends(get_current_user),
+    repos: Repositories = Depends(get_repos),
 ):
     """Save or update an API key for a provider."""
     if user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin only")
 
-    async with async_session() as db:
-        result = await db.execute(select(LLMKey).where(LLMKey.provider == data.provider))
-        existing = result.scalar_one_or_none()
-
-        encrypted_key = encrypt_value(data.api_key)
-        if existing:
-            existing.api_key = encrypted_key
-            existing.label = data.label
-        else:
-            db.add(LLMKey(provider=data.provider, api_key=encrypted_key, label=data.label))
-
-        await db.commit()
+    encrypted_key = encrypt_value(data.api_key)
+    await repos.llm_keys.upsert(data.provider, {"api_key": encrypted_key, "label": data.label})
 
     from providers.factory import refresh_key_cache
     await refresh_key_cache()
@@ -93,30 +81,30 @@ async def save_key(
 async def delete_key(
     provider: str,
     user: TokenData = Depends(get_current_user),
+    repos: Repositories = Depends(get_repos),
 ):
     """Delete an API key."""
     if user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin only")
 
-    async with async_session() as db:
-        result = await db.execute(select(LLMKey).where(LLMKey.provider == provider))
-        existing = result.scalar_one_or_none()
-        if not existing:
-            raise HTTPException(status_code=404, detail="Key not found")
-        await db.delete(existing)
-        await db.commit()
+    deleted = await repos.llm_keys.delete_by_provider(provider)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Key not found")
 
     return {"message": f"API key for {provider} deleted"}
 
 
 async def get_key_for_provider(provider: str) -> Optional[str]:
     """Get the API key for a provider from DB. Used by provider factory."""
+    from repositories import create_repos
     try:
-        async with async_session() as db:
-            result = await db.execute(select(LLMKey).where(LLMKey.provider == provider))
-            key = result.scalar_one_or_none()
+        repos = await create_repos()
+        try:
+            key = await repos.llm_keys.get_by_provider(provider)
             if not key:
                 return None
-            return _decrypt_key_safe(key.api_key)
+            return _decrypt_key_safe(key["api_key"])
+        finally:
+            await repos.close()
     except Exception:
         return None

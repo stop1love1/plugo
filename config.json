@@ -37,6 +37,9 @@
   "auth": {
     "enabled": true
   },
+  "crawl": {
+    "verify_ssl": false
+  },
   "rate_limit": {
     "default": "60/minute",
     "chat": "30/minute",

@@ -245,8 +245,8 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
 
         try:
             await repos.chat_sessions.set_ended(session_id)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to mark session ended", session_id=session_id, error=str(e))
         active_agents.pop(session_id, None)
         await repos.close()
 

@@ -1,5 +1,5 @@
 import { h } from "preact";
-import { useState, useCallback, useRef } from "preact/hooks";
+import { useState, useCallback, useRef, useEffect } from "preact/hooks";
 import { Bubble } from "./Bubble";
 import { ChatWindow } from "./Window";
 import { PlugoWebSocket, ConnectionState } from "../lib/websocket";
@@ -16,6 +16,8 @@ type AppProps = {
   primaryColor: string;
   greeting: string;
   position: "bottom-right" | "bottom-left";
+  widgetTitle?: string;
+  showBranding?: boolean;
   getPageContext: () => any;
 };
 
@@ -83,7 +85,7 @@ function playNotificationSound() {
   osc.stop(ctx.currentTime + 0.1);
 }
 
-export function App({ token, serverUrl, primaryColor, greeting, position, getPageContext }: AppProps) {
+export function App({ token, serverUrl, primaryColor, greeting, position, widgetTitle, showBranding = true, getPageContext }: AppProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -178,6 +180,13 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
     setWs(socket);
   }, [token, serverUrl]);
 
+  // Cleanup WebSocket on unmount (e.g. host page navigation while chat is open)
+  useEffect(() => {
+    return () => {
+      ws?.disconnect();
+    };
+  }, [ws]);
+
   const handleOpen = useCallback(() => {
     setIsOpen(true);
     isOpenRef.current = true;
@@ -190,6 +199,17 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
   const handleClose = useCallback(() => {
     setIsOpen(false);
     isOpenRef.current = false;
+    // Disconnect WebSocket when closing to prevent memory leaks
+    if (ws) {
+      ws.disconnect();
+      setWs(null);
+    }
+  }, [ws]);
+
+  const handleMinimize = useCallback(() => {
+    setIsOpen(false);
+    isOpenRef.current = false;
+    // Keep WS alive — user just minimized, not closed
   }, []);
 
   const handleFeedback = useCallback(
@@ -257,8 +277,11 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
           position={position}
           suggestions={suggestions}
           connectionState={connectionState}
+          widgetTitle={widgetTitle}
+          showBranding={showBranding}
           onSend={handleSend}
           onClose={handleClose}
+          onMinimize={handleMinimize}
           onFeedback={handleFeedback}
           onRetry={handleRetry}
         />

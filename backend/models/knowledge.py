@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, Text, Integer, ForeignKey
 from database import Base
 
@@ -20,4 +20,4 @@ class KnowledgeChunk(Base):
     # Reference to ChromaDB
     embedding_id = Column(String(255), nullable=True)
 
-    crawled_at = Column(DateTime, default=datetime.utcnow)
+    crawled_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

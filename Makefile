@@ -71,7 +71,7 @@ install-dev: ## Install all dependencies including dev tools
 # ============================================================
 
 dev: ## Start all services (backend + dashboard + widget)
-	npx concurrently -n backend,dashboard,widget -c blue,green,yellow \
+	npx --yes concurrently -n backend,dashboard,widget -c blue,green,yellow \
 		"$(PYTHON) -m uvicorn main:app --reload --host 0.0.0.0 --port 8000 --app-dir backend" \
 		"cd dashboard && pnpm dev" \
 		"cd widget && pnpm dev"

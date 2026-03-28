@@ -118,16 +118,6 @@ Summary:"""
     MESSAGE_THRESHOLD = 20
     KEEP_RECENT_MESSAGES = 6
 
-    @staticmethod
-    def _format_conversation(messages: list[dict]) -> str:
-        parts = []
-        for msg in messages:
-            role = "User" if msg.get("role") == "user" else "Assistant"
-            content = msg.get("content", "")
-            if content:
-                parts.append(f"{role}: {content}")
-        return "\n".join(parts)
-
     async def should_summarize(self, messages: list[dict]) -> bool:
         return len(messages) > self.MESSAGE_THRESHOLD
 
@@ -146,7 +136,7 @@ Summary:"""
         if existing_summary:
             existing_context = f"[Previous summary: {existing_summary}]\n"
 
-        conversation = self._format_conversation(messages_to_summarize)
+        conversation = MemoryExtractor._format_conversation(messages_to_summarize)
 
         try:
             prompt = self.SUMMARY_PROMPT.format(

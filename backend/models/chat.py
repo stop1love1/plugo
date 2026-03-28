@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, Text, ForeignKey, JSON
 from database import Base
 
@@ -14,5 +14,5 @@ class ChatSession(Base):
     page_url = Column(String(2048), nullable=True)
     messages = Column(JSON, default=list)  # [{role, content, timestamp}]
 
-    started_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     ended_at = Column(DateTime, nullable=True)

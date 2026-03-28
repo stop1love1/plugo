@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, Text, Boolean, Integer, JSON
 from database import Base
 
@@ -20,6 +20,9 @@ class Site(Base):
     primary_color = Column(String(7), default="#6366f1")
     greeting = Column(Text, default="Hello! How can I help you?")
     position = Column(String(20), default="bottom-right")
+    widget_title = Column(String(100), default="")  # Custom header title (empty = default i18n)
+    dark_mode = Column(String(10), default="auto")   # "auto" | "light" | "dark"
+    show_branding = Column(Boolean, default=True)     # Show "Powered by Plugo" in widget
 
     # Default suggestions for the widget
     suggestions = Column(JSON, default=list)
@@ -38,5 +41,5 @@ class Site(Base):
     last_crawled_at = Column(DateTime, nullable=True)        # Last crawl timestamp
     knowledge_count = Column(Integer, default=0)             # Total knowledge chunks stored
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

@@ -10,7 +10,7 @@ from repositories.base import (
     BaseSiteRepo, BaseKnowledgeRepo, BaseToolRepo,
     BaseChatSessionRepo, BaseCrawlJobRepo, BaseUserRepo,
     BaseVisitorMemoryRepo, BaseConversationSummaryRepo,
-    BaseAuditLogRepo,
+    BaseAuditLogRepo, BaseLLMKeyRepo,
 )
 from models.site import Site
 from models.knowledge import KnowledgeChunk
@@ -20,6 +20,7 @@ from models.crawl import CrawlJob
 from models.user import User
 from models.memory import VisitorMemory, ConversationSummary
 from models.audit_log import AuditLog
+from models.llm_key import LLMKey
 
 
 def _site_to_dict(s: Site) -> dict:
@@ -27,7 +28,9 @@ def _site_to_dict(s: Site) -> dict:
         "id": s.id, "name": s.name, "url": s.url, "token": s.token,
         "llm_provider": s.llm_provider, "llm_model": s.llm_model,
         "primary_color": s.primary_color, "greeting": s.greeting,
-        "position": s.position, "allowed_domains": s.allowed_domains or "",
+        "position": s.position, "widget_title": s.widget_title or "",
+        "dark_mode": s.dark_mode or "auto", "show_branding": s.show_branding if s.show_branding is not None else True,
+        "allowed_domains": s.allowed_domains or "",
         "suggestions": s.suggestions or [],
         "is_approved": s.is_approved,
         # Crawl management
@@ -77,7 +80,12 @@ def _job_to_dict(j: CrawlJob) -> dict:
     return {
         "id": j.id, "site_id": j.site_id, "status": j.status,
         "start_url": j.start_url, "pages_found": j.pages_found,
-        "pages_done": j.pages_done, "error_log": j.error_log,
+        "pages_done": j.pages_done,
+        "pages_skipped": j.pages_skipped or 0,
+        "pages_failed": j.pages_failed or 0,
+        "chunks_created": j.chunks_created or 0,
+        "current_url": j.current_url,
+        "error_log": j.error_log,
         "crawl_log": j.crawl_log,
         "started_at": j.started_at.isoformat() if j.started_at else None,
         "finished_at": j.finished_at.isoformat() if j.finished_at else None,
@@ -233,6 +241,70 @@ class SQLiteKnowledgeRepo(BaseKnowledgeRepo):
             ids.append(data.get("id", chunk.id))
         await self.db.commit()
         return ids
+
+    async def delete_many(self, chunk_ids: list[str]) -> int:
+        if not chunk_ids:
+            return 0
+        result = await self.db.execute(
+            select(KnowledgeChunk).where(KnowledgeChunk.id.in_(chunk_ids))
+        )
+        chunks = result.scalars().all()
+        for chunk in chunks:
+            await self.db.delete(chunk)
+        await self.db.commit()
+        return len(chunks)
+
+    async def get_many(self, chunk_ids: list[str]) -> list[dict]:
+        if not chunk_ids:
+            return []
+        result = await self.db.execute(
+            select(KnowledgeChunk).where(KnowledgeChunk.id.in_(chunk_ids))
+        )
+        return [_chunk_to_dict(c) for c in result.scalars().all()]
+
+    async def list_crawled_urls(self, site_id: str) -> list[dict]:
+        """List unique source_urls with chunk count and metadata for a site."""
+        result = await self.db.execute(
+            select(
+                KnowledgeChunk.source_url,
+                func.count(KnowledgeChunk.id).label("chunk_count"),
+                func.max(KnowledgeChunk.title).label("title"),
+                func.max(KnowledgeChunk.crawled_at).label("last_crawled_at"),
+                func.min(KnowledgeChunk.source_type).label("source_type"),
+            )
+            .where(KnowledgeChunk.site_id == site_id, KnowledgeChunk.source_url.isnot(None))
+            .group_by(KnowledgeChunk.source_url)
+            .order_by(func.max(KnowledgeChunk.crawled_at).desc())
+        )
+        return [
+            {
+                "source_url": row.source_url,
+                "chunk_count": row.chunk_count,
+                "title": row.title,
+                "last_crawled_at": row.last_crawled_at.isoformat() if row.last_crawled_at else None,
+                "source_type": row.source_type,
+            }
+            for row in result.all()
+        ]
+
+    async def list_by_url(self, site_id: str, source_url: str) -> list[dict]:
+        result = await self.db.execute(
+            select(KnowledgeChunk)
+            .where(KnowledgeChunk.site_id == site_id, KnowledgeChunk.source_url == source_url)
+            .order_by(KnowledgeChunk.chunk_index)
+        )
+        return [_chunk_to_dict(c) for c in result.scalars().all()]
+
+    async def delete_by_url(self, site_id: str, source_url: str) -> int:
+        result = await self.db.execute(
+            select(KnowledgeChunk)
+            .where(KnowledgeChunk.site_id == site_id, KnowledgeChunk.source_url == source_url)
+        )
+        chunks = result.scalars().all()
+        for c in chunks:
+            await self.db.delete(c)
+        await self.db.commit()
+        return len(chunks)
 
 
 # --- Tool ---
@@ -490,6 +562,14 @@ class SQLiteVisitorMemoryRepo(BaseVisitorMemoryRepo):
         await self.db.commit()
         return count
 
+    async def list_by_site(self, site_id: str) -> list[dict]:
+        result = await self.db.execute(
+            select(VisitorMemory)
+            .where(VisitorMemory.site_id == site_id)
+            .order_by(VisitorMemory.updated_at.desc())
+        )
+        return [_memory_to_dict(m) for m in result.scalars().all()]
+
 
 # --- Conversation Summary ---
 class SQLiteConversationSummaryRepo(BaseConversationSummaryRepo):
@@ -559,3 +639,51 @@ class SQLiteAuditLogRepo(BaseAuditLogRepo):
         count_result = await self.db.execute(select(func.count()).select_from(AuditLog))
         total = count_result.scalar()
         return {"logs": logs, "total": total, "page": page, "per_page": per_page}
+
+
+# --- LLM Key ---
+def _llm_key_to_dict(k: LLMKey) -> dict:
+    return {
+        "id": k.id,
+        "provider": k.provider,
+        "api_key": k.api_key,
+        "label": k.label,
+        "created_at": str(k.created_at) if k.created_at else None,
+        "updated_at": str(k.updated_at) if k.updated_at else None,
+    }
+
+
+class SQLiteLLMKeyRepo(BaseLLMKeyRepo):
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def list_all(self) -> list[dict]:
+        result = await self.db.execute(select(LLMKey))
+        return [_llm_key_to_dict(k) for k in result.scalars().all()]
+
+    async def get_by_provider(self, provider: str) -> Optional[dict]:
+        result = await self.db.execute(select(LLMKey).where(LLMKey.provider == provider))
+        k = result.scalar_one_or_none()
+        return _llm_key_to_dict(k) if k else None
+
+    async def upsert(self, provider: str, data: dict) -> dict:
+        result = await self.db.execute(select(LLMKey).where(LLMKey.provider == provider))
+        existing = result.scalar_one_or_none()
+        if existing:
+            for key, value in data.items():
+                if hasattr(existing, key):
+                    setattr(existing, key, value)
+        else:
+            existing = LLMKey(provider=provider, **data)
+            self.db.add(existing)
+        await self.db.commit()
+        return _llm_key_to_dict(existing)
+
+    async def delete_by_provider(self, provider: str) -> bool:
+        result = await self.db.execute(select(LLMKey).where(LLMKey.provider == provider))
+        k = result.scalar_one_or_none()
+        if not k:
+            return False
+        await self.db.delete(k)
+        await self.db.commit()
+        return True

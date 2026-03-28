@@ -19,7 +19,7 @@ from repositories.base import (
     BaseSiteRepo, BaseKnowledgeRepo, BaseToolRepo,
     BaseChatSessionRepo, BaseCrawlJobRepo, BaseUserRepo,
     BaseVisitorMemoryRepo, BaseConversationSummaryRepo,
-    BaseAuditLogRepo,
+    BaseAuditLogRepo, BaseLLMKeyRepo,
 )
 
 
@@ -36,6 +36,7 @@ class Repositories:
         visitor_memories: BaseVisitorMemoryRepo,
         conversation_summaries: BaseConversationSummaryRepo,
         audit_logs: BaseAuditLogRepo,
+        llm_keys: BaseLLMKeyRepo,
     ):
         self.sites = sites
         self.knowledge = knowledge
@@ -46,6 +47,7 @@ class Repositories:
         self.visitor_memories = visitor_memories
         self.conversation_summaries = conversation_summaries
         self.audit_logs = audit_logs
+        self.llm_keys = llm_keys
         self._db_session = None  # holds SQLite AsyncSession for cleanup
 
     async def close(self) -> None:
@@ -94,7 +96,7 @@ async def create_repos() -> Repositories:
             MongoSiteRepo, MongoKnowledgeRepo, MongoToolRepo,
             MongoChatSessionRepo, MongoCrawlJobRepo, MongoUserRepo,
             MongoVisitorMemoryRepo, MongoConversationSummaryRepo,
-            MongoAuditLogRepo,
+            MongoAuditLogRepo, MongoLLMKeyRepo,
         )
         db = _get_mongo_db()
         return Repositories(
@@ -107,6 +109,7 @@ async def create_repos() -> Repositories:
             visitor_memories=MongoVisitorMemoryRepo(db),
             conversation_summaries=MongoConversationSummaryRepo(db),
             audit_logs=MongoAuditLogRepo(db),
+            llm_keys=MongoLLMKeyRepo(db),
         )
     else:
         # Default: SQLite
@@ -114,7 +117,7 @@ async def create_repos() -> Repositories:
             SQLiteSiteRepo, SQLiteKnowledgeRepo, SQLiteToolRepo,
             SQLiteChatSessionRepo, SQLiteCrawlJobRepo, SQLiteUserRepo,
             SQLiteVisitorMemoryRepo, SQLiteConversationSummaryRepo,
-            SQLiteAuditLogRepo,
+            SQLiteAuditLogRepo, SQLiteLLMKeyRepo,
         )
         session_factory = _get_sqlite_session()
         db = session_factory()
@@ -128,6 +131,7 @@ async def create_repos() -> Repositories:
             visitor_memories=SQLiteVisitorMemoryRepo(db),
             conversation_summaries=SQLiteConversationSummaryRepo(db),
             audit_logs=SQLiteAuditLogRepo(db),
+            llm_keys=SQLiteLLMKeyRepo(db),
         )
         repos._db_session = db  # track session for cleanup
         return repos
@@ -146,5 +150,5 @@ async def close_mongo():
     """Call on shutdown to close MongoDB connection."""
     global _mongo_client
     if _mongo_client:
-        _mongo_client.close()
+        await _mongo_client.close()
         _mongo_client = None

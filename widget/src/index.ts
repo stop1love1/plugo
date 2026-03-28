@@ -11,6 +11,8 @@ declare global {
       position?: "bottom-right" | "bottom-left";
       language?: string;
       darkMode?: boolean;
+      widgetTitle?: string;
+      showBranding?: boolean;
     };
   }
 }
@@ -50,9 +52,17 @@ function init() {
   const container = document.createElement("div");
   container.id = "plugo-root";
   // Auto-detect dark mode from system preference if not explicitly set
-  const isDark = config.darkMode ?? window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+  const darkMediaQuery = window.matchMedia?.("(prefers-color-scheme: dark)");
+  const isDark = config.darkMode ?? darkMediaQuery?.matches;
   if (isDark) {
     container.classList.add("plugo-dark");
+  }
+
+  // Listen for dark mode changes when not explicitly configured
+  if (config.darkMode === undefined && darkMediaQuery) {
+    darkMediaQuery.addEventListener("change", (e) => {
+      container.classList.toggle("plugo-dark", e.matches);
+    });
   }
   shadow.appendChild(container);
 
@@ -61,8 +71,10 @@ function init() {
       token: config.token,
       serverUrl: config.serverUrl || "",
       primaryColor: config.primaryColor || "#6366f1",
-      greeting: config.greeting || "Xin chào! Tôi có thể giúp gì?",
+      greeting: config.greeting || "",
       position: config.position || "bottom-right",
+      widgetTitle: config.widgetTitle || "",
+      showBranding: config.showBranding !== false,
       getPageContext,
     }),
     container
@@ -84,42 +96,66 @@ function getWidgetStyles(primaryColor: string): string {
   return `
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
+    :host {
+      --plugo-primary: ${primaryColor};
+      --plugo-text-on-primary: ${textOnPrimary};
+      --plugo-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --plugo-radius: 16px;
+      --plugo-window-w: 380px;
+      --plugo-window-h: 550px;
+    }
+
     .plugo-bubble {
       position: fixed;
       bottom: 20px;
       width: 60px;
       height: 60px;
       border-radius: 50%;
-      background: ${primaryColor};
-      color: ${textOnPrimary};
+      background: linear-gradient(135deg, ${primaryColor}, ${primaryColor}dd);
+      color: var(--plugo-text-on-primary);
       border: none;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      box-shadow: 0 4px 20px ${primaryColor}40, 0 2px 8px rgba(0,0,0,0.15);
       z-index: 999999;
-      transition: transform 0.2s, box-shadow 0.2s;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s;
+      font-family: var(--plugo-font);
     }
-    .plugo-bubble:hover { transform: scale(1.1); box-shadow: 0 6px 24px rgba(0,0,0,0.3); }
+    .plugo-bubble:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 28px ${primaryColor}50, 0 4px 12px rgba(0,0,0,0.2);
+    }
+    .plugo-bubble:active { transform: scale(0.95); }
     .plugo-bubble.bottom-right { right: 20px; }
     .plugo-bubble.bottom-left { left: 20px; }
-    .plugo-bubble svg { width: 28px; height: 28px; fill: white; }
+
+    /* Bubble icon transitions */
+    .plugo-bubble-icon {
+      position: absolute;
+      width: 28px;
+      height: 28px;
+      transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s;
+    }
+    .plugo-bubble-chat { opacity: 1; transform: scale(1) rotate(0deg); }
+    .plugo-bubble-close { opacity: 0; transform: scale(0.5) rotate(-90deg); }
+    .plugo-bubble.open .plugo-bubble-chat { opacity: 0; transform: scale(0.5) rotate(90deg); }
+    .plugo-bubble.open .plugo-bubble-close { opacity: 1; transform: scale(1) rotate(0deg); }
 
     .plugo-window {
       position: fixed;
       bottom: 90px;
-      width: 380px;
-      height: 520px;
+      width: var(--plugo-window-w);
+      height: var(--plugo-window-h);
       background: white;
-      border-radius: 16px;
+      border-radius: var(--plugo-radius);
       box-shadow: 0 8px 40px rgba(0,0,0,0.15);
       z-index: 999998;
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: var(--plugo-font);
       animation: plugo-slide-up 0.3s ease-out;
     }
     .plugo-window.bottom-right { right: 20px; }
@@ -131,18 +167,44 @@ function getWidgetStyles(primaryColor: string): string {
     }
 
     .plugo-header {
-      background: ${primaryColor};
-      color: ${textOnPrimary};
-      padding: 16px;
+      background: var(--plugo-primary);
+      color: var(--plugo-text-on-primary);
+      padding: 14px 16px;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 8px;
     }
-    .plugo-header h3 { font-size: 16px; font-weight: 600; }
+    .plugo-header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .plugo-header-avatar {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; flex-shrink: 0;
+    }
+    .plugo-header-info { min-width: 0; }
+    .plugo-header h3 { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .plugo-header-status {
+      font-size: 11px; opacity: 0.8;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .plugo-header-status-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #4ade80; display: inline-block;
+    }
+    .plugo-header-actions { display: flex; gap: 4px; }
     .plugo-header button {
-      background: none; border: none; color: white; cursor: pointer;
-      font-size: 20px; padding: 4px; line-height: 1;
+      background: rgba(255,255,255,0.15); border: none; color: inherit; cursor: pointer;
+      font-size: 18px; padding: 6px; line-height: 1; border-radius: 6px;
+      transition: background 0.2s;
     }
+    .plugo-header button:hover { background: rgba(255,255,255,0.25); }
 
     .plugo-messages {
       flex: 1;
@@ -150,7 +212,7 @@ function getWidgetStyles(primaryColor: string): string {
       padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 8px;
     }
     .plugo-messages::-webkit-scrollbar { width: 4px; }
     .plugo-messages::-webkit-scrollbar-thumb { background: #ddd; border-radius: 4px; }
@@ -166,8 +228,8 @@ function getWidgetStyles(primaryColor: string): string {
     }
     .plugo-msg.user {
       align-self: flex-end;
-      background: ${primaryColor};
-      color: ${textOnPrimary};
+      background: var(--plugo-primary);
+      color: var(--plugo-text-on-primary);
       border-bottom-right-radius: 4px;
     }
     .plugo-msg.bot {
@@ -179,15 +241,15 @@ function getWidgetStyles(primaryColor: string): string {
 
     .plugo-typing {
       align-self: flex-start;
-      padding: 10px 14px;
+      padding: 12px 16px;
       background: #f1f3f5;
       border-radius: 12px;
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 5px;
     }
     .plugo-typing span {
-      width: 6px; height: 6px;
+      width: 7px; height: 7px;
       background: #999;
       border-radius: 50%;
       animation: plugo-bounce 1.4s infinite ease-in-out;
@@ -205,42 +267,67 @@ function getWidgetStyles(primaryColor: string): string {
       display: flex;
       gap: 8px;
     }
-    .plugo-input-area input {
+    .plugo-input-area input,
+    .plugo-input-area textarea {
       flex: 1;
       border: 1px solid #ddd;
-      border-radius: 8px;
-      padding: 10px 12px;
+      border-radius: 16px;
+      padding: 10px 16px;
       font-size: 14px;
       outline: none;
-      transition: border-color 0.2s;
+      transition: border-color 0.2s, box-shadow 0.2s;
       font-family: inherit;
     }
-    .plugo-input-area input:focus { border-color: ${primaryColor}; }
+    .plugo-input-area input:focus,
+    .plugo-input-area textarea:focus {
+      border-color: var(--plugo-primary);
+      box-shadow: 0 0 0 2px ${primaryColor}20;
+    }
     .plugo-input-area button {
-      background: ${primaryColor};
-      color: ${textOnPrimary};
+      background: var(--plugo-primary);
+      color: var(--plugo-text-on-primary);
       border: none;
-      border-radius: 8px;
-      padding: 10px 16px;
+      border-radius: 50%;
+      width: 40px; height: 40px;
       cursor: pointer;
       font-size: 14px;
-      transition: opacity 0.2s;
+      transition: opacity 0.2s, transform 0.1s;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
     }
     .plugo-input-area button:hover { opacity: 0.9; }
-    .plugo-input-area button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .plugo-input-area button:active { transform: scale(0.95); }
+    .plugo-input-area button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .plugo-input-area button svg { width: 18px; height: 18px; }
 
     .plugo-suggestion-btn {
-      background: #f1f3f5;
+      background: white;
       border: 1px solid #e0e0e0;
-      border-radius: 16px;
-      padding: 6px 12px;
+      border-radius: 20px;
+      padding: 6px 14px;
       font-size: 12px;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: background 0.2s, border-color 0.2s;
       font-family: inherit;
-      color: #333;
+      color: #555;
     }
-    .plugo-suggestion-btn:hover { background: #e2e8f0; }
+    .plugo-suggestion-btn:hover {
+      background: #f8f9fa;
+      border-color: var(--plugo-primary);
+      color: var(--plugo-primary);
+    }
+
+    /* Branding */
+    .plugo-branding {
+      text-align: center;
+      padding: 4px 0 6px;
+      font-size: 10px;
+      color: #bbb;
+    }
+    .plugo-branding a {
+      color: #999; text-decoration: none;
+    }
+    .plugo-branding a:hover { color: #666; }
 
     @media (max-width: 480px) {
       .plugo-window {
@@ -251,8 +338,11 @@ function getWidgetStyles(primaryColor: string): string {
         left: 0;
         border-radius: 0;
       }
+      .plugo-bubble { bottom: 16px; }
+      .plugo-bubble.bottom-right { right: 16px; }
+      .plugo-bubble.bottom-left { left: 16px; }
       .plugo-input-area {
-        padding-bottom: env(safe-area-inset-bottom, 8px);
+        padding-bottom: env(safe-area-inset-bottom, 12px);
       }
     }
 
@@ -278,6 +368,7 @@ function getWidgetStyles(primaryColor: string): string {
     .plugo-markdown pre.plugo-code {
       background: #1e1e2e; color: #cdd6f4; padding: 12px; border-radius: 8px;
       overflow-x: auto; margin: 8px 0; font-size: 0.82em; line-height: 1.5;
+      position: relative;
     }
     .plugo-markdown pre.plugo-code code {
       background: none; padding: 0; color: inherit; font-size: inherit;
@@ -321,7 +412,6 @@ function getWidgetStyles(primaryColor: string): string {
 
     /* Dark mode */
     .plugo-dark .plugo-window { background: #1a1a2e; }
-    .plugo-dark .plugo-header { background: #16213e; }
     .plugo-dark .plugo-messages { background: #1a1a2e; }
     .plugo-dark .plugo-msg.bot { background: #2d2d44; color: #e0e0e0; }
     .plugo-dark .plugo-msg.user { color: #fff; }
@@ -331,17 +421,28 @@ function getWidgetStyles(primaryColor: string): string {
       border-color: #3d3d5c;
     }
     .plugo-dark .plugo-input-area input::placeholder { color: #888; }
+    .plugo-dark .plugo-input-area input:focus {
+      border-color: var(--plugo-primary);
+      box-shadow: 0 0 0 2px ${primaryColor}20;
+    }
+    .plugo-dark .plugo-typing { background: #2d2d44; }
     .plugo-dark .plugo-typing span { background: #888; }
     .plugo-dark .plugo-suggestion-btn {
       background: #2d2d44; color: #ccc;
       border-color: #3d3d5c;
     }
-    .plugo-dark .plugo-suggestion-btn:hover { background: #3d3d5c; }
+    .plugo-dark .plugo-suggestion-btn:hover { background: #3d3d5c; border-color: var(--plugo-primary); }
+    .plugo-dark .plugo-branding { color: #555; }
+    .plugo-dark .plugo-branding a { color: #666; }
 
     /* Feedback buttons */
     .plugo-msg-wrapper {
       display: flex;
       flex-direction: column;
+    }
+    .plugo-msg-wrapper.user {
+      align-self: flex-end;
+      max-width: 85%;
     }
     .plugo-msg-wrapper.bot {
       align-self: flex-start;
@@ -358,10 +459,10 @@ function getWidgetStyles(primaryColor: string): string {
       border: 1px solid #e0e0e0;
       border-radius: 8px;
       cursor: pointer;
-      font-size: 16px;
-      min-width: 44px;
-      min-height: 44px;
-      padding: 8px 12px;
+      font-size: 14px;
+      min-width: 36px;
+      min-height: 36px;
+      padding: 6px 10px;
       line-height: 1;
       display: inline-flex;
       align-items: center;
@@ -374,8 +475,12 @@ function getWidgetStyles(primaryColor: string): string {
     }
     .plugo-feedback-btn.active {
       background: ${primaryColor}15;
-      border-color: ${primaryColor};
+      border-color: var(--plugo-primary);
     }
+    .plugo-dark .plugo-feedback-btn {
+      background: #2d2d44; border-color: #3d3d5c;
+    }
+    .plugo-dark .plugo-feedback-btn:hover { background: #3d3d5c; }
 
     /* Connection status bar */
     .plugo-status-bar {
@@ -407,8 +512,8 @@ function getWidgetStyles(primaryColor: string): string {
       bottom: 70px;
       left: 50%;
       transform: translateX(-50%);
-      background: ${primaryColor};
-      color: ${textOnPrimary};
+      background: var(--plugo-primary);
+      color: var(--plugo-text-on-primary);
       border: none;
       border-radius: 20px;
       padding: 6px 16px;
@@ -447,7 +552,7 @@ function getWidgetStyles(primaryColor: string): string {
     }
 
     /* Timestamp */
-    .plugo-msg-time { font-size: 10px; color: #999; margin-top: 2px; }
+    .plugo-msg-time { font-size: 10px; color: #aaa; margin-top: 2px; padding-left: 2px; }
     .plugo-dark .plugo-msg-time { color: #666; }
 
     /* Copy button */
@@ -455,7 +560,7 @@ function getWidgetStyles(primaryColor: string): string {
     .plugo-copy-btn {
       position: absolute; top: 4px; right: 4px;
       background: rgba(255,255,255,0.9); border: 1px solid #e5e7eb;
-      border-radius: 4px; padding: 2px 4px; cursor: pointer;
+      border-radius: 6px; padding: 4px 6px; cursor: pointer;
       opacity: 0; transition: opacity 0.2s; font-size: 11px;
       display: inline-flex; align-items: center; justify-content: center;
       z-index: 1; line-height: 1;
@@ -486,7 +591,9 @@ function getWidgetStyles(primaryColor: string): string {
     .plugo-dark .plugo-markdown code { background: #3d3d5c; color: #e0e0e0; }
     .plugo-dark .plugo-markdown pre { background: #2d2d44; }
     .plugo-dark .plugo-markdown blockquote { border-left-color: #3d3d5c; color: #aaa; }
-    .plugo-dark .plugo-status-bar { background: #2d2d44; color: #888; }
+    .plugo-dark .plugo-status-bar.connecting { background: #1e293b; color: #60a5fa; }
+    .plugo-dark .plugo-status-bar.reconnecting { background: #1e293b; color: #fbbf24; }
+    .plugo-dark .plugo-status-bar.disconnected { background: #1e293b; color: #f87171; }
 
     /* Character counter warning/danger */
     .plugo-char-counter.warning { color: #f59e0b; }
@@ -494,6 +601,96 @@ function getWidgetStyles(primaryColor: string): string {
 
     /* Accessibility */
     .plugo-messages { -webkit-overflow-scrolling: touch; }
+    *:focus-visible { outline: 2px solid var(--plugo-primary); outline-offset: 2px; }
+
+    /* Bot avatar */
+    .plugo-avatar {
+      width: 24px; height: 24px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--plugo-primary), ${primaryColor}99);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; font-size: 12px; color: var(--plugo-text-on-primary);
+    }
+    .plugo-msg-row {
+      display: flex; gap: 8px; align-items: flex-end;
+      animation: plugo-msg-in 0.25s ease-out;
+    }
+    .plugo-msg-row.user { flex-direction: row-reverse; }
+
+    /* Message entrance animation */
+    @keyframes plugo-msg-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Message grouping */
+    .plugo-msg-row + .plugo-msg-row.same-role { margin-top: -4px; }
+    .plugo-msg-row + .plugo-msg-row.same-role .plugo-avatar { visibility: hidden; }
+
+    /* Tool call card */
+    .plugo-tool-card {
+      display: flex; align-items: center; gap: 10px;
+      background: #f8fafc; border: 1px solid #e2e8f0;
+      border-radius: 10px; padding: 10px 14px;
+      font-size: 13px; color: #475569;
+      animation: plugo-msg-in 0.25s ease-out;
+    }
+    .plugo-tool-card-icon {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: var(--plugo-primary);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .plugo-tool-card-icon svg { width: 14px; height: 14px; stroke: var(--plugo-text-on-primary); fill: none; }
+    .plugo-tool-card-info { flex: 1; min-width: 0; }
+    .plugo-tool-card-name { font-weight: 600; font-size: 12px; color: #1e293b; }
+    .plugo-tool-card-status { font-size: 11px; color: #94a3b8; margin-top: 1px; }
+    .plugo-tool-card .plugo-spinner {
+      width: 14px; height: 14px; border: 2px solid #e2e8f0;
+      border-top-color: var(--plugo-primary);
+      border-radius: 50%; animation: plugo-spin 0.8s linear infinite;
+    }
+    @keyframes plugo-spin {
+      to { transform: rotate(360deg); }
+    }
+    .plugo-dark .plugo-tool-card { background: #2d2d44; border-color: #3d3d5c; color: #94a3b8; }
+    .plugo-dark .plugo-tool-card-name { color: #e0e0e0; }
+
+    /* Status dot pulse */
+    .plugo-header-status-dot.online {
+      animation: plugo-pulse 2s infinite;
+    }
+    @keyframes plugo-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.6); }
+      50% { box-shadow: 0 0 0 4px rgba(74, 222, 128, 0); }
+    }
+
+    /* Textarea input */
+    .plugo-input-area textarea {
+      flex: 1;
+      border: 1px solid #ddd;
+      border-radius: 16px;
+      padding: 10px 16px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      font-family: inherit;
+      resize: none;
+      line-height: 1.4;
+      max-height: 100px;
+      overflow-y: auto;
+    }
+    .plugo-input-area textarea:focus {
+      border-color: var(--plugo-primary);
+      box-shadow: 0 0 0 2px ${primaryColor}20;
+    }
+    .plugo-dark .plugo-input-area textarea {
+      background: #2d2d44; color: #e0e0e0; border-color: #3d3d5c;
+    }
+    .plugo-dark .plugo-input-area textarea::placeholder { color: #888; }
+    .plugo-dark .plugo-input-area textarea:focus {
+      border-color: var(--plugo-primary);
+      box-shadow: 0 0 0 2px ${primaryColor}20;
+    }
   `;
 }
 

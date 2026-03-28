@@ -20,6 +20,7 @@ from routers import auth as auth_router
 from routers import users as users_router
 from routers import audit as audit_router
 from routers import llm_keys as llm_keys_router
+from routers import demo_api
 
 
 # --- Rate limiter ---
@@ -45,9 +46,19 @@ async def lifespan(app: FastAPI):
         llm_model=settings.llm_model,
         auth_enabled=settings.auth_enabled,
     )
+
+    # Clean up orphaned "running" crawls from previous process
+    from routers.crawl import cleanup_stale_crawls_on_startup
+    await cleanup_stale_crawls_on_startup()
+
+    # Start auto-crawl scheduler
+    from scheduler import start_scheduler, stop_scheduler
+    start_scheduler()
+
     yield
 
-    # Shutdown — close database connections
+    # Shutdown — stop scheduler and close database connections
+    await stop_scheduler()
     if settings.database_provider == "mongodb":
         from repositories import close_mongo
         await close_mongo()
@@ -114,15 +125,20 @@ app.include_router(analytics.router)
 app.include_router(users_router.router)
 app.include_router(audit_router.router)
 app.include_router(llm_keys_router.router)
+app.include_router(demo_api.router)
 
 
 @app.get("/demo/{site_token}", response_class=HTMLResponse)
 async def demo_page(site_token: str):
     """Serve a demo page with the widget embedded for testing."""
     from repositories import create_repos
+    from routers.demo_api import ensure_demo_tools
     repos = await create_repos()
     try:
         site = await repos.sites.get_by_token(site_token)
+        if site:
+            base_url = f"http://localhost:{settings.backend_port}"
+            await ensure_demo_tools(site["id"], repos, base_url)
     finally:
         await repos.close()
     if not site:
@@ -135,6 +151,10 @@ async def demo_page(site_token: str):
     js_color = _json.dumps(site['primary_color'] or '#6366f1')
     js_greeting = _json.dumps(site['greeting'] or 'Hello! How can I help?')
     js_position = _json.dumps(site['position'] or 'bottom-right')
+    js_widget_title = _json.dumps(site.get('widget_title') or '')
+    dark_mode = site.get('dark_mode', 'auto')
+    js_dark_mode = 'undefined' if dark_mode == 'auto' else ('true' if dark_mode == 'dark' else 'false')
+    js_show_branding = 'true' if site.get('show_branding', True) else 'false'
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -186,12 +206,16 @@ async def demo_page(site_token: str):
   <footer>Plugo Demo Page &mdash; This page is for testing only.</footer>
 </div>
 <script>
+  var proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   window.PlugoConfig = {{
     token: {js_token},
-    serverUrl: "ws://" + window.location.hostname + ":8000",
+    serverUrl: proto + "//" + window.location.host,
     primaryColor: {js_color},
     greeting: {js_greeting},
-    position: {js_position}
+    position: {js_position},
+    widgetTitle: {js_widget_title},
+    darkMode: {js_dark_mode},
+    showBranding: {js_show_branding}
   }};
 </script>
 <script src="/static/widget.js" async></script>

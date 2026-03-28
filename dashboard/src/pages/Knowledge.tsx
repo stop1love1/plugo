@@ -2,15 +2,11 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { getKnowledge, getChunk, updateChunk, deleteChunk, addManualChunk, uploadFile } from "../lib/api";
+import { getKnowledge, getChunk, updateChunk, deleteChunk, addManualChunk, uploadFile, bulkDeleteChunks } from "../lib/api";
 import { Trash2, Plus, Upload, FileText, Search, Pencil, X, ExternalLink, Download } from "lucide-react";
-import api from "../lib/api";
 import { PageHeader } from "../components/PageHeader";
 import { EmptyState } from "../components/EmptyState";
 import { useLocale } from "../lib/useLocale";
-
-const bulkDeleteChunks = (ids: string[]) =>
-  api.post("/knowledge/bulk-delete", { chunk_ids: ids }).then((r) => r.data);
 
 export default function Knowledge() {
   const { siteId } = useParams<{ siteId: string }>();

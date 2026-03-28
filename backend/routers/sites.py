@@ -18,6 +18,10 @@ class SiteCreate(BaseModel):
     llm_model: str = "claude-sonnet-4-20250514"
     primary_color: str = Field(default="#6366f1", pattern="^#[0-9a-fA-F]{6}$")
     greeting: str = "Hello! How can I help you?"
+    position: str = Field(default="bottom-right", pattern="^(bottom-right|bottom-left)$")
+    widget_title: str = ""
+    dark_mode: str = Field(default="auto", pattern="^(auto|light|dark)$")
+    show_branding: bool = True
     allowed_domains: str = ""
 
 
@@ -28,6 +32,9 @@ class SiteUpdate(BaseModel):
     primary_color: Optional[str] = None
     greeting: Optional[str] = None
     position: Optional[str] = None
+    widget_title: Optional[str] = None
+    dark_mode: Optional[str] = None
+    show_branding: Optional[bool] = None
     allowed_domains: Optional[str] = None
     suggestions: Optional[list[str]] = None
 

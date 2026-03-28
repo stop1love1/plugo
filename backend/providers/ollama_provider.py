@@ -69,16 +69,17 @@ class OllamaProvider(BaseLLMProvider):
                             yield content
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        results = []
+        import asyncio
         async with httpx.AsyncClient(timeout=60) as client:
-            for text in texts:
-                response = await client.post(
+            tasks = [
+                client.post(
                     f"{self.base_url}/api/embeddings",
                     json={"model": "nomic-embed-text", "prompt": text},
                 )
-                data = response.json()
-                results.append(data.get("embedding", []))
-        return results
+                for text in texts
+            ]
+            responses = await asyncio.gather(*tasks)
+        return [r.json().get("embedding", []) for r in responses]
 
     @staticmethod
     def available_models() -> list[dict]:

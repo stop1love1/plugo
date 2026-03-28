@@ -1,5 +1,5 @@
 import { Outlet, Link, useParams, useLocation, useNavigate } from "react-router-dom";
-import { Database, Wrench, Code, Settings, LayoutDashboard, MessageCircle, LogOut, User, Brain, BarChart3, Globe, Users, FileText, Keyboard, Menu, X, Play, ExternalLink } from "lucide-react";
+import { Database, Wrench, Code, Settings, LayoutDashboard, MessageCircle, LogOut, User, Brain, BarChart3, Globe, Users, FileText, Keyboard, Menu, X, Play, ExternalLink, Link2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { getSite } from "../lib/api";
 import { useStore } from "../lib/store";
@@ -20,6 +20,7 @@ const sidebarGroups = [
     links: [
       { to: "setup", label: "nav.setup", icon: LayoutDashboard, num: "2" },
       { to: "knowledge", label: "nav.knowledge", icon: Database, num: "3" },
+      { to: "crawled-pages", label: "nav.crawledPages", icon: Link2, num: "" },
       { to: "tools", label: "nav.tools", icon: Wrench, num: "4" },
     ],
   },
@@ -77,7 +78,7 @@ export default function Layout() {
     } else {
       document.title = "Plugo Dashboard";
     }
-  }, [location.pathname]);
+  }, [location.pathname, t]);
 
   const { data: currentSite } = useQuery({
     queryKey: ["site", siteId],
@@ -135,7 +136,7 @@ export default function Layout() {
       <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-64 shrink-0 bg-white border-r border-gray-200 flex flex-col transform transition-transform lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="border-b border-gray-200 px-4 py-3 flex items-center h-16">
           <Link to="/" onClick={handleNavClick} className="flex items-center gap-3 text-2xl font-bold text-primary-600">
-            <img src="/src/assets/images/logo.png" alt="Plugo" className="h-10 object-contain" />
+            <img src={new URL("../assets/images/logo.png", import.meta.url).href} alt="Plugo" className="h-10 object-contain" />
             Plugo
           </Link>
         </div>
@@ -173,7 +174,7 @@ export default function Layout() {
                   {/* Demo page link in Deploy group */}
                   {group.heading === "nav.group.deploy" && currentSite?.token && (
                     <a
-                      href={`${import.meta.env.VITE_BACKEND_URL || window.location.origin}/demo/${currentSite.token}`}
+                      href={`${import.meta.env.VITE_BACKEND_URL || __BACKEND_URL__}/demo/${currentSite.token}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={handleNavClick}

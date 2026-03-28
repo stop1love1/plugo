@@ -22,25 +22,23 @@ async def list_visitors_with_memories(
     _user: TokenData = Depends(get_current_user),
 ):
     """List unique visitors that have memories for a site."""
-    # Get all sessions for this site to find unique visitor_ids
-    sessions = await repos.chat_sessions.list_by_site(site_id)
-    visitor_ids = set()
-    for s in sessions:
-        vid = s.get("visitor_id")
-        if vid:
-            visitor_ids.add(vid)
+    # Get all memories for this site in a single query, then group by visitor_id
+    all_memories = await repos.visitor_memories.list_by_site(site_id)
 
-    visitors = []
-    for vid in visitor_ids:
-        memories = await repos.visitor_memories.list_by_visitor(vid, site_id)
-        if memories:
-            visitors.append({
+    visitor_map: dict[str, dict] = {}
+    for mem in all_memories:
+        vid = mem.get("visitor_id")
+        if not vid:
+            continue
+        if vid not in visitor_map:
+            visitor_map[vid] = {
                 "visitor_id": vid,
-                "memory_count": len(memories),
-                "last_updated": memories[0].get("updated_at") if memories else None,
-            })
+                "memory_count": 0,
+                "last_updated": mem.get("updated_at"),
+            }
+        visitor_map[vid]["memory_count"] += 1
 
-    return visitors
+    return list(visitor_map.values())
 
 
 @router.get("/visitor/{visitor_id}")

@@ -19,7 +19,7 @@ export default function Playground() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [device, setDevice] = useState<Device>("desktop");
   const [darkMode, setDarkMode] = useState(false);
-  const [demoPage, setDemoPage] = useState("landing");
+  const [demoPage, setDemoPage] = useState("store");
   const [key, setKey] = useState(0);
 
   const { data: site } = useQuery({
@@ -28,18 +28,19 @@ export default function Playground() {
     enabled: !!siteId,
   });
 
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || __BACKEND_URL__;
   const demoPages: Record<string, { title: string; content: string }> = {
-    landing: {
-      title: t("playground.pageLanding"),
-      content: getDemoLandingPage(site, darkMode),
+    store: {
+      title: "Store",
+      content: getDemoStorePage(site, darkMode, backendUrl),
     },
-    pricing: {
-      title: t("playground.pagePricing"),
-      content: getDemoPricingPage(site, darkMode),
+    account: {
+      title: "Account",
+      content: getDemoAccountPage(site, darkMode, backendUrl),
     },
-    docs: {
-      title: t("playground.pageDocs"),
-      content: getDemoDocsPage(site, darkMode),
+    support: {
+      title: "Support",
+      content: getDemoSupportPage(site, darkMode, backendUrl),
     },
     blank: {
       title: t("playground.pageBlank"),
@@ -196,220 +197,389 @@ const escapeHtml = (str: string) =>
 
 // --- Demo page generators ---
 
-function getWidgetScript(site: any, darkMode: boolean): string {
-  const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
-  const wsBackendUrl = backendUrl ? backendUrl.replace(/^http/, 'ws') : '';
+function getWidgetScript(site: any, darkMode: boolean, backendUrl?: string): string {
+  const bUrl = backendUrl || import.meta.env.VITE_BACKEND_URL || __BACKEND_URL__;
+  const wsBackendUrl = bUrl.replace(/^http/, "ws");
   return `
 <script>
   window.PlugoConfig = {
     token: ${JSON.stringify(site.token || "")},
-    serverUrl: ${wsBackendUrl ? JSON.stringify(wsBackendUrl) : '"ws://" + window.location.hostname + ":" + window.location.port'},
+    serverUrl: ${JSON.stringify(wsBackendUrl)},
     primaryColor: ${JSON.stringify(site.primary_color || "#6366f1")},
     greeting: ${JSON.stringify(site.greeting || "Hello! How can I help you?")},
     position: ${JSON.stringify(site.position || "bottom-right")},
-    darkMode: ${darkMode}
+    darkMode: ${darkMode},
+    widgetTitle: ${JSON.stringify(site.widget_title || "")},
+    showBranding: ${site.show_branding !== false}
   };
 </script>
-<script src="${backendUrl}/static/widget.js" async></script>`;
+<script src="${bUrl}/static/widget.js" async></script>`;
 }
 
-function baseStyles(dark: boolean): string {
-  const bg = dark ? "#0f172a" : "#ffffff";
+function baseStyles(dark: boolean, accent: string): string {
+  const bg = dark ? "#0f172a" : "#f8fafc";
   const text = dark ? "#e2e8f0" : "#1e293b";
   const muted = dark ? "#94a3b8" : "#64748b";
-  const card = dark ? "#1e293b" : "#f8fafc";
+  const card = dark ? "#1e293b" : "#ffffff";
   const border = dark ? "#334155" : "#e2e8f0";
   return `
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: ${bg}; color: ${text}; line-height: 1.6; }
-    .container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+    .container { max-width: 1000px; margin: 0 auto; padding: 0 24px; }
     .muted { color: ${muted}; }
-    .card { background: ${card}; border: 1px solid ${border}; border-radius: 12px; padding: 24px; }
-    a { color: #6366f1; text-decoration: none; }
+    .card { background: ${card}; border: 1px solid ${border}; border-radius: 12px; padding: 20px; }
+    a { color: ${accent}; text-decoration: none; }
     a:hover { text-decoration: underline; }
+    .btn { display: inline-block; background: ${accent}; color: #fff; padding: 10px 24px; border-radius: 8px; font-weight: 600; font-size: 0.875rem; border: none; cursor: pointer; }
+    .btn:hover { opacity: 0.9; text-decoration: none; }
+    .btn-outline { background: none; border: 1.5px solid ${accent}; color: ${accent}; }
+    .btn-outline:hover { background: ${accent}; color: #fff; }
+    .nav { padding: 12px 0; border-bottom: 1px solid ${border}; display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+    .nav-brand { font-weight: 700; font-size: 1.2rem; color: ${accent}; display: flex; align-items: center; gap: 8px; }
+    .nav-links { display: flex; gap: 20px; font-size: 0.85rem; align-items: center; }
+    .nav-links a { color: ${muted}; }
+    .badge { display: inline-block; background: ${accent}20; color: ${accent}; font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
+    .grid { display: grid; gap: 16px; }
+    .grid-2 { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+    .toast { position: fixed; top: 20px; right: 20px; background: #22c55e; color: #fff; padding: 12px 20px; border-radius: 8px; font-size: 0.85rem; font-weight: 500; z-index: 9999; animation: fadeInOut 2.5s ease; }
+    @keyframes fadeInOut { 0% { opacity: 0; transform: translateY(-10px); } 10% { opacity: 1; transform: translateY(0); } 80% { opacity: 1; } 100% { opacity: 0; } }
+    .footer { padding: 24px 0; text-align: center; font-size: 0.75rem; color: ${muted}; border-top: 1px solid ${border}; margin-top: 40px; }
+    .section-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 16px; }
+    .price { font-weight: 800; color: ${accent}; }
+    .stock { font-size: 0.75rem; color: ${muted}; }
+    .rating { font-size: 0.8rem; color: #f59e0b; }
+    .product-img { width: 100%; height: 140px; background: ${dark ? "#334155" : "#f1f5f9"}; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 2rem; margin-bottom: 12px; }
+    .cart-badge { background: #ef4444; color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 99px; margin-left: 4px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid ${border}; }
+    th { font-weight: 600; font-size: 0.75rem; text-transform: uppercase; color: ${muted}; }
+    input, textarea, select { font-family: inherit; font-size: 0.875rem; padding: 8px 12px; border: 1px solid ${border}; border-radius: 8px; background: ${card}; color: ${text}; outline: none; width: 100%; }
+    input:focus, textarea:focus { border-color: ${accent}; }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 0.8rem; font-weight: 500; margin-bottom: 4px; color: ${muted}; }
+    .status-confirmed { color: #22c55e; font-weight: 600; }
+    .status-open { color: #3b82f6; font-weight: 600; }
   `;
 }
 
-function getDemoLandingPage(site: any, dark: boolean): string {
+const PRODUCT_EMOJIS: Record<string, string> = {
+  headphones: "\u{1F3A7}", watch: "\u{231A}", coffee: "\u2615",
+  chair: "\u{1FA91}", shoes: "\u{1F45F}", keyboard: "\u2328",
+  yogamat: "\u{1F9D8}", speaker: "\u{1F50A}",
+};
+
+function getDemoStorePage(site: any, dark: boolean, backendUrl: string): string {
   if (!site) return "";
   const accent = site.primary_color || "#6366f1";
   const safeName = escapeHtml(site.name || "");
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${safeName} - Demo</title>
-<style>
-  ${baseStyles(dark)}
-  .hero { padding: 80px 0 60px; text-align: center; }
-  .hero h1 { font-size: 2.5rem; font-weight: 800; margin-bottom: 16px; }
-  .hero p { font-size: 1.1rem; max-width: 560px; margin: 0 auto 32px; }
-  .btn { display: inline-block; background: ${accent}; color: #fff; padding: 12px 32px; border-radius: 8px; font-weight: 600; font-size: 1rem; }
-  .btn:hover { opacity: 0.9; text-decoration: none; }
-  .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; padding: 40px 0; }
-  .feature h3 { margin-bottom: 8px; font-size: 1rem; }
-  .feature p { font-size: 0.875rem; }
-  .nav { padding: 16px 0; border-bottom: 1px solid ${dark ? "#334155" : "#e2e8f0"}; display: flex; align-items: center; justify-content: space-between; }
-  .nav-brand { font-weight: 700; font-size: 1.25rem; color: ${accent}; }
-  .nav-links { display: flex; gap: 24px; font-size: 0.875rem; }
-  .footer { padding: 32px 0; text-align: center; font-size: 0.8rem; border-top: 1px solid ${dark ? "#334155" : "#e2e8f0"}; margin-top: 40px; }
-</style></head><body>
+<title>${safeName} - Store</title>
+<meta name="description" content="Demo e-commerce store for ${safeName}. Browse products, add to cart, and place orders. The AI assistant can help you shop!">
+<style>${baseStyles(dark, accent)}</style></head><body>
 <div class="container">
   <nav class="nav">
-    <div class="nav-brand">${safeName}</div>
+    <div class="nav-brand">\u{1F6CD}\uFE0F ${safeName}</div>
     <div class="nav-links">
-      <a href="#">Features</a>
-      <a href="#">Pricing</a>
-      <a href="#">Docs</a>
-      <a href="#">Contact</a>
+      <a href="#" onclick="filterProducts('')">All</a>
+      <a href="#" onclick="filterProducts('electronics')">Electronics</a>
+      <a href="#" onclick="filterProducts('sports')">Sports</a>
+      <a href="#" onclick="filterProducts('food')">Food</a>
+      <a id="cart-link" href="#" onclick="viewCart()">\u{1F6D2} Cart <span id="cart-count" class="cart-badge" style="display:none">0</span></a>
+      <a id="auth-link" href="#" onclick="showLogin()">Login</a>
     </div>
   </nav>
-  <div class="hero">
-    <h1>Welcome to ${safeName}</h1>
-    <p class="muted">This is a demo website to test your Plugo chat widget. Try clicking the chat bubble in the bottom corner!</p>
-    <a href="#" class="btn">Get Started</a>
+  <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center">
+    <input id="search" type="text" placeholder="Search products..." style="max-width:300px" onkeyup="if(event.key==='Enter')searchProducts()">
+    <button class="btn" onclick="searchProducts()">Search</button>
   </div>
-  <div class="features">
-    <div class="card feature">
-      <h3>AI-Powered Chat</h3>
-      <p class="muted">Intelligent responses based on your website content and knowledge base.</p>
-    </div>
-    <div class="card feature">
-      <h3>Easy Integration</h3>
-      <p class="muted">Just paste a script tag — works with any website or framework.</p>
-    </div>
-    <div class="card feature">
-      <h3>Customizable</h3>
-      <p class="muted">Match your brand with custom colors, greetings, and positioning.</p>
-    </div>
-  </div>
-  <footer class="footer muted">© 2026 ${safeName}. This is a demo page for testing the Plugo widget.</footer>
+  <h2 class="section-title">Products</h2>
+  <div id="products" class="grid grid-2"></div>
+  <div id="cart-panel" style="display:none"></div>
+  <div id="login-panel" style="display:none"></div>
+  <footer class="footer">${safeName} Demo Store \u2014 Powered by Plugo. Try asking the AI to help you shop!</footer>
 </div>
-${getWidgetScript(site, dark)}
+<div id="toast-container"></div>
+${getWidgetScript(site, dark, backendUrl)}
+<script>
+const API = "${backendUrl}/api/demo";
+let authToken = null;
+let userName = null;
+const emojis = ${JSON.stringify(PRODUCT_EMOJIS)};
+function toast(msg) {
+  const el = document.createElement('div'); el.className = 'toast'; el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 2600);
+}
+async function apiFetch(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+  const r = await fetch(API + path, { ...opts, headers });
+  if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || 'Error'); }
+  return r.json();
+}
+function renderProducts(products) {
+  const el = document.getElementById('products');
+  el.innerHTML = products.map(p => '<div class="card">' +
+    '<div class="product-img">' + (emojis[p.image] || '\u{1F4E6}') + '</div>' +
+    '<h3 style="font-size:0.95rem;margin-bottom:4px">' + p.name + '</h3>' +
+    '<div class="rating">' + '\u2B50'.repeat(Math.round(p.rating)) + ' ' + p.rating + '</div>' +
+    '<p style="font-size:0.8rem;margin:6px 0" class="muted">' + p.description + '</p>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">' +
+    '<span class="price">$' + p.price.toFixed(2) + '</span>' +
+    '<button class="btn" onclick="addToCart(' + p.id + ')" style="padding:6px 16px;font-size:0.8rem">Add to Cart</button>' +
+    '</div><div class="stock">' + p.stock + ' in stock</div></div>').join('');
+}
+async function loadProducts(cat, search) {
+  let q = '/products?';
+  if (cat) q += 'category=' + cat + '&';
+  if (search) q += 'search=' + encodeURIComponent(search);
+  const data = await apiFetch(q);
+  renderProducts(data.products);
+}
+function filterProducts(cat) { loadProducts(cat, ''); }
+function searchProducts() { loadProducts('', document.getElementById('search').value); }
+async function addToCart(pid) {
+  if (!authToken) { toast('Please log in first!'); showLogin(); return; }
+  try {
+    const data = await apiFetch('/cart/add', { method: 'POST', body: JSON.stringify({ product_id: pid, quantity: 1 }) });
+    document.getElementById('cart-count').textContent = data.item_count;
+    document.getElementById('cart-count').style.display = data.item_count > 0 ? 'inline' : 'none';
+    toast('Added to cart!');
+  } catch (e) { toast(e.message); }
+}
+async function viewCart() {
+  if (!authToken) { toast('Please log in first!'); showLogin(); return; }
+  try {
+    const data = await apiFetch('/cart');
+    const panel = document.getElementById('cart-panel');
+    if (data.items.length === 0) {
+      panel.innerHTML = '<div class="card" style="margin-top:20px"><h3>Your Cart</h3><p class="muted" style="margin-top:8px">Cart is empty</p></div>';
+    } else {
+      panel.innerHTML = '<div class="card" style="margin-top:20px"><h3>Your Cart</h3><table><tr><th>Item</th><th>Qty</th><th>Price</th><th></th></tr>' +
+        data.items.map(i => '<tr><td>' + i.name + '</td><td>' + i.quantity + '</td><td>$' + (i.price * i.quantity).toFixed(2) + '</td><td><a href="#" onclick="removeFromCart(' + i.product_id + ')">Remove</a></td></tr>').join('') +
+        '</table><div style="text-align:right;margin-top:12px;font-size:1.1rem"><strong>Total: $' + data.total.toFixed(2) + '</strong></div>' +
+        '<div style="text-align:right;margin-top:8px"><button class="btn" onclick="placeOrder()">Place Order</button></div></div>';
+    }
+    panel.style.display = 'block';
+  } catch (e) { toast(e.message); }
+}
+async function removeFromCart(pid) {
+  try {
+    const data = await apiFetch('/cart/remove', { method: 'POST', body: JSON.stringify({ product_id: pid }) });
+    document.getElementById('cart-count').textContent = data.item_count;
+    document.getElementById('cart-count').style.display = data.item_count > 0 ? 'inline' : 'none';
+    viewCart();
+  } catch (e) { toast(e.message); }
+}
+async function placeOrder() {
+  try {
+    const data = await apiFetch('/orders/create', { method: 'POST' });
+    document.getElementById('cart-count').textContent = '0';
+    document.getElementById('cart-count').style.display = 'none';
+    document.getElementById('cart-panel').innerHTML = '<div class="card" style="margin-top:20px"><h3>\u2705 Order Placed!</h3><p style="margin-top:8px">Order <strong>' + data.order.id + '</strong> confirmed. Total: $' + data.order.total.toFixed(2) + '</p><p class="muted">Estimated delivery: ' + data.order.estimated_delivery + '</p></div>';
+    toast('Order placed!');
+  } catch (e) { toast(e.message); }
+}
+function showLogin() {
+  if (authToken) { logout(); return; }
+  document.getElementById('login-panel').innerHTML =
+    '<div class="card" style="margin-top:20px;max-width:360px"><h3>Login</h3><p class="muted" style="margin:8px 0;font-size:0.8rem">Demo account: demo@shop.com / demo123</p>' +
+    '<div class="form-group"><label>Email</label><input id="login-email" value="demo@shop.com"></div>' +
+    '<div class="form-group"><label>Password</label><input id="login-pass" type="password" value="demo123"></div>' +
+    '<button class="btn" onclick="doLogin()" style="width:100%">Log In</button></div>';
+  document.getElementById('login-panel').style.display = 'block';
+}
+async function doLogin() {
+  try {
+    const data = await apiFetch('/auth/login', { method: 'POST', body: JSON.stringify({
+      email: document.getElementById('login-email').value,
+      password: document.getElementById('login-pass').value
+    })});
+    authToken = data.token; userName = data.user.name;
+    document.getElementById('auth-link').textContent = userName + ' (Logout)';
+    document.getElementById('login-panel').style.display = 'none';
+    toast('Welcome, ' + userName + '!');
+  } catch (e) { toast(e.message); }
+}
+function logout() {
+  authToken = null; userName = null;
+  document.getElementById('auth-link').textContent = 'Login';
+  document.getElementById('cart-count').style.display = 'none';
+  toast('Logged out');
+}
+loadProducts('', '');
+</script>
 </body></html>`;
 }
 
-function getDemoPricingPage(site: any, dark: boolean): string {
+function getDemoAccountPage(site: any, dark: boolean, backendUrl: string): string {
   if (!site) return "";
   const accent = site.primary_color || "#6366f1";
   const safeName = escapeHtml(site.name || "");
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${safeName} - Pricing</title>
-<style>
-  ${baseStyles(dark)}
-  h1 { text-align: center; padding: 60px 0 16px; font-size: 2rem; }
-  .subtitle { text-align: center; margin-bottom: 40px; }
-  .plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; padding-bottom: 60px; }
-  .plan { text-align: center; }
-  .plan h3 { font-size: 1.1rem; margin-bottom: 8px; }
-  .plan .price { font-size: 2rem; font-weight: 800; color: ${accent}; margin: 12px 0; }
-  .plan .price span { font-size: 0.9rem; font-weight: 400; }
-  .plan ul { list-style: none; margin: 16px 0; font-size: 0.875rem; }
-  .plan ul li { padding: 6px 0; }
-  .plan ul li::before { content: "✓ "; color: ${accent}; font-weight: 700; }
-  .plan-btn { display: inline-block; border: 2px solid ${accent}; color: ${accent}; padding: 10px 28px; border-radius: 8px; font-weight: 600; }
-  .plan-btn:hover { background: ${accent}; color: #fff; text-decoration: none; }
-  .popular { border-color: ${accent} !important; position: relative; }
-  .popular::before { content: "Popular"; position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: ${accent}; color: #fff; padding: 2px 12px; border-radius: 12px; font-size: 0.7rem; font-weight: 600; }
-</style></head><body>
+<title>${safeName} - My Account</title>
+<meta name="description" content="Account dashboard for ${safeName}. View orders, profile, and manage your account. Ask the AI for help!">
+<style>${baseStyles(dark, accent)}</style></head><body>
 <div class="container">
-  <h1>Pricing Plans</h1>
-  <p class="subtitle muted">Choose the plan that fits your needs. Ask our chat bot for help!</p>
-  <div class="plans">
-    <div class="card plan">
-      <h3>Starter</h3>
-      <div class="price">Free<span></span></div>
-      <ul><li>1 site</li><li>100 messages/mo</li><li>Basic analytics</li></ul>
-      <a href="#" class="plan-btn">Get Started</a>
+  <nav class="nav">
+    <div class="nav-brand">\u{1F6CD}\uFE0F ${safeName}</div>
+    <div class="nav-links">
+      <a href="#">Store</a>
+      <a id="auth-link" href="#" onclick="showLogin()">Login</a>
     </div>
-    <div class="card plan popular">
-      <h3>Pro</h3>
-      <div class="price">$29<span>/mo</span></div>
-      <ul><li>5 sites</li><li>10,000 messages/mo</li><li>Advanced analytics</li><li>Custom branding</li></ul>
-      <a href="#" class="plan-btn">Start Trial</a>
-    </div>
-    <div class="card plan">
-      <h3>Enterprise</h3>
-      <div class="price">Custom</div>
-      <ul><li>Unlimited sites</li><li>Unlimited messages</li><li>Dedicated support</li><li>SLA guarantee</li></ul>
-      <a href="#" class="plan-btn">Contact Us</a>
+  </nav>
+  <div id="account-content">
+    <div class="card" style="text-align:center;padding:40px">
+      <h2>My Account</h2>
+      <p class="muted" style="margin:12px 0">Please log in to view your account.</p>
+      <p class="muted" style="font-size:0.8rem;margin-bottom:16px">Demo: demo@shop.com / demo123</p>
+      <div style="max-width:300px;margin:0 auto">
+        <div class="form-group"><label>Email</label><input id="login-email" value="demo@shop.com"></div>
+        <div class="form-group"><label>Password</label><input id="login-pass" type="password" value="demo123"></div>
+        <button class="btn" onclick="doLogin()" style="width:100%">Log In</button>
+      </div>
     </div>
   </div>
+  <footer class="footer">Ask the AI assistant to help you view orders or manage your account!</footer>
 </div>
-${getWidgetScript(site, dark)}
+<div id="toast-container"></div>
+${getWidgetScript(site, dark, backendUrl)}
+<script>
+const API = "${backendUrl}/api/demo";
+let authToken = null;
+function toast(msg) {
+  const el = document.createElement('div'); el.className = 'toast'; el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 2600);
+}
+async function apiFetch(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+  const r = await fetch(API + path, { ...opts, headers });
+  if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || 'Error'); }
+  return r.json();
+}
+async function doLogin() {
+  try {
+    const data = await apiFetch('/auth/login', { method: 'POST', body: JSON.stringify({
+      email: document.getElementById('login-email').value,
+      password: document.getElementById('login-pass').value
+    })});
+    authToken = data.token;
+    document.getElementById('auth-link').textContent = data.user.name + ' (Logout)';
+    toast('Welcome, ' + data.user.name + '!');
+    loadDashboard(data.user);
+  } catch (e) { toast(e.message); }
+}
+async function loadDashboard(user) {
+  let ordersHtml = '<p class="muted">No orders yet. Visit the store to place one!</p>';
+  try {
+    const data = await apiFetch('/orders');
+    if (data.orders.length > 0) {
+      ordersHtml = '<table><tr><th>Order ID</th><th>Items</th><th>Total</th><th>Status</th><th>Date</th></tr>' +
+        data.orders.map(o => '<tr><td><strong>' + o.id + '</strong></td><td>' + o.items.length + ' items</td><td>$' + o.total.toFixed(2) + '</td><td><span class="status-confirmed">' + o.status + '</span></td><td>' + new Date(o.created_at).toLocaleDateString() + '</td></tr>').join('') +
+        '</table>';
+    }
+  } catch (e) {}
+  document.getElementById('account-content').innerHTML =
+    '<div class="grid" style="grid-template-columns:260px 1fr;gap:20px;margin-top:8px">' +
+    '<div class="card"><h3>\u{1F464} Profile</h3><div style="margin-top:12px"><p><strong>' + user.name + '</strong></p><p class="muted" style="font-size:0.85rem">' + user.email + '</p><p class="muted" style="font-size:0.75rem;margin-top:4px">Member since ' + new Date(user.created_at || Date.now()).toLocaleDateString() + '</p></div></div>' +
+    '<div><div class="card"><h3>\u{1F4E6} Order History</h3><div style="margin-top:12px">' + ordersHtml + '</div></div></div></div>';
+}
+function showLogin() {
+  if (authToken) { authToken = null; document.getElementById('auth-link').textContent = 'Login'; location.reload(); }
+}
+</script>
 </body></html>`;
 }
 
-function getDemoDocsPage(site: any, dark: boolean): string {
+function getDemoSupportPage(site: any, dark: boolean, backendUrl: string): string {
   if (!site) return "";
+  const accent = site.primary_color || "#6366f1";
   const safeName = escapeHtml(site.name || "");
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${safeName} - Documentation</title>
-<style>
-  ${baseStyles(dark)}
-  .docs { display: grid; grid-template-columns: 200px 1fr; gap: 32px; padding: 40px 0; min-height: 80vh; }
-  .sidebar { font-size: 0.875rem; }
-  .sidebar h4 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; margin: 16px 0 8px; }
-  .sidebar a { display: block; padding: 4px 0; color: ${dark ? "#94a3b8" : "#64748b"}; }
-  .sidebar a:hover { color: ${dark ? "#e2e8f0" : "#1e293b"}; text-decoration: none; }
-  .content h1 { font-size: 1.75rem; margin-bottom: 16px; }
-  .content h2 { font-size: 1.25rem; margin: 24px 0 12px; }
-  .content p { margin-bottom: 12px; font-size: 0.9375rem; }
-  .content code { background: ${dark ? "#334155" : "#f1f5f9"}; padding: 2px 6px; border-radius: 4px; font-size: 0.85em; }
-  .content pre { background: ${dark ? "#1a1a2e" : "#f8fafc"}; border: 1px solid ${dark ? "#334155" : "#e2e8f0"}; padding: 16px; border-radius: 8px; overflow-x: auto; margin: 12px 0; font-size: 0.85rem; }
-  @media (max-width: 640px) { .docs { grid-template-columns: 1fr; } .sidebar { display: none; } }
-</style></head><body>
+<title>${safeName} - Help Center</title>
+<meta name="description" content="Help center and FAQ for ${safeName}. Find answers to common questions about shipping, returns, payments. Create support tickets or ask the AI!">
+<style>${baseStyles(dark, accent)}</style></head><body>
 <div class="container">
-  <div class="docs">
-    <nav class="sidebar">
-      <h4>Getting Started</h4>
-      <a href="#">Installation</a>
-      <a href="#">Quick Start</a>
-      <a href="#">Configuration</a>
-      <h4>Features</h4>
-      <a href="#">Chat Widget</a>
-      <a href="#">Knowledge Base</a>
-      <a href="#">API Tools</a>
-      <h4>API Reference</h4>
-      <a href="#">REST API</a>
-      <a href="#">WebSocket</a>
-    </nav>
-    <div class="content">
-      <h1>Getting Started</h1>
-      <p>Welcome to the ${safeName} documentation. This guide will help you set up and configure your chat widget.</p>
-      <h2>Installation</h2>
-      <p>Add the following code to your website, just before the closing <code>&lt;/body&gt;</code> tag:</p>
-      <pre>&lt;script&gt;
-  window.PlugoConfig = {
-    token: "${escapeHtml(site.token || "")}"
-  };
-&lt;/script&gt;
-&lt;script src="https://cdn.plugo.dev/widget.js" async&gt;&lt;/script&gt;</pre>
-      <h2>Configuration</h2>
-      <p>You can customize the widget with these options:</p>
-      <p><code>primaryColor</code> — Set the theme color (hex format, e.g. <code>#6366f1</code>)</p>
-      <p><code>greeting</code> — Welcome message shown when the chat opens</p>
-      <p><code>position</code> — Widget position: <code>bottom-right</code> or <code>bottom-left</code></p>
-      <p><code>darkMode</code> — Enable dark theme (<code>true</code> / <code>false</code>)</p>
-      <h2>Need Help?</h2>
-      <p>Try asking the chat widget! It can answer questions about this documentation.</p>
+  <nav class="nav">
+    <div class="nav-brand">\u{1F6CD}\uFE0F ${safeName}</div>
+    <div class="nav-links">
+      <a href="#">Store</a>
+      <a href="#">Account</a>
+    </div>
+  </nav>
+  <div style="text-align:center;padding:32px 0">
+    <h1 style="font-size:1.75rem;font-weight:800">Help Center</h1>
+    <p class="muted" style="margin-top:8px">Find answers or ask our AI assistant for help!</p>
+  </div>
+  <div id="faq-section"><h2 class="section-title">\u2753 Frequently Asked Questions</h2><div id="faq-list" class="grid" style="gap:12px"></div></div>
+  <div style="margin-top:32px">
+    <h2 class="section-title">\u{1F4E9} Submit a Support Ticket</h2>
+    <div class="card" style="max-width:500px">
+      <div class="form-group"><label>Subject</label><input id="ticket-subject" placeholder="Brief description of your issue"></div>
+      <div class="form-group"><label>Message</label><textarea id="ticket-message" rows="4" placeholder="Please describe your issue in detail..."></textarea></div>
+      <button class="btn" onclick="submitTicket()">Submit Ticket</button>
+      <div id="ticket-result" style="margin-top:12px"></div>
     </div>
   </div>
+  <footer class="footer">Need more help? Click the chat bubble and ask the AI assistant anything!</footer>
 </div>
-${getWidgetScript(site, dark)}
+<div id="toast-container"></div>
+${getWidgetScript(site, dark, backendUrl)}
+<script>
+const API = "${backendUrl}/api/demo";
+function toast(msg) {
+  const el = document.createElement('div'); el.className = 'toast'; el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 2600);
+}
+async function apiFetch(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  const r = await fetch(API + path, { ...opts, headers });
+  if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || 'Error'); }
+  return r.json();
+}
+async function loadFAQ() {
+  try {
+    const data = await apiFetch('/support/faq');
+    document.getElementById('faq-list').innerHTML = data.faqs.map(f =>
+      '<div class="card" style="cursor:pointer" onclick="this.querySelector(\\'.faq-a\\').style.display=this.querySelector(\\'.faq-a\\').style.display===\\'none\\'?\\'block\\':\\'none\\'">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center"><strong style="font-size:0.9rem">' + f.question + '</strong><span class="muted">\u25BC</span></div>' +
+      '<p class="faq-a muted" style="display:none;margin-top:8px;font-size:0.85rem">' + f.answer + '</p></div>'
+    ).join('');
+  } catch (e) { console.error(e); }
+}
+async function submitTicket() {
+  const subject = document.getElementById('ticket-subject').value;
+  const message = document.getElementById('ticket-message').value;
+  if (!subject || !message) { toast('Please fill in all fields'); return; }
+  try {
+    const data = await apiFetch('/support/ticket', { method: 'POST', body: JSON.stringify({ subject, message }) });
+    document.getElementById('ticket-result').innerHTML =
+      '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px">' +
+      '<strong>\u2705 Ticket Created</strong><br><span class="muted" style="font-size:0.85rem">ID: ' + data.ticket.id + ' \u2014 We\\'ll get back to you soon!</span></div>';
+    document.getElementById('ticket-subject').value = '';
+    document.getElementById('ticket-message').value = '';
+    toast('Ticket submitted!');
+  } catch (e) { toast(e.message); }
+}
+loadFAQ();
+</script>
 </body></html>`;
 }
 
 function getDemoBlankPage(site: any, dark: boolean): string {
   if (!site) return "";
+  const accent = site.primary_color || "#6366f1";
   const safeName = escapeHtml(site.name || "");
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${safeName}</title>
-<style>
-  ${baseStyles(dark)}
-  body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-  .center { text-align: center; }
-  .center p { font-size: 0.875rem; }
-</style></head><body>
-<div class="center">
-  <p class="muted">Blank page — only the chat widget is loaded.</p>
+<style>${baseStyles(dark, accent)} body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }</style></head><body>
+<div style="text-align:center">
+  <p class="muted">Blank page \u2014 only the chat widget is loaded.</p>
+  <p class="muted" style="font-size:0.8rem;margin-top:8px">Click the chat bubble to start a conversation.</p>
 </div>
 ${getWidgetScript(site, dark)}
 </body></html>`;

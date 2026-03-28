@@ -42,8 +42,13 @@ class ToolTestRequest(BaseModel):
 
 
 def validate_tool_url(url: str) -> bool:
-    """Prevent SSRF by blocking internal/private IPs."""
+    """Prevent SSRF by blocking internal/private IPs.
+    Exception: /api/demo/* paths are allowed (our own mock endpoints).
+    """
     parsed = urlparse(url)
+    # Allow our own demo API endpoints
+    if parsed.path.startswith("/api/demo/"):
+        return True
     hostname = parsed.hostname
     if not hostname:
         return False

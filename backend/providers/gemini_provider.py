@@ -61,12 +61,16 @@ class GeminiProvider(BaseLLMProvider):
                 yield chunk.text
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        model = genai.GenerativeModel("models/text-embedding-004")
+        import asyncio
+        loop = asyncio.get_event_loop()
         results = []
         for text in texts:
-            result = genai.embed_content(
-                model="models/text-embedding-004",
-                content=text,
+            result = await loop.run_in_executor(
+                None,
+                lambda t=text: genai.embed_content(
+                    model="models/text-embedding-004",
+                    content=t,
+                ),
             )
             results.append(result["embedding"])
         return results
