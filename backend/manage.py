@@ -21,6 +21,7 @@ load_dotenv()
 from database import init_db, async_session
 from auth import hash_password, verify_password
 from repositories import get_repos
+import models  # noqa: F401 — ensure all models registered for create_all
 
 
 async def create_admin(username: str, password: str):
