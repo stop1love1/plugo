@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from pydantic import BaseModel, Field
 from typing import Optional
 from repositories import get_repos, Repositories
@@ -18,8 +18,8 @@ MAX_PER_PAGE = 100
 @router.get("")
 async def list_knowledge(
     site_id: str,
-    page: int = Field(default=1, ge=1),
-    per_page: int = Field(default=20, ge=1, le=MAX_PER_PAGE),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=MAX_PER_PAGE),
     search: Optional[str] = None,
     repos: Repositories = Depends(get_repos),
     _user: TokenData = Depends(get_current_user),
