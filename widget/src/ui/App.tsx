@@ -20,6 +20,14 @@ type AppProps = {
 
 const SESSION_KEY = "plugo_session_";
 const VISITOR_KEY = "plugo_visitor_";
+const MAX_MESSAGES = 200;
+
+function generateFallbackId(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
 
 function getSavedSessionId(token: string): string | null {
   try {
@@ -41,11 +49,11 @@ function getOrCreateVisitorId(token: string): string {
   try {
     const existing = localStorage.getItem(VISITOR_KEY + token);
     if (existing) return existing;
-    const id = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const id = crypto.randomUUID ? crypto.randomUUID() : generateFallbackId();
     localStorage.setItem(VISITOR_KEY + token, id);
     return id;
   } catch {
-    return Math.random().toString(36).slice(2) + Date.now().toString(36);
+    return generateFallbackId();
   }
 }
 
@@ -97,7 +105,10 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
       onStart: () => {
         setIsTyping(true);
         setSuggestions([]); // Clear suggestions during response
-        setMessages((prev) => [...prev, { role: "bot", content: "" }]);
+        setMessages((prev) => {
+          const updated = [...prev, { role: "bot", content: "" }];
+          return updated.length > MAX_MESSAGES ? updated.slice(-MAX_MESSAGES) : updated;
+        });
       },
       onToken: (token) => {
         setMessages((prev) => {
@@ -125,10 +136,13 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
       },
       onError: (error) => {
         setIsTyping(false);
-        setMessages((prev) => [
-          ...prev,
-          { role: "bot", content: `⚠️ ${error}` },
-        ]);
+        setMessages((prev) => {
+          const updated = [
+            ...prev,
+            { role: "bot", content: `⚠️ ${error}` },
+          ];
+          return updated.length > MAX_MESSAGES ? updated.slice(-MAX_MESSAGES) : updated;
+        });
       },
     }, savedSessionId, visitorId);
 
@@ -155,7 +169,10 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
       if (!ws || !message.trim()) return;
 
       setSuggestions([]); // Clear suggestions when user sends
-      setMessages((prev) => [...prev, { role: "user", content: message }]);
+      setMessages((prev) => {
+        const updated = [...prev, { role: "user", content: message }];
+        return updated.length > MAX_MESSAGES ? updated.slice(-MAX_MESSAGES) : updated;
+      });
       ws.send(message, getPageContext());
     },
     [ws, getPageContext]

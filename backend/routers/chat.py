@@ -111,9 +111,33 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
             visitor_id, conversation_summary,
         )
 
+    # Background heartbeat to detect stale connections
+    heartbeat_active = True
+
+    async def _heartbeat():
+        """Send ping every 30 seconds to detect stale WebSocket connections."""
+        try:
+            while heartbeat_active:
+                await asyncio.sleep(30)
+                if not heartbeat_active:
+                    break
+                try:
+                    await websocket.send_json({"type": "ping"})
+                except Exception:
+                    break
+        except asyncio.CancelledError:
+            pass
+
+    heartbeat_task = asyncio.create_task(_heartbeat())
+
     try:
         while True:
             data = await websocket.receive_json()
+
+            # Handle pong from client
+            if data.get("type") == "pong":
+                continue
+
             message = data.get("message", "")
             page_context = data.get("pageContext", None)
 
@@ -132,6 +156,8 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
                 )
 
     except WebSocketDisconnect:
+        heartbeat_active = False
+        heartbeat_task.cancel()
         await repos.chat_sessions.set_ended(session_id)
         active_agents.pop(session_id, None)
 

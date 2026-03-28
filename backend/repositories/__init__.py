@@ -72,6 +72,7 @@ async def get_repos() -> Repositories:
         from repositories.mongo_repo import (
             MongoSiteRepo, MongoKnowledgeRepo, MongoToolRepo,
             MongoChatSessionRepo, MongoCrawlJobRepo, MongoUserRepo,
+            MongoVisitorMemoryRepo, MongoConversationSummaryRepo,
         )
         db = _get_mongo_db()
         return Repositories(
@@ -81,8 +82,8 @@ async def get_repos() -> Repositories:
             chat_sessions=MongoChatSessionRepo(db),
             crawl_jobs=MongoCrawlJobRepo(db),
             users=MongoUserRepo(db),
-            visitor_memories=None,  # TODO: implement MongoVisitorMemoryRepo
-            conversation_summaries=None,  # TODO: implement MongoConversationSummaryRepo
+            visitor_memories=MongoVisitorMemoryRepo(db),
+            conversation_summaries=MongoConversationSummaryRepo(db),
         )
     else:
         # Default: SQLite

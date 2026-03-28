@@ -1,6 +1,7 @@
 import { h } from "preact";
 import { useState, useRef, useEffect } from "preact/hooks";
 import { Message } from "./Message";
+import { getWidgetString, detectLanguage } from "../lib/i18n";
 
 type ChatMessage = {
   role: "user" | "bot";
@@ -20,6 +21,7 @@ export function ChatWindow({ messages, isTyping, position, suggestions, onSend, 
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const lang = detectLanguage();
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -90,11 +92,11 @@ export function ChatWindow({ messages, isTyping, position, suggestions, onSend, 
           type="text"
           value={input}
           onInput={(e) => setInput((e.target as HTMLInputElement).value)}
-          placeholder="Type a message..."
+          placeholder={getWidgetString("placeholder", lang)}
           disabled={isTyping}
         />
         <button type="submit" disabled={!input.trim() || isTyping}>
-          Send
+          {getWidgetString("send", lang)}
         </button>
       </form>
     </div>

@@ -5,6 +5,8 @@ import toast from "react-hot-toast";
 import { getKnowledge, deleteChunk, addManualChunk, uploadFile } from "../lib/api";
 import { Trash2, Plus, Upload, FileText, Search } from "lucide-react";
 import api from "../lib/api";
+import { PageHeader } from "../components/PageHeader";
+import { EmptyState } from "../components/EmptyState";
 
 const bulkDeleteChunks = (ids: string[]) =>
   api.post("/knowledge/bulk-delete", { chunk_ids: ids }).then((r) => r.data);
@@ -18,6 +20,7 @@ export default function Knowledge() {
   const [content, setContent] = useState("");
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["knowledge", siteId, page, search],
@@ -85,33 +88,28 @@ export default function Knowledge() {
 
   const handleBulkDelete = () => {
     if (selectedIds.size === 0) return;
-    if (confirm(`Delete ${selectedIds.size} selected chunks?`)) {
-      bulkDeleteMutation.mutate(Array.from(selectedIds));
-    }
+    setShowConfirmDelete(true);
+  };
+
+  const confirmBulkDelete = () => {
+    bulkDeleteMutation.mutate(Array.from(selectedIds));
+    setShowConfirmDelete(false);
   };
 
   return (
     <div className="max-w-4xl">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Knowledge Base</h1>
-          <p className="text-gray-500 mt-1">
-            {data?.total || 0} chunks
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <label className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-            <Upload className="w-4 h-4" /> Upload File
-            <input type="file" accept=".txt,.md" onChange={handleUpload} className="hidden" />
-          </label>
-          <button
-            onClick={() => setShowAdd(true)}
-            className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700"
-          >
-            <Plus className="w-4 h-4" /> Add Manually
-          </button>
-        </div>
-      </div>
+      <PageHeader title="Knowledge Base" subtitle={`${data?.total || 0} chunks`}>
+        <label className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">
+          <Upload className="w-4 h-4" /> Upload File
+          <input type="file" accept=".txt,.md" onChange={handleUpload} className="hidden" />
+        </label>
+        <button
+          onClick={() => setShowAdd(true)}
+          className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700"
+        >
+          <Plus className="w-4 h-4" /> Add Manually
+        </button>
+      </PageHeader>
 
       {/* Search bar */}
       <div className="relative mb-4">
@@ -131,19 +129,40 @@ export default function Knowledge() {
       {selectedIds.size > 0 && (
         <div className="flex items-center gap-3 mb-4 p-3 bg-red-50 rounded-lg border border-red-100">
           <span className="text-sm text-red-700">{selectedIds.size} selected</span>
-          <button
-            onClick={handleBulkDelete}
-            disabled={bulkDeleteMutation.isPending}
-            className="text-sm text-red-600 hover:text-red-800 font-medium"
-          >
-            {bulkDeleteMutation.isPending ? "Deleting..." : "Delete Selected"}
-          </button>
-          <button
-            onClick={() => setSelectedIds(new Set())}
-            className="text-sm text-gray-500 hover:text-gray-700"
-          >
-            Clear selection
-          </button>
+          {showConfirmDelete ? (
+            <>
+              <span className="text-sm text-red-700 font-medium">Are you sure?</span>
+              <button
+                onClick={confirmBulkDelete}
+                disabled={bulkDeleteMutation.isPending}
+                className="text-sm bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 font-medium"
+              >
+                {bulkDeleteMutation.isPending ? "Deleting..." : "Confirm"}
+              </button>
+              <button
+                onClick={() => setShowConfirmDelete(false)}
+                className="text-sm text-gray-500 hover:text-gray-700"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleteMutation.isPending}
+                className="text-sm text-red-600 hover:text-red-800 font-medium"
+              >
+                {bulkDeleteMutation.isPending ? "Deleting..." : "Delete Selected"}
+              </button>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="text-sm text-gray-500 hover:text-gray-700"
+              >
+                Clear selection
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -177,12 +196,7 @@ export default function Knowledge() {
       {isLoading ? (
         <div className="text-gray-400">Loading...</div>
       ) : !data?.chunks?.length ? (
-        <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
-          <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500">
-            {search ? "No results found." : "No data yet. Crawl your website or add content manually."}
-          </p>
-        </div>
+        <EmptyState icon={FileText} message={search ? "No results found." : "No data yet. Crawl your website or add content manually."} />
       ) : (
         <div className="space-y-3">
           {data.chunks.map((chunk: any) => (

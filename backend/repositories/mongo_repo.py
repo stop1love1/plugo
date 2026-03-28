@@ -8,6 +8,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from repositories.base import (
     BaseSiteRepo, BaseKnowledgeRepo, BaseToolRepo,
     BaseChatSessionRepo, BaseCrawlJobRepo, BaseUserRepo,
+    BaseVisitorMemoryRepo, BaseConversationSummaryRepo,
 )
 
 
@@ -290,3 +291,120 @@ class MongoUserRepo(BaseUserRepo):
 
     async def count(self) -> int:
         return await self.col.count_documents({})
+
+
+# --- Visitor Memory ---
+class MongoVisitorMemoryRepo(BaseVisitorMemoryRepo):
+    def __init__(self, db: AsyncIOMotorDatabase):
+        self.col = db["visitor_memories"]
+
+    async def create(self, data: dict) -> dict:
+        doc = {
+            "_id": data.get("id", str(uuid.uuid4())),
+            "visitor_id": data["visitor_id"],
+            "site_id": data["site_id"],
+            "category": data.get("category", "context"),
+            "key": data["key"],
+            "value": data["value"],
+            "confidence": data.get("confidence", "medium"),
+            "source_session_id": data.get("source_session_id"),
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow(),
+        }
+        await self.col.insert_one(doc)
+        return _clean_doc(doc)
+
+    async def get_by_id(self, memory_id: str) -> Optional[dict]:
+        doc = await self.col.find_one({"_id": memory_id})
+        return _clean_doc(doc) if doc else None
+
+    async def list_by_visitor(self, visitor_id: str, site_id: str) -> list[dict]:
+        cursor = self.col.find(
+            {"visitor_id": visitor_id, "site_id": site_id}
+        ).sort("updated_at", -1)
+        return [_clean_doc(doc) async for doc in cursor]
+
+    async def upsert(self, visitor_id: str, site_id: str, key: str, data: dict) -> dict:
+        filter_query = {"visitor_id": visitor_id, "site_id": site_id, "key": key}
+        existing = await self.col.find_one(filter_query)
+        if existing:
+            update_data = {k: v for k, v in data.items() if v is not None}
+            update_data["updated_at"] = datetime.utcnow()
+            result = await self.col.find_one_and_update(
+                filter_query, {"$set": update_data}, return_document=True,
+            )
+            return _clean_doc(result)
+        else:
+            doc = {
+                "_id": data.get("id", str(uuid.uuid4())),
+                "visitor_id": visitor_id,
+                "site_id": site_id,
+                "category": data.get("category", "context"),
+                "key": key,
+                "value": data.get("value", ""),
+                "confidence": data.get("confidence", "medium"),
+                "source_session_id": data.get("source_session_id"),
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow(),
+            }
+            await self.col.insert_one(doc)
+            return _clean_doc(doc)
+
+    async def delete(self, memory_id: str) -> bool:
+        result = await self.col.delete_one({"_id": memory_id})
+        return result.deleted_count > 0
+
+    async def delete_by_visitor(self, visitor_id: str, site_id: str) -> int:
+        result = await self.col.delete_many({"visitor_id": visitor_id, "site_id": site_id})
+        return result.deleted_count
+
+
+# --- Conversation Summary ---
+class MongoConversationSummaryRepo(BaseConversationSummaryRepo):
+    def __init__(self, db: AsyncIOMotorDatabase):
+        self.col = db["conversation_summaries"]
+
+    async def create(self, data: dict) -> dict:
+        doc = {
+            "_id": data.get("id", str(uuid.uuid4())),
+            "session_id": data["session_id"],
+            "site_id": data["site_id"],
+            "summary_text": data["summary_text"],
+            "message_count_summarized": data.get("message_count_summarized", 0),
+            "total_message_count": data.get("total_message_count", 0),
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow(),
+        }
+        await self.col.insert_one(doc)
+        return _clean_doc(doc)
+
+    async def get_by_session(self, session_id: str) -> Optional[dict]:
+        doc = await self.col.find_one({"session_id": session_id})
+        return _clean_doc(doc) if doc else None
+
+    async def upsert_by_session(self, session_id: str, data: dict) -> dict:
+        existing = await self.col.find_one({"session_id": session_id})
+        if existing:
+            update_data = {k: v for k, v in data.items() if v is not None}
+            update_data["updated_at"] = datetime.utcnow()
+            result = await self.col.find_one_and_update(
+                {"session_id": session_id}, {"$set": update_data}, return_document=True,
+            )
+            return _clean_doc(result)
+        else:
+            doc = {
+                "_id": data.get("id", str(uuid.uuid4())),
+                "session_id": session_id,
+                "site_id": data["site_id"],
+                "summary_text": data.get("summary_text", ""),
+                "message_count_summarized": data.get("message_count_summarized", 0),
+                "total_message_count": data.get("total_message_count", 0),
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow(),
+            }
+            await self.col.insert_one(doc)
+            return _clean_doc(doc)
+
+    async def delete(self, summary_id: str) -> bool:
+        result = await self.col.delete_one({"_id": summary_id})
+        return result.deleted_count > 0

@@ -24,19 +24,8 @@ async def list_knowledge(
     repos: Repositories = Depends(get_repos),
     _user: TokenData = Depends(get_current_user),
 ):
-    data = await repos.knowledge.list_by_site(site_id, page, per_page)
+    data = await repos.knowledge.list_by_site(site_id, page, per_page, search=search)
     chunks = data.get("chunks", [])
-
-    # Filter by search query (client-side filter for now, works for SQLite)
-    if search:
-        search_lower = search.lower()
-        chunks = [
-            c for c in chunks
-            if search_lower in (c.get("title") or "").lower()
-            or search_lower in (c.get("content") or "").lower()
-        ]
-        data["chunks"] = chunks
-        data["total"] = len(chunks)
 
     # Truncate content for list view
     for chunk in chunks:

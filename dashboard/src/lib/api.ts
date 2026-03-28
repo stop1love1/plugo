@@ -1,4 +1,24 @@
-import axios from "axios";
+import axios, { AxiosError } from "axios";
+
+/** Typed API error from backend */
+export type ApiError = {
+  status: number;
+  detail: string;
+};
+
+/** Extract a readable error message from any axios error */
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof AxiosError) {
+    const detail = error.response?.data?.detail;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) return detail.map((d: { msg: string }) => d.msg).join(", ");
+    if (error.response?.status === 413) return "File too large";
+    if (error.response?.status === 429) return "Too many requests. Please slow down.";
+    if (error.response?.status === 500) return "Server error. Please try again later.";
+    if (error.message) return error.message;
+  }
+  return "An unexpected error occurred";
+}
 
 const api = axios.create({
   baseURL: "/api",

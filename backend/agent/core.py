@@ -5,6 +5,7 @@ from providers.factory import get_llm_provider
 from agent.rag import rag_engine
 from agent.tools import tool_executor
 from knowledge.embed_cache import embed_cache
+from config import settings
 
 
 SYSTEM_PROMPT_TEMPLATE = """You are an AI assistant for the website "{site_name}" ({site_url}).
@@ -104,7 +105,10 @@ class ChatAgent:
             # Check embedding cache first
             query_embedding = embed_cache.get(query)
             if query_embedding is None:
-                embedding_provider = get_llm_provider("openai")
+                embedding_provider = get_llm_provider(
+                    settings.embedding_provider,
+                    settings.embedding_model,
+                )
                 query_embedding = (await embedding_provider.embed([query]))[0]
                 embed_cache.put(query, query_embedding)
 
@@ -164,18 +168,63 @@ class ChatAgent:
         visitor_id: Optional[str] = None,
         conversation_summary: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
-        """Process user message → stream response."""
+        """Process user message → stream response with tool calling support."""
         self.messages.append({"role": "user", "content": message})
 
         system_prompt, tools = await self._build_system_prompt(
             message, page_context, repos, visitor_id, conversation_summary,
         )
 
+        # First, use non-streaming call to detect tool calls
+        max_tool_rounds = 3
+        round_count = 0
+
+        if tools:
+            result = await self.provider.chat(
+                messages=self.messages,
+                system_prompt=system_prompt,
+                tools=tools,
+            )
+
+            while result.get("tool_calls") and round_count < max_tool_rounds:
+                round_count += 1
+                for tc in result["tool_calls"]:
+                    tool_meta = next(
+                        (t["_meta"] for t in tools if t["name"] == tc["name"]), None
+                    )
+                    if tool_meta:
+                        # Notify the client about the tool call
+                        yield f"\n\n> Calling **{tc['name']}**...\n\n"
+
+                        tool_result = await tool_executor.execute_tool(
+                            tool_meta, tc["arguments"]
+                        )
+                        self.messages.append({
+                            "role": "assistant",
+                            "content": f"Executing: {tc['name']}({json.dumps(tc['arguments'], ensure_ascii=False)})",
+                        })
+                        self.messages.append({
+                            "role": "user",
+                            "content": f"Tool result {tc['name']}: {json.dumps(tool_result, ensure_ascii=False)}",
+                        })
+
+                # Check for more tool calls
+                result = await self.provider.chat(
+                    messages=self.messages,
+                    system_prompt=system_prompt,
+                    tools=tools,
+                )
+
+            # If the last non-streaming call had no tool calls but produced content,
+            # we still want to stream the final response for a better UX.
+            # Only skip streaming if there were tool rounds and we already have content.
+
+        # Stream the final response (no tools needed since tool calls are resolved)
         full_response = ""
         async for token in self.provider.stream(
             messages=self.messages,
             system_prompt=system_prompt,
-            tools=tools if tools else None,
+            tools=None,
         ):
             full_response += token
             yield token

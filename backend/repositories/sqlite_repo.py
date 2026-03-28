@@ -161,15 +161,26 @@ class SQLiteKnowledgeRepo(BaseKnowledgeRepo):
         chunk = await self.db.get(KnowledgeChunk, chunk_id)
         return _chunk_to_dict(chunk) if chunk else None
 
-    async def list_by_site(self, site_id: str, page: int = 1, per_page: int = 20) -> dict:
+    async def list_by_site(self, site_id: str, page: int = 1, per_page: int = 20, search: Optional[str] = None) -> dict:
         offset = (page - 1) * per_page
+        base_filter = KnowledgeChunk.site_id == site_id
+        if search:
+            search_pattern = f"%{search}%"
+            search_filter = (
+                KnowledgeChunk.title.ilike(search_pattern)
+                | KnowledgeChunk.content.ilike(search_pattern)
+            )
+            combined = base_filter & search_filter
+        else:
+            combined = base_filter
+
         result = await self.db.execute(
-            select(KnowledgeChunk).where(KnowledgeChunk.site_id == site_id)
+            select(KnowledgeChunk).where(combined)
             .order_by(KnowledgeChunk.crawled_at.desc()).offset(offset).limit(per_page)
         )
         chunks = [_chunk_to_dict(c) for c in result.scalars().all()]
         count_result = await self.db.execute(
-            select(func.count()).where(KnowledgeChunk.site_id == site_id)
+            select(func.count()).where(combined)
         )
         total = count_result.scalar()
         return {"chunks": chunks, "total": total, "page": page, "per_page": per_page}

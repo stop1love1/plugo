@@ -14,6 +14,7 @@ export class PlugoWebSocket {
   private maxReconnectAttempts = 5;
   private sessionId: string | null = null;
   private visitorId: string | null = null;
+  private pingInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(url: string, handlers: MessageHandler, sessionId?: string | null, visitorId?: string | null) {
     this.url = url;
@@ -28,6 +29,7 @@ export class PlugoWebSocket {
 
       this.ws.onopen = () => {
         this.reconnectAttempts = 0;
+        this.startPing();
         // Send init message with session_id and visitor_id
         this.ws?.send(
           JSON.stringify({
@@ -61,6 +63,9 @@ export class PlugoWebSocket {
             case "error":
               this.handlers.onError(data.message);
               break;
+            case "pong":
+              // Heartbeat acknowledged — connection is alive
+              break;
           }
         } catch (e) {
           console.error("[Plugo] Failed to parse message:", e);
@@ -68,6 +73,7 @@ export class PlugoWebSocket {
       };
 
       this.ws.onclose = () => {
+        this.stopPing();
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
           this.reconnectAttempts++;
           const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000);
@@ -96,7 +102,24 @@ export class PlugoWebSocket {
 
   disconnect() {
     this.maxReconnectAttempts = 0; // Prevent reconnection
+    this.stopPing();
     this.ws?.close();
+  }
+
+  private startPing() {
+    this.stopPing();
+    this.pingInterval = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: "ping" }));
+      }
+    }, 30000);
+  }
+
+  private stopPing() {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
   }
 
   get isConnected(): boolean {

@@ -4,6 +4,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { getTools, createTool, deleteTool, testTool } from "../lib/api";
 import { Wrench, Plus, Trash2, Play, CheckCircle } from "lucide-react";
+import { PageHeader } from "../components/PageHeader";
+import { FormField } from "../components/FormField";
+import { EmptyState } from "../components/EmptyState";
 
 export default function Tools() {
   const { siteId } = useParams<{ siteId: string }>();
@@ -77,64 +80,53 @@ export default function Tools() {
 
   return (
     <div className="max-w-4xl">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">API Tools</h1>
-          <p className="text-gray-500 mt-1">Let the bot call your website's APIs</p>
-        </div>
+      <PageHeader title="API Tools" subtitle="Let the bot call your website's APIs">
         <button
           onClick={() => setShowAdd(true)}
           className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700"
         >
           <Plus className="w-4 h-4" /> Add Tool
         </button>
-      </div>
+      </PageHeader>
 
       {showAdd && (
         <form onSubmit={handleCreate} className="bg-white p-6 rounded-xl border border-gray-200 mb-6">
           <h3 className="font-semibold mb-4">Add API Tool</h3>
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tool Name</label>
+            <FormField label="Tool Name">
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
                 placeholder="search_products" className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Method</label>
+            </FormField>
+            <FormField label="Method">
               <select value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}
                 className="w-full border rounded-lg px-3 py-2 outline-none">
                 <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option>
               </select>
-            </div>
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description (helps the bot decide when to call this tool)</label>
+            </FormField>
+            <FormField label="Description (helps the bot decide when to call this tool)" className="col-span-2">
               <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
                 placeholder="Search products by name or category" className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">URL</label>
+            </FormField>
+            <FormField label="URL" className="col-span-2">
               <input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })}
                 placeholder="https://api.example.com/products" className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Auth Type</label>
+            </FormField>
+            <FormField label="Auth Type">
               <select value={form.auth_type} onChange={(e) => setForm({ ...form, auth_type: e.target.value })}
                 className="w-full border rounded-lg px-3 py-2 outline-none">
                 <option value="none">None</option><option value="bearer">Bearer Token</option>
                 <option value="api_key">API Key</option><option value="basic">Basic Auth</option>
               </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Auth Value</label>
+            </FormField>
+            <FormField label="Auth Value">
               <input value={form.auth_value} onChange={(e) => setForm({ ...form, auth_value: e.target.value })}
                 placeholder="Token or key..." type="password" className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Params Schema (JSON)</label>
+            </FormField>
+            <FormField label="Params Schema (JSON)" className="col-span-2">
               <textarea value={form.params_schema} onChange={(e) => setForm({ ...form, params_schema: e.target.value })}
                 rows={4} placeholder='{"q": {"type": "string", "description": "Search query", "required": true}}'
                 className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm" />
-            </div>
+            </FormField>
           </div>
           <div className="flex gap-3 mt-4">
             <button type="submit" disabled={createMutation.isPending} className="bg-primary-600 text-white px-4 py-2 rounded-lg">
@@ -148,10 +140,7 @@ export default function Tools() {
       {isLoading ? (
         <div className="text-gray-400">Loading...</div>
       ) : tools.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
-          <Wrench className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500">No tools yet. Add an API tool to enable the bot to perform actions.</p>
-        </div>
+        <EmptyState icon={Wrench} message="No tools yet. Add an API tool to enable the bot to perform actions." />
       ) : (
         <div className="space-y-3">
           {tools.map((tool: any) => (

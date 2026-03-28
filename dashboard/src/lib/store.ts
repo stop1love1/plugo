@@ -26,8 +26,14 @@ type Store = {
 };
 
 // Restore user from localStorage on load
-const savedUser = localStorage.getItem("plugo_user");
-const initialUser = savedUser ? JSON.parse(savedUser) : null;
+let initialUser = null;
+try {
+  const savedUser = localStorage.getItem("plugo_user");
+  initialUser = savedUser ? JSON.parse(savedUser) : null;
+} catch {
+  localStorage.removeItem("plugo_user");
+  localStorage.removeItem("plugo_token");
+}
 
 export const useStore = create<Store>((set) => ({
   currentSite: null,

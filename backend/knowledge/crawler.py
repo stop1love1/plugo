@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime
 from typing import Optional
 from urllib.parse import urljoin, urlparse
+from urllib.robotparser import RobotFileParser
 import httpx
 from bs4 import BeautifulSoup
 from agent.rag import rag_engine
@@ -30,6 +31,24 @@ class WebCrawler:
         """Signal the crawler to stop. Data already crawled will be persisted."""
         self._stopped = True
 
+    async def _check_robots_txt(self, client: httpx.AsyncClient, start_url: str) -> RobotFileParser:
+        """Fetch and parse robots.txt from the target domain."""
+        parsed = urlparse(start_url)
+        robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
+        rp = RobotFileParser()
+        rp.set_url(robots_url)
+        try:
+            response = await client.get(robots_url)
+            if response.status_code == 200:
+                rp.parse(response.text.splitlines())
+            else:
+                # If robots.txt is not found, allow everything
+                rp.parse([])
+        except Exception:
+            # If we can't fetch robots.txt, allow everything
+            rp.parse([])
+        return rp
+
     async def crawl_site(
         self,
         site_id: str,
@@ -51,6 +70,9 @@ class WebCrawler:
                 follow_redirects=True,
                 headers={"User-Agent": "PlugoBot/1.0 (+https://github.com/stop1love1/plugo)"},
             ) as client:
+                # Fetch and parse robots.txt before crawling
+                robot_parser = await self._check_robots_txt(client, start_url)
+
                 while queue and len(self.visited) < self.max_pages:
                     # Check stop signal — persist crawled data before stopping
                     if self._stopped:
@@ -58,6 +80,10 @@ class WebCrawler:
 
                     url = queue.pop(0)
                     if url in self.visited:
+                        continue
+
+                    # Check robots.txt before crawling this URL
+                    if not robot_parser.can_fetch("PlugoBot/1.0", url):
                         continue
 
                     try:

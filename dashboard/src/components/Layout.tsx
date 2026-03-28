@@ -1,6 +1,7 @@
 import { Outlet, Link, useParams, useLocation, useNavigate } from "react-router-dom";
-import { MessageSquare, Database, Wrench, Code, Settings, LayoutDashboard, MessageCircle, LogOut, User, Brain, BarChart3 } from "lucide-react";
+import { MessageSquare, Database, Wrench, Code, Settings, LayoutDashboard, MessageCircle, LogOut, User, Brain, BarChart3, Globe } from "lucide-react";
 import { useStore } from "../lib/store";
+import { useLocale } from "../lib/useLocale";
 
 const sidebarLinks = [
   { to: "analytics", label: "Analytics", icon: BarChart3 },
@@ -18,6 +19,7 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useStore();
+  const { locale, setLocale, t } = useLocale();
 
   const handleLogout = () => {
     logout();
@@ -76,9 +78,17 @@ export default function Layout() {
                 </span>
               </div>
               <button
+                onClick={() => setLocale(locale === "vi" ? "en" : "vi")}
+                className="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded font-medium text-gray-600 shrink-0 flex items-center gap-1"
+                title={t("settings.language")}
+              >
+                <Globe className="w-3 h-3" />
+                {locale === "vi" ? "EN" : "VI"}
+              </button>
+              <button
                 onClick={handleLogout}
                 className="text-gray-400 hover:text-red-500 p-1"
-                title="Logout"
+                title={t("nav.logout")}
               >
                 <LogOut className="w-4 h-4" />
               </button>
