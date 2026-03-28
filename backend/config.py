@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     ollama_base_url: str = _get("ollama", "base_url", "http://localhost:11434")
     ollama_model: str = _get("ollama", "model", "llama3")
 
+    # --- LM Studio (OpenAI-compatible local server) ---
+    lmstudio_base_url: str = "http://localhost:1234/v1"
+
     # --- Embedding (from config.json → embedding) ---
     embedding_provider: str = _get("embedding", "provider", "openai")
     embedding_model: str = _get("embedding", "model", "text-embedding-3-small")

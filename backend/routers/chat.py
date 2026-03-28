@@ -33,6 +33,11 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
         await websocket.close()
         return
 
+    if not site.get("is_approved"):
+        await websocket.send_json({"type": "error", "message": "Site is pending approval. Contact admin."})
+        await websocket.close()
+        return
+
     # Wait for the first message to check for session resumption
     # The client sends {"type": "init", "session_id": "...", "visitor_id": "..."} or just starts chatting
     first_data = await websocket.receive_json()
@@ -200,7 +205,7 @@ async def _handle_message(
             full_response += token
             await websocket.send_json({"type": "token", "content": token})
     except Exception as e:
-        logger.error("Chat stream error", error=str(e), session_id=session_id)
+        logger.error("Chat stream error", error=str(e), error_type=type(e).__name__, session_id=session_id)
         await websocket.send_json({
             "type": "error",
             "message": "An error occurred. Please try again.",

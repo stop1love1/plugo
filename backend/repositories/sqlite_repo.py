@@ -29,6 +29,7 @@ def _site_to_dict(s: Site) -> dict:
         "primary_color": s.primary_color, "greeting": s.greeting,
         "position": s.position, "allowed_domains": s.allowed_domains or "",
         "suggestions": s.suggestions or [],
+        "is_approved": s.is_approved,
         # Crawl management
         "crawl_enabled": s.crawl_enabled,
         "crawl_auto_interval": s.crawl_auto_interval,

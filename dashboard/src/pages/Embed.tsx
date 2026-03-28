@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getSite } from "../lib/api";
-import { Copy, Check, Code, Eye, Sliders } from "lucide-react";
+import { Copy, Check, Code, Eye, Sliders, ShieldCheck, ShieldX, ExternalLink, AlertTriangle } from "lucide-react";
 import { useLocale } from "../lib/useLocale";
 
 export default function Embed() {
@@ -210,6 +210,77 @@ p{text-align:center;font-size:14px;}</style></head>
         </pre>
       </div>
 
+      {/* Approval status */}
+      {site && (
+        <div className={`rounded-xl border p-4 mb-6 flex items-start gap-3 ${
+          site.is_approved
+            ? "bg-green-50 border-green-200"
+            : "bg-amber-50 border-amber-200"
+        }`}>
+          {site.is_approved ? (
+            <>
+              <ShieldCheck className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-medium text-green-800 text-sm">{t("embed.siteApproved")}</p>
+                <p className="text-green-700 text-xs mt-1">{t("embed.siteApprovedDesc")}</p>
+              </div>
+            </>
+          ) : (
+            <>
+              <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-medium text-amber-800 text-sm">{t("embed.sitePending")}</p>
+                <p className="text-amber-700 text-xs mt-1">{t("embed.sitePendingDesc")}</p>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Demo page link */}
+      {site && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6 flex items-center justify-between">
+          <div>
+            <p className="font-medium text-sm">{t("embed.demoPage")}</p>
+            <p className="text-xs text-gray-500 mt-1">{t("embed.demoPageDesc")}</p>
+          </div>
+          <a
+            href={`http://localhost:8000/demo/${site.token}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700 font-medium border border-primary-200 px-3 py-1.5 rounded-lg"
+          >
+            <ExternalLink className="w-4 h-4" />
+            {t("embed.openDemo")}
+          </a>
+        </div>
+      )}
+
+      {/* Auth guide */}
+      <div className="bg-white rounded-xl border border-gray-200 mb-6">
+        <div className="p-4 border-b border-gray-100">
+          <h3 className="font-semibold text-sm">{t("embed.authGuide")}</h3>
+        </div>
+        <div className="p-4 text-sm text-gray-700 space-y-3">
+          <div className="flex gap-3">
+            <span className="bg-primary-100 text-primary-700 font-bold text-xs w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">1</span>
+            <p>{t("embed.authStep1")}</p>
+          </div>
+          <div className="flex gap-3">
+            <span className="bg-primary-100 text-primary-700 font-bold text-xs w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">2</span>
+            <p>{t("embed.authStep2")}</p>
+          </div>
+          <div className="flex gap-3">
+            <span className="bg-primary-100 text-primary-700 font-bold text-xs w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">3</span>
+            <p>{t("embed.authStep3")}</p>
+          </div>
+          <div className="flex gap-3">
+            <span className="bg-primary-100 text-primary-700 font-bold text-xs w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">4</span>
+            <p>{t("embed.authStep4")}</p>
+          </div>
+        </div>
+      </div>
+
       {/* Config options */}
       <div className="bg-white p-6 rounded-xl border border-gray-200">
         <h3 className="font-semibold mb-4">{t("embed.configOptions")}</h3>
@@ -223,13 +294,13 @@ p{text-align:center;font-size:14px;}</style></head>
           </thead>
           <tbody className="text-gray-700">
             {[
-              ["token", "string", "Site authentication token (required)"],
-              ["serverUrl", "string", "Backend server URL"],
-              ["primaryColor", "string", "Primary theme color (hex)"],
-              ["greeting", "string", "Welcome message when chat opens"],
-              ["position", "string", '"bottom-right" or "bottom-left"'],
-              ["darkMode", "boolean", "Enable dark theme"],
-              ["language", "string", "UI language (vi, en, ja, ko, zh, fr, de, es, th)"],
+              ["token", "string", t("embed.optToken")],
+              ["serverUrl", "string", t("embed.optServerUrl")],
+              ["primaryColor", "string", t("embed.optColor")],
+              ["greeting", "string", t("embed.optGreeting")],
+              ["position", "string", t("embed.optPosition")],
+              ["darkMode", "boolean", t("embed.optDarkMode")],
+              ["language", "string", t("embed.optLanguage")],
             ].map(([opt, type, desc], i) => (
               <tr key={i} className="border-b border-gray-50 last:border-0">
                 <td className="py-2 font-mono text-xs">{opt}</td>

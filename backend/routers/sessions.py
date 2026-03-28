@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from typing import Optional
 from repositories import get_repos, Repositories
+from auth import get_current_user, TokenData
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -12,12 +13,17 @@ async def list_sessions(
     page: int = 1,
     per_page: int = 20,
     repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
 ):
     return await repos.chat_sessions.list_by_site(site_id, page, per_page)
 
 
 @router.get("/{session_id}")
-async def get_session(session_id: str, repos: Repositories = Depends(get_repos)):
+async def get_session(
+    session_id: str,
+    repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
+):
     session = await repos.chat_sessions.get_by_id(session_id)
     if not session:
         return {"error": "Session not found"}
@@ -34,6 +40,7 @@ async def submit_feedback(
     session_id: str,
     data: FeedbackRequest,
     repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
 ):
     session = await repos.chat_sessions.get_by_id(session_id)
     if not session:

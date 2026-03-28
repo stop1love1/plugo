@@ -1,5 +1,7 @@
 import { Outlet, Link, useParams, useLocation, useNavigate } from "react-router-dom";
-import { MessageSquare, Database, Wrench, Code, Settings, LayoutDashboard, MessageCircle, LogOut, User, Brain, BarChart3, Globe, Users, FileText, Keyboard, Menu, X } from "lucide-react";
+import { MessageSquare, Database, Wrench, Code, Settings, LayoutDashboard, MessageCircle, LogOut, User, Brain, BarChart3, Globe, Users, FileText, Keyboard, Menu, X, Play, ExternalLink } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { getSite } from "../lib/api";
 import { useStore } from "../lib/store";
 import { useLocale } from "../lib/useLocale";
 import { NotificationBell } from "./NotificationBell";
@@ -12,6 +14,7 @@ const sidebarLinks = [
   { to: "knowledge", label: "nav.knowledge", icon: Database, num: "3" },
   { to: "tools", label: "nav.tools", icon: Wrench, num: "4" },
   { to: "embed", label: "nav.embed", icon: Code, num: "5" },
+  { to: "playground", label: "nav.playground", icon: Play, num: "9" },
   { to: "chat-log", label: "nav.chatLog", icon: MessageCircle, num: "6" },
   { to: "visitors", label: "nav.visitors", icon: Brain, num: "7" },
   { to: "settings", label: "nav.settings", icon: Settings, num: "8" },
@@ -32,6 +35,12 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useKeyboardShortcuts();
+
+  const { data: currentSite } = useQuery({
+    queryKey: ["site", siteId],
+    queryFn: () => getSite(siteId!),
+    enabled: !!siteId,
+  });
 
   const handleLogout = () => {
     logout();
@@ -107,6 +116,27 @@ export default function Layout() {
                 </Link>
               );
             })}
+
+            {/* Demo page link */}
+            {currentSite?.token && (
+              <a
+                href={`http://localhost:8000/demo/${currentSite.token}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={handleNavClick}
+                className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-orange-600 hover:bg-orange-50 transition-colors"
+              >
+                <ExternalLink className="w-4 h-4" />
+                <span className="flex-1">{navT("nav.demo")}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                  currentSite.is_approved
+                    ? "bg-green-100 text-green-700"
+                    : "bg-amber-100 text-amber-700"
+                }`}>
+                  {currentSite.is_approved ? navT("sites.statusApproved") : navT("sites.statusPending")}
+                </span>
+              </a>
+            )}
 
             <div className="border-t border-gray-100 my-2 pt-2">
               {globalLinks.map(({ to, label, icon: Icon }) => {

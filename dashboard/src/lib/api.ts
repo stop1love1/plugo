@@ -59,6 +59,8 @@ export const getSite = (id: string) => api.get(`/sites/${id}`).then((r) => r.dat
 export const createSite = (data: any) => api.post("/sites", data).then((r) => r.data);
 export const updateSite = (id: string, data: any) => api.put(`/sites/${id}`, data).then((r) => r.data);
 export const deleteSite = (id: string) => api.delete(`/sites/${id}`).then((r) => r.data);
+export const updateSiteApproval = (siteId: string, isApproved: boolean) =>
+  api.put(`/sites/${siteId}/approval`, { is_approved: isApproved }).then((r) => r.data);
 export const getProviders = () => api.get("/sites/providers/list").then((r) => r.data);
 
 // Crawl
@@ -105,6 +107,13 @@ export const createUser = (data: { username: string; password: string; role: str
 export const updateUserRole = (id: string, role: string) =>
   api.put(`/users/${id}/role`, { role }).then((r) => r.data);
 export const deleteUser = (id: string) => api.delete(`/users/${id}`).then((r) => r.data);
+
+// LLM Keys
+export const getLLMKeys = () => api.get("/llm-keys").then((r) => r.data);
+export const saveLLMKey = (data: { provider: string; api_key: string; label?: string }) =>
+  api.post("/llm-keys", data).then((r) => r.data);
+export const deleteLLMKey = (provider: string) =>
+  api.delete(`/llm-keys/${provider}`).then((r) => r.data);
 
 // Audit
 export const getAuditLogs = (page = 1) =>

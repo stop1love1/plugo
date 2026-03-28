@@ -27,6 +27,9 @@ class Site(Base):
     # Domain whitelist (comma-separated)
     allowed_domains = Column(Text, default="")
 
+    # --- Site approval ---
+    is_approved = Column(Boolean, default=False)  # Admin must approve before widget works
+
     # --- Crawl management ---
     crawl_enabled = Column(Boolean, default=False)           # Admin toggle: enable/disable crawl
     crawl_auto_interval = Column(Integer, default=0)         # Auto re-crawl interval (hours). 0 = disabled

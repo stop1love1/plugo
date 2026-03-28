@@ -13,6 +13,7 @@ import Settings from "./pages/Settings";
 import Analytics from "./pages/Analytics";
 import UsersPage from "./pages/Users";
 import AuditLog from "./pages/AuditLog";
+import Playground from "./pages/Playground";
 
 export default function App() {
   return (
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="knowledge" element={<Knowledge />} />
           <Route path="tools" element={<Tools />} />
           <Route path="embed" element={<Embed />} />
+          <Route path="playground" element={<Playground />} />
           <Route path="chat-log" element={<ChatLog />} />
           <Route path="visitors" element={<Visitors />} />
           <Route path="settings" element={<Settings />} />

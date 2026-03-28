@@ -442,12 +442,8 @@ function getWidgetStyles(primaryColor: string): string {
       gap: 6px;
     }
 
-    /* Window needs position:relative for new-msg-btn */
-    .plugo-window { position: relative; }
-
     /* Accessibility */
     .plugo-messages { -webkit-overflow-scrolling: touch; }
-    .plugo-bubble { position: relative; }
   `;
 }
 

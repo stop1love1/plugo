@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api/sites", tags=["sites"])
 class SiteCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     url: str = Field(min_length=1, max_length=2048)
-    llm_provider: str = Field(default="claude", pattern="^(claude|openai|gemini|ollama)$")
+    llm_provider: str = Field(default="claude", pattern="^(claude|openai|gemini|ollama|lmstudio)$")
     llm_model: str = "claude-sonnet-4-20250514"
     primary_color: str = Field(default="#6366f1", pattern="^#[0-9a-fA-F]{6}$")
     greeting: str = "Hello! How can I help you?"
@@ -26,6 +26,10 @@ class SiteUpdate(BaseModel):
     greeting: Optional[str] = None
     position: Optional[str] = None
     allowed_domains: Optional[str] = None
+
+
+class ApprovalUpdate(BaseModel):
+    is_approved: bool
 
 
 @router.post("")
@@ -50,6 +54,25 @@ async def list_sites(
 async def list_providers():
     return get_all_providers()
 
+
+# --- Approval (must be before /{site_id} to avoid route conflict) ---
+
+@router.put("/{site_id}/approval")
+async def update_site_approval(
+    site_id: str,
+    data: ApprovalUpdate,
+    repos: Repositories = Depends(get_repos),
+    user: TokenData = Depends(get_current_user),
+):
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    site = await repos.sites.update(site_id, {"is_approved": data.is_approved})
+    if not site:
+        raise HTTPException(status_code=404, detail="Site not found")
+    return {"message": "Approval updated", "is_approved": site["is_approved"]}
+
+
+# --- CRUD (generic /{site_id} routes last) ---
 
 @router.get("/{site_id}")
 async def get_site(site_id: str, repos: Repositories = Depends(get_repos)):

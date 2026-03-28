@@ -71,7 +71,7 @@ async def delete_user(
 ):
     if user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin only")
-    if user.user_id == user_id:
+    if user.sub == user_id:
         raise HTTPException(status_code=400, detail="Cannot delete yourself")
     ok = await repos.users.delete(user_id)
     if not ok:

@@ -1,6 +1,26 @@
 from providers.base import BaseLLMProvider
 from config import settings
 
+# In-memory cache for DB keys (refreshed on each provider creation)
+_key_cache: dict[str, str] = {}
+
+
+async def _load_db_key(provider: str) -> str | None:
+    """Load API key from DB, cache it."""
+    try:
+        from routers.llm_keys import get_key_for_provider
+        key = await get_key_for_provider(provider)
+        if key:
+            _key_cache[provider] = key
+        return key
+    except Exception:
+        return _key_cache.get(provider)
+
+
+def _get_key(provider: str, env_key: str | None) -> str | None:
+    """Get key: DB cache first, then .env fallback."""
+    return _key_cache.get(provider) or env_key
+
 
 def get_llm_provider(
     provider: str | None = None,
@@ -12,22 +32,37 @@ def get_llm_provider(
 
     if provider == "claude":
         from providers.claude_provider import ClaudeProvider
-        return ClaudeProvider(api_key=settings.anthropic_api_key, model=model)
+        return ClaudeProvider(api_key=_get_key("claude", settings.anthropic_api_key), model=model)
 
     elif provider == "openai":
         from providers.openai_provider import OpenAIProvider
-        return OpenAIProvider(api_key=settings.openai_api_key, model=model)
+        return OpenAIProvider(api_key=_get_key("openai", settings.openai_api_key), model=model)
 
     elif provider == "gemini":
         from providers.gemini_provider import GeminiProvider
-        return GeminiProvider(api_key=settings.gemini_api_key, model=model)
+        return GeminiProvider(api_key=_get_key("gemini", settings.gemini_api_key), model=model)
 
     elif provider == "ollama":
         from providers.ollama_provider import OllamaProvider
         return OllamaProvider(base_url=settings.ollama_base_url, model=model)
 
+    elif provider == "lmstudio":
+        from providers.openai_provider import OpenAIProvider
+        p = OpenAIProvider(api_key="lm-studio", model=model)
+        p.client = __import__("openai").AsyncOpenAI(
+            api_key="lm-studio",
+            base_url=settings.lmstudio_base_url,
+        )
+        return p
+
     else:
         raise ValueError(f"Unknown LLM provider: {provider}")
+
+
+async def refresh_key_cache():
+    """Refresh all keys from DB into cache. Called after key save."""
+    for p in ["claude", "openai", "gemini"]:
+        await _load_db_key(p)
 
 
 def get_all_providers() -> list[dict]:
@@ -43,23 +78,36 @@ def get_all_providers() -> list[dict]:
             "name": "Claude (Anthropic)",
             "models": ClaudeProvider.available_models(),
             "requires_key": True,
+            "has_key": bool(_get_key("claude", settings.anthropic_api_key)),
         },
         {
             "id": "openai",
             "name": "OpenAI",
             "models": OpenAIProvider.available_models(),
             "requires_key": True,
+            "has_key": bool(_get_key("openai", settings.openai_api_key)),
         },
         {
             "id": "gemini",
             "name": "Gemini (Google)",
             "models": GeminiProvider.available_models(),
             "requires_key": True,
+            "has_key": bool(_get_key("gemini", settings.gemini_api_key)),
         },
         {
             "id": "ollama",
             "name": "Ollama (Local)",
             "models": OllamaProvider.available_models(),
             "requires_key": False,
+            "has_key": True,
+        },
+        {
+            "id": "lmstudio",
+            "name": "LM Studio (Local)",
+            "models": [
+                {"id": "qwen/qwen3.5-9b", "name": "Qwen 3.5 9B", "description": "Local model via LM Studio"},
+            ],
+            "requires_key": False,
+            "has_key": True,
         },
     ]
