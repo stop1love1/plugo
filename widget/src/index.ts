@@ -328,33 +328,37 @@ function getWidgetStyles(primaryColor: string): string {
     .plugo-dark .plugo-suggestion-btn:hover { background: #3d3d5c; }
 
     /* Feedback buttons */
+    .plugo-msg-wrapper {
+      display: flex;
+      flex-direction: column;
+    }
     .plugo-msg-wrapper.bot {
       align-self: flex-start;
       max-width: 85%;
     }
     .plugo-feedback {
       display: flex;
-      gap: 2px;
+      gap: 4px;
       margin-top: 4px;
-      opacity: 0;
-      transition: opacity 0.2s;
+      padding-left: 2px;
     }
-    .plugo-msg-wrapper:hover .plugo-feedback { opacity: 1; }
     .plugo-feedback-btn {
-      background: none;
-      border: 1px solid transparent;
-      border-radius: 4px;
+      background: #f5f5f5;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
       cursor: pointer;
-      font-size: 12px;
-      padding: 2px 4px;
-      opacity: 0.5;
-      transition: opacity 0.2s, border-color 0.2s;
+      font-size: 14px;
+      padding: 3px 8px;
+      line-height: 1;
+      transition: background 0.2s, border-color 0.2s;
     }
-    .plugo-feedback-btn:hover { opacity: 1; }
+    .plugo-feedback-btn:hover {
+      background: #e8e8e8;
+      border-color: #ccc;
+    }
     .plugo-feedback-btn.active {
-      opacity: 1;
+      background: ${primaryColor}15;
       border-color: ${primaryColor};
-      background: ${primaryColor}11;
     }
 
     /* File attach button */
@@ -363,14 +367,19 @@ function getWidgetStyles(primaryColor: string): string {
       border: 1px solid #ddd;
       border-radius: 8px;
       cursor: pointer;
-      font-size: 16px;
-      padding: 8px;
+      font-size: 18px;
+      padding: 6px 10px;
+      line-height: 1;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: border-color 0.2s;
+      flex-shrink: 0;
+      transition: border-color 0.2s, background 0.2s;
     }
-    .plugo-attach-btn:hover { border-color: ${primaryColor}; }
+    .plugo-attach-btn:hover {
+      border-color: ${primaryColor};
+      background: #f9f9f9;
+    }
 
     /* Accessibility */
     .plugo-messages { -webkit-overflow-scrolling: touch; }

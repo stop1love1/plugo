@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
@@ -10,6 +10,7 @@ import {
 import api from "../lib/api";
 import { useLocale } from "../lib/useLocale";
 import { OnboardingChecklist } from "../components/OnboardingChecklist";
+import { pushNotification } from "../components/NotificationBell";
 
 const toggleCrawl = (siteId: string, data: any) =>
   api.put(`/crawl/toggle/${siteId}`, data).then((r) => r.data);
@@ -44,6 +45,28 @@ export default function Setup() {
     enabled: !!siteId,
     refetchInterval: (query) => query.state.data?.crawl_status === "running" ? 2000 : false,
   });
+
+  // Detect crawl completion/failure and push notification
+  const prevCrawlStatus = useRef<string | null>(null);
+  useEffect(() => {
+    const current = crawlStatus?.crawl_status;
+    const prev = prevCrawlStatus.current;
+    if (prev === "running" && current && current !== "running") {
+      if (current === "completed" || current === "idle") {
+        pushNotification({
+          type: "success",
+          title: t("notifications.crawlComplete"),
+          message: `${crawlStatus?.knowledge_count ?? 0} chunks learned`,
+        });
+      } else if (current === "failed") {
+        pushNotification({
+          type: "error",
+          title: t("notifications.crawlFailed"),
+        });
+      }
+    }
+    prevCrawlStatus.current = current ?? null;
+  }, [crawlStatus?.crawl_status]);
 
   const { data: jobs = [], refetch: refetchJobs } = useQuery({
     queryKey: ["crawl-jobs", siteId],

@@ -12,6 +12,10 @@ const getMessagesPerDay = (siteId: string, days = 30) =>
   api.get(`/analytics/messages-per-day?site_id=${siteId}&days=${days}`).then((r) => r.data);
 const getPopularQuestions = (siteId: string) =>
   api.get(`/analytics/popular-questions?site_id=${siteId}&limit=10`).then((r) => r.data);
+const getKnowledgeGaps = (siteId: string) =>
+  api.get(`/analytics/knowledge-gaps?site_id=${siteId}&limit=10`).then((r) => r.data);
+const getToolUsage = (siteId: string, days = 30) =>
+  api.get(`/analytics/tool-usage?site_id=${siteId}&days=${days}`).then((r) => r.data);
 
 function StatCard({ icon: Icon, label, value, color }: { icon: any; label: string; value: string | number; color: string }) {
   return (
@@ -57,6 +61,18 @@ export default function Analytics() {
   const { data: questions = [] } = useQuery({
     queryKey: ["analytics-questions", siteId],
     queryFn: () => getPopularQuestions(siteId!),
+    enabled: !!siteId,
+  });
+
+  const { data: knowledgeGaps = [] } = useQuery({
+    queryKey: ["analytics-gaps", siteId],
+    queryFn: () => getKnowledgeGaps(siteId!),
+    enabled: !!siteId,
+  });
+
+  const { data: toolUsage = [] } = useQuery({
+    queryKey: ["analytics-tool-usage", siteId, days],
+    queryFn: () => getToolUsage(siteId!, days),
     enabled: !!siteId,
   });
 
@@ -192,15 +208,64 @@ export default function Analytics() {
           )}
         </div>
 
-        {/* Knowledge gaps — questions that couldn't be answered */}
+        {/* Knowledge gaps — questions the bot couldn't answer */}
         <div className="bg-white p-6 rounded-xl border border-gray-200">
           <h3 className="font-semibold mb-4">{t("analytics.knowledgeGaps")}</h3>
-          <p className="text-sm text-gray-400">{t("analytics.noData")}</p>
-          <p className="text-xs text-gray-300 mt-2">
-            Coming soon — tracks questions where the bot had no relevant knowledge to answer.
-          </p>
+          {knowledgeGaps.length === 0 ? (
+            <p className="text-sm text-gray-400">{t("analytics.noData")}</p>
+          ) : (
+            <div className="space-y-2">
+              {knowledgeGaps.map((q: any, i: number) => (
+                <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                  <p className="text-sm text-gray-700 truncate flex-1">{q.question}</p>
+                  <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full ml-2 shrink-0">
+                    {q.count}x
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Tool usage stats */}
+      {toolUsage.length > 0 && (
+        <div className="bg-white p-6 rounded-xl border border-gray-200 mt-6">
+          <h3 className="font-semibold mb-4">{t("analytics.toolUsage")}</h3>
+          <div className="overflow-hidden rounded-lg border border-gray-100">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500 bg-gray-50">
+                  <th className="px-4 py-2">Tool</th>
+                  <th className="px-4 py-2 text-right">Calls</th>
+                  <th className="px-4 py-2 text-right">Errors</th>
+                  <th className="px-4 py-2 text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {toolUsage.map((tool: any, i: number) => (
+                  <tr key={i} className="border-t border-gray-50">
+                    <td className="px-4 py-2 font-medium text-gray-700">{tool.name}</td>
+                    <td className="px-4 py-2 text-right text-gray-600">{tool.calls}</td>
+                    <td className="px-4 py-2 text-right">
+                      {tool.errors > 0 ? (
+                        <span className="text-red-600">{tool.errors}</span>
+                      ) : (
+                        <span className="text-gray-400">0</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${tool.enabled ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                        {tool.enabled ? "Active" : "Disabled"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
