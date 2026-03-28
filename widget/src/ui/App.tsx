@@ -198,7 +198,7 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
       if (!sid) return;
       const baseUrl = serverUrl || `${window.location.protocol}//${window.location.host}`;
       const httpUrl = baseUrl.replace(/^ws/, "http");
-      fetch(`${httpUrl}/api/sessions/${sid}/feedback`, {
+      fetch(`${httpUrl}/api/sessions/${sid}/feedback?site_token=${encodeURIComponent(token)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message_index: messageIndex, rating }),
