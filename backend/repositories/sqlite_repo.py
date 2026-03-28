@@ -10,6 +10,7 @@ from repositories.base import (
     BaseSiteRepo, BaseKnowledgeRepo, BaseToolRepo,
     BaseChatSessionRepo, BaseCrawlJobRepo, BaseUserRepo,
     BaseVisitorMemoryRepo, BaseConversationSummaryRepo,
+    BaseAuditLogRepo,
 )
 from models.site import Site
 from models.knowledge import KnowledgeChunk
@@ -18,6 +19,7 @@ from models.chat import ChatSession
 from models.crawl import CrawlJob
 from models.user import User
 from models.memory import VisitorMemory, ConversationSummary
+from models.audit_log import AuditLog
 
 
 def _site_to_dict(s: Site) -> dict:
@@ -184,6 +186,16 @@ class SQLiteKnowledgeRepo(BaseKnowledgeRepo):
         )
         total = count_result.scalar()
         return {"chunks": chunks, "total": total, "page": page, "per_page": per_page}
+
+    async def update(self, chunk_id: str, data: dict) -> Optional[dict]:
+        chunk = await self.db.get(KnowledgeChunk, chunk_id)
+        if not chunk:
+            return None
+        for key, value in data.items():
+            if hasattr(chunk, key):
+                setattr(chunk, key, value)
+        await self.db.commit()
+        return _chunk_to_dict(chunk)
 
     async def delete(self, chunk_id: str) -> bool:
         chunk = await self.db.get(KnowledgeChunk, chunk_id)
@@ -357,6 +369,26 @@ class SQLiteUserRepo(BaseUserRepo):
         result = await self.db.execute(select(func.count()).select_from(User))
         return result.scalar() or 0
 
+    async def list_all(self) -> list[dict]:
+        result = await self.db.execute(select(User).order_by(User.created_at.desc()))
+        return [{"id": u.id, "username": u.username, "role": u.role, "created_at": str(u.created_at)} for u in result.scalars().all()]
+
+    async def update_role(self, user_id: str, role: str) -> Optional[dict]:
+        user = await self.db.get(User, user_id)
+        if not user:
+            return None
+        user.role = role
+        await self.db.commit()
+        return {"id": user.id, "username": user.username, "role": user.role, "created_at": str(user.created_at)}
+
+    async def delete(self, user_id: str) -> bool:
+        user = await self.db.get(User, user_id)
+        if not user:
+            return False
+        await self.db.delete(user)
+        await self.db.commit()
+        return True
+
 
 # --- Visitor Memory ---
 class SQLiteVisitorMemoryRepo(BaseVisitorMemoryRepo):
@@ -476,3 +508,25 @@ class SQLiteConversationSummaryRepo(BaseConversationSummaryRepo):
             await self.db.commit()
             return True
         return False
+
+
+# --- Audit Log ---
+class SQLiteAuditLogRepo(BaseAuditLogRepo):
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def create(self, data: dict) -> dict:
+        log = AuditLog(**data)
+        self.db.add(log)
+        await self.db.commit()
+        return {"id": log.id, "user_id": log.user_id, "username": log.username, "action": log.action, "resource_type": log.resource_type, "resource_id": log.resource_id, "details": log.details, "created_at": str(log.created_at)}
+
+    async def list_by_site(self, page: int = 1, per_page: int = 50) -> dict:
+        offset = (page - 1) * per_page
+        result = await self.db.execute(
+            select(AuditLog).order_by(AuditLog.created_at.desc()).offset(offset).limit(per_page)
+        )
+        logs = [{"id": l.id, "user_id": l.user_id, "username": l.username, "action": l.action, "resource_type": l.resource_type, "resource_id": l.resource_id, "details": l.details, "created_at": str(l.created_at)} for l in result.scalars().all()]
+        count_result = await self.db.execute(select(func.count()).select_from(AuditLog))
+        total = count_result.scalar()
+        return {"logs": logs, "total": total, "page": page, "per_page": per_page}

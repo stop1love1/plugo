@@ -1,12 +1,26 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getSessions, getSession } from "../lib/api";
-import { MessageCircle, User, Bot } from "lucide-react";
+import { MessageCircle, User, Bot, Search, Globe, Clock } from "lucide-react";
+import { useLocale } from "../lib/useLocale";
+
+function formatDuration(startedAt: string, endedAt?: string | null): string {
+  if (!startedAt) return "";
+  const start = new Date(startedAt).getTime();
+  const end = endedAt ? new Date(endedAt).getTime() : Date.now();
+  const diffMs = end - start;
+  const mins = Math.floor(diffMs / 60000);
+  const secs = Math.floor((diffMs % 60000) / 1000);
+  if (mins > 0) return `${mins}m ${secs}s`;
+  return `${secs}s`;
+}
 
 export default function ChatLog() {
   const { siteId } = useParams<{ siteId: string }>();
+  const { t } = useLocale();
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { data: sessions = [], isLoading } = useQuery({
     queryKey: ["sessions", siteId],
@@ -20,24 +34,47 @@ export default function ChatLog() {
     enabled: !!selectedSession,
   });
 
+  // Filter sessions by search query (matches message content)
+  const filteredSessions = useMemo(() => {
+    if (!searchQuery.trim()) return sessions;
+    const q = searchQuery.toLowerCase();
+    return sessions.filter((s: any) => {
+      if (s.visitor_id?.toLowerCase().includes(q)) return true;
+      if (s.page_url?.toLowerCase().includes(q)) return true;
+      if (s.first_message?.toLowerCase().includes(q)) return true;
+      return false;
+    });
+  }, [sessions, searchQuery]);
+
   return (
     <div className="max-w-5xl">
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Chat Log</h1>
-      <p className="text-gray-500 mb-8">View chat history from website visitors</p>
+      <h1 className="text-2xl font-bold text-gray-900 mb-2">{t("chatLog.title")}</h1>
+      <p className="text-gray-500 mb-6">{t("chatLog.subtitle")}</p>
+
+      {/* Search */}
+      <div className="relative mb-6">
+        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder={t("chatLog.searchMessages")}
+          className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
+        />
+      </div>
 
       <div className="flex gap-6">
         {/* Session list */}
         <div className="w-80 flex-shrink-0">
           {isLoading ? (
-            <div className="text-gray-400">Loading...</div>
-          ) : sessions.length === 0 ? (
+            <div className="text-gray-400">{t("common.loading")}</div>
+          ) : filteredSessions.length === 0 ? (
             <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
               <MessageCircle className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-              <p className="text-sm text-gray-500">No chat sessions yet</p>
+              <p className="text-sm text-gray-500">{searchQuery ? t("common.noResults") : t("chatLog.noSessions")}</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {sessions.map((s: any) => (
+            <div className="space-y-2 max-h-[600px] overflow-y-auto">
+              {filteredSessions.map((s: any) => (
                 <button
                   key={s.id}
                   onClick={() => setSelectedSession(s.id)}
@@ -47,9 +84,34 @@ export default function ChatLog() {
                       : "border-gray-200 bg-white hover:border-gray-300"
                   }`}
                 >
-                  <div className="text-sm font-medium text-gray-900">
-                    {s.message_count} messages
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-900">
+                      {s.message_count} {t("chatLog.messages")}
+                    </span>
+                    {s.started_at && s.ended_at && (
+                      <span className="text-xs text-gray-400 flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {formatDuration(s.started_at, s.ended_at)}
+                      </span>
+                    )}
                   </div>
+
+                  {/* Visitor ID */}
+                  {s.visitor_id && (
+                    <div className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                      <User className="w-3 h-3" />
+                      <span className="truncate max-w-[200px]">{s.visitor_id}</span>
+                    </div>
+                  )}
+
+                  {/* Page URL */}
+                  {s.page_url && (
+                    <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+                      <Globe className="w-3 h-3" />
+                      <span className="truncate max-w-[200px]">{s.page_url}</span>
+                    </div>
+                  )}
+
                   <div className="text-xs text-gray-400 mt-1">
                     {s.started_at ? new Date(s.started_at).toLocaleString() : ""}
                   </div>
@@ -62,28 +124,59 @@ export default function ChatLog() {
         {/* Message detail */}
         <div className="flex-1">
           {selectedSession && sessionDetail?.messages ? (
-            <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4 max-h-[600px] overflow-y-auto">
-              {sessionDetail.messages.map((msg: any, i: number) => (
-                <div key={i} className={`flex gap-3 ${msg.role === "user" ? "" : ""}`}>
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    msg.role === "user" ? "bg-blue-100" : "bg-purple-100"
-                  }`}>
-                    {msg.role === "user"
-                      ? <User className="w-3.5 h-3.5 text-blue-600" />
-                      : <Bot className="w-3.5 h-3.5 text-purple-600" />}
-                  </div>
-                  <div className="flex-1">
-                    <span className="text-xs font-medium text-gray-500">
-                      {msg.role === "user" ? "Visitor" : "Bot"}
-                    </span>
-                    <p className="text-sm text-gray-800 mt-0.5 whitespace-pre-wrap">{msg.content}</p>
-                  </div>
+            <div>
+              {/* Session metadata */}
+              {(sessionDetail.visitor_id || sessionDetail.page_url) && (
+                <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 mb-3 text-xs text-gray-500 space-y-1">
+                  {sessionDetail.visitor_id && (
+                    <div className="flex items-center gap-2">
+                      <User className="w-3 h-3" />
+                      <span className="font-medium">{t("chatLog.visitor")}:</span>
+                      <span className="font-mono">{sessionDetail.visitor_id}</span>
+                    </div>
+                  )}
+                  {sessionDetail.page_url && (
+                    <div className="flex items-center gap-2">
+                      <Globe className="w-3 h-3" />
+                      <span className="font-medium">{t("chatLog.page")}:</span>
+                      <a href={sessionDetail.page_url} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline truncate">
+                        {sessionDetail.page_url}
+                      </a>
+                    </div>
+                  )}
+                  {sessionDetail.started_at && (
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-3 h-3" />
+                      <span className="font-medium">{t("chatLog.duration")}:</span>
+                      <span>{formatDuration(sessionDetail.started_at, sessionDetail.ended_at)}</span>
+                    </div>
+                  )}
                 </div>
-              ))}
+              )}
+
+              <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4 max-h-[600px] overflow-y-auto">
+                {sessionDetail.messages.map((msg: any, i: number) => (
+                  <div key={i} className="flex gap-3">
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
+                      msg.role === "user" ? "bg-blue-100" : "bg-purple-100"
+                    }`}>
+                      {msg.role === "user"
+                        ? <User className="w-3.5 h-3.5 text-blue-600" />
+                        : <Bot className="w-3.5 h-3.5 text-purple-600" />}
+                    </div>
+                    <div className="flex-1">
+                      <span className="text-xs font-medium text-gray-500">
+                        {msg.role === "user" ? t("chatLog.visitor") : t("chatLog.bot")}
+                      </span>
+                      <p className="text-sm text-gray-800 mt-0.5 whitespace-pre-wrap">{msg.content}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : (
             <div className="text-center py-20 text-gray-400 text-sm">
-              Select a session to view details
+              {t("chatLog.selectSession")}
             </div>
           )}
         </div>

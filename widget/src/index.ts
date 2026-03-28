@@ -327,6 +327,51 @@ function getWidgetStyles(primaryColor: string): string {
     }
     .plugo-dark .plugo-suggestion-btn:hover { background: #3d3d5c; }
 
+    /* Feedback buttons */
+    .plugo-msg-wrapper.bot {
+      align-self: flex-start;
+      max-width: 85%;
+    }
+    .plugo-feedback {
+      display: flex;
+      gap: 2px;
+      margin-top: 4px;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .plugo-msg-wrapper:hover .plugo-feedback { opacity: 1; }
+    .plugo-feedback-btn {
+      background: none;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 2px 4px;
+      opacity: 0.5;
+      transition: opacity 0.2s, border-color 0.2s;
+    }
+    .plugo-feedback-btn:hover { opacity: 1; }
+    .plugo-feedback-btn.active {
+      opacity: 1;
+      border-color: ${primaryColor};
+      background: ${primaryColor}11;
+    }
+
+    /* File attach button */
+    .plugo-attach-btn {
+      background: none;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color 0.2s;
+    }
+    .plugo-attach-btn:hover { border-color: ${primaryColor}; }
+
     /* Accessibility */
     .plugo-messages { -webkit-overflow-scrolling: touch; }
     .plugo-bubble { position: relative; }

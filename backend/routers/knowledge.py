@@ -61,6 +61,45 @@ async def delete_chunk(
     return {"message": "Chunk deleted"}
 
 
+class ChunkUpdate(BaseModel):
+    title: Optional[str] = Field(None, min_length=1, max_length=500)
+    content: Optional[str] = Field(None, min_length=1, max_length=50000)
+
+
+@router.put("/{chunk_id}")
+async def update_chunk(
+    chunk_id: str,
+    data: ChunkUpdate,
+    repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
+):
+    chunk = await repos.knowledge.get_by_id(chunk_id)
+    if not chunk:
+        raise HTTPException(status_code=404, detail="Chunk not found")
+
+    update_data = data.model_dump(exclude_none=True)
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    updated = await repos.knowledge.update(chunk_id, update_data)
+
+    # Re-embed if content changed
+    if "content" in update_data:
+        try:
+            embed_provider = get_llm_provider(settings.embedding_provider, settings.embedding_model)
+            embeddings = await embed_provider.embed([updated["content"]])
+            await rag_engine.delete_chunks(chunk["site_id"], [chunk.get("embedding_id") or chunk["id"]])
+            await rag_engine.add_chunks(
+                chunk["site_id"],
+                [{"id": chunk_id, "content": updated["content"], "source_url": chunk.get("source_url", ""), "title": updated.get("title", chunk.get("title", "")), "chunk_index": 0}],
+                embeddings,
+            )
+        except Exception as e:
+            logger.warning("Failed to re-embed updated chunk", error=str(e), chunk_id=chunk_id)
+
+    return {"message": "Chunk updated", "chunk": updated}
+
+
 class BulkDeleteRequest(BaseModel):
     chunk_ids: list[str] = Field(min_length=1, max_length=100)
 

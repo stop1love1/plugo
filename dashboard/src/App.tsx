@@ -11,6 +11,8 @@ import ChatLog from "./pages/ChatLog";
 import Visitors from "./pages/Visitors";
 import Settings from "./pages/Settings";
 import Analytics from "./pages/Analytics";
+import UsersPage from "./pages/Users";
+import AuditLog from "./pages/AuditLog";
 
 export default function App() {
   return (
@@ -25,6 +27,8 @@ export default function App() {
         }
       >
         <Route index element={<Sites />} />
+        <Route path="users" element={<UsersPage />} />
+        <Route path="audit" element={<AuditLog />} />
         <Route path="site/:siteId">
           <Route path="analytics" element={<Analytics />} />
           <Route path="setup" element={<Setup />} />

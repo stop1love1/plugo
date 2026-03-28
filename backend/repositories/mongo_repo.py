@@ -9,6 +9,7 @@ from repositories.base import (
     BaseSiteRepo, BaseKnowledgeRepo, BaseToolRepo,
     BaseChatSessionRepo, BaseCrawlJobRepo, BaseUserRepo,
     BaseVisitorMemoryRepo, BaseConversationSummaryRepo,
+    BaseAuditLogRepo,
 )
 
 
@@ -111,6 +112,14 @@ class MongoKnowledgeRepo(BaseKnowledgeRepo):
         chunks = [_clean_doc(doc) async for doc in cursor]
         total = await self.col.count_documents({"site_id": site_id})
         return {"chunks": chunks, "total": total, "page": page, "per_page": per_page}
+
+    async def update(self, chunk_id: str, data: dict) -> Optional[dict]:
+        result = await self.col.find_one_and_update(
+            {"_id": chunk_id},
+            {"$set": data},
+            return_document=True,
+        )
+        return _clean_doc(result) if result else None
 
     async def delete(self, chunk_id: str) -> bool:
         result = await self.col.delete_one({"_id": chunk_id})
@@ -292,6 +301,25 @@ class MongoUserRepo(BaseUserRepo):
     async def count(self) -> int:
         return await self.col.count_documents({})
 
+    async def list_all(self) -> list[dict]:
+        cursor = self.col.find().sort("created_at", -1)
+        users = []
+        async for doc in cursor:
+            users.append({"id": doc["_id"], "username": doc["username"], "role": doc.get("role", "admin"), "created_at": str(doc.get("created_at", ""))})
+        return users
+
+    async def update_role(self, user_id: str, role: str) -> Optional[dict]:
+        result = await self.col.find_one_and_update(
+            {"_id": user_id}, {"$set": {"role": role}}, return_document=True
+        )
+        if not result:
+            return None
+        return {"id": result["_id"], "username": result["username"], "role": result.get("role", "admin"), "created_at": str(result.get("created_at", ""))}
+
+    async def delete(self, user_id: str) -> bool:
+        result = await self.col.delete_one({"_id": user_id})
+        return result.deleted_count > 0
+
 
 # --- Visitor Memory ---
 class MongoVisitorMemoryRepo(BaseVisitorMemoryRepo):
@@ -408,3 +436,30 @@ class MongoConversationSummaryRepo(BaseConversationSummaryRepo):
     async def delete(self, summary_id: str) -> bool:
         result = await self.col.delete_one({"_id": summary_id})
         return result.deleted_count > 0
+
+
+# --- Audit Log ---
+class MongoAuditLogRepo(BaseAuditLogRepo):
+    def __init__(self, db: AsyncIOMotorDatabase):
+        self.col = db["audit_logs"]
+
+    async def create(self, data: dict) -> dict:
+        doc = {
+            "_id": data.get("id", str(uuid.uuid4())),
+            "user_id": data["user_id"],
+            "username": data["username"],
+            "action": data["action"],
+            "resource_type": data["resource_type"],
+            "resource_id": data.get("resource_id"),
+            "details": data.get("details"),
+            "created_at": datetime.utcnow(),
+        }
+        await self.col.insert_one(doc)
+        return _clean_doc(doc)
+
+    async def list_by_site(self, page: int = 1, per_page: int = 50) -> dict:
+        skip = (page - 1) * per_page
+        cursor = self.col.find().sort("created_at", -1).skip(skip).limit(per_page)
+        logs = [_clean_doc(doc) async for doc in cursor]
+        total = await self.col.count_documents({})
+        return {"logs": logs, "total": total, "page": page, "per_page": per_page}

@@ -5,11 +5,12 @@ import toast from "react-hot-toast";
 import { getSite } from "../lib/api";
 import {
   Globe, Play, Square, RefreshCw, CheckCircle, XCircle,
-  Clock, Database, Trash2, Power, PowerOff,
+  Clock, Database, Trash2, Power, PowerOff, Settings2,
 } from "lucide-react";
 import api from "../lib/api";
+import { useLocale } from "../lib/useLocale";
+import { OnboardingChecklist } from "../components/OnboardingChecklist";
 
-// API helpers for crawl management
 const toggleCrawl = (siteId: string, data: any) =>
   api.put(`/crawl/toggle/${siteId}`, data).then((r) => r.data);
 const startCrawl = (data: any) =>
@@ -26,8 +27,10 @@ const clearKnowledge = (siteId: string) =>
 export default function Setup() {
   const { siteId } = useParams<{ siteId: string }>();
   const queryClient = useQueryClient();
+  const { t } = useLocale();
   const [maxPages, setMaxPages] = useState(50);
   const [customUrl, setCustomUrl] = useState("");
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const { data: site } = useQuery({
     queryKey: ["site", siteId],
@@ -39,7 +42,7 @@ export default function Setup() {
     queryKey: ["crawl-status", siteId],
     queryFn: () => getCrawlStatus(siteId!),
     enabled: !!siteId,
-    refetchInterval: (data) => data?.crawl_status === "running" ? 2000 : false,
+    refetchInterval: (query) => query.state.data?.crawl_status === "running" ? 2000 : false,
   });
 
   const { data: jobs = [], refetch: refetchJobs } = useQuery({
@@ -62,11 +65,7 @@ export default function Setup() {
 
   const startMutation = useMutation({
     mutationFn: () =>
-      startCrawl({
-        site_id: siteId!,
-        url: customUrl || undefined,
-        max_pages: maxPages,
-      }),
+      startCrawl({ site_id: siteId!, url: customUrl || undefined, max_pages: maxPages }),
     onSuccess: () => {
       refetchStatus();
       refetchJobs();
@@ -90,6 +89,7 @@ export default function Setup() {
     onSuccess: () => {
       refetchStatus();
       queryClient.invalidateQueries({ queryKey: ["site", siteId] });
+      setShowClearConfirm(false);
       toast.success("All knowledge cleared");
     },
     onError: () => toast.error("Failed to clear knowledge"),
@@ -97,6 +97,12 @@ export default function Setup() {
 
   const isRunning = crawlStatus?.crawl_status === "running";
   const isEnabled = crawlStatus?.crawl_enabled ?? false;
+
+  // Progress estimate for running crawls
+  const runningJob = jobs.find((j: any) => j.status === "running");
+  const progressPercent = runningJob && maxPages > 0
+    ? Math.min(100, Math.round((runningJob.pages_done / maxPages) * 100))
+    : 0;
 
   const statusIcon = (status: string) => {
     switch (status) {
@@ -110,11 +116,19 @@ export default function Setup() {
 
   return (
     <div className="max-w-3xl">
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Crawl & Knowledge</h1>
-      <p className="text-gray-500 mb-8">Teach your bot by crawling your website content</p>
+      <h1 className="text-2xl font-bold text-gray-900 mb-2">{t("setup.title")}</h1>
+      <p className="text-gray-500 mb-6">{t("setup.subtitle")}</p>
 
-      {/* ========== Toggle Crawl ON/OFF ========== */}
+      {/* Onboarding Checklist */}
+      <OnboardingChecklist />
+
+      {/* ===== SECTION 1: Auto Crawl Settings ===== */}
       <div className="bg-white p-6 rounded-xl border border-gray-200 mb-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Settings2 className="w-5 h-5 text-gray-400" />
+          <h3 className="font-semibold text-lg">{t("setup.autoCrawl")}</h3>
+        </div>
+
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             {isEnabled ? (
@@ -123,13 +137,11 @@ export default function Setup() {
               <PowerOff className="w-6 h-6 text-gray-400" />
             )}
             <div>
-              <h3 className="font-semibold text-lg">
+              <p className="font-medium">
                 Crawl: {isEnabled ? "ON" : "OFF"}
-              </h3>
+              </p>
               <p className="text-sm text-gray-500">
-                {isEnabled
-                  ? "Bot is actively learning from your website"
-                  : "Bot is not learning new content"}
+                {isEnabled ? t("setup.autoCrawlDesc") : t("setup.autoCrawlOff")}
               </p>
             </div>
           </div>
@@ -150,43 +162,62 @@ export default function Setup() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 mt-4 p-4 bg-gray-50 rounded-lg">
+        <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
           <div className="text-center">
             <div className="text-2xl font-bold text-primary-600">
               {crawlStatus?.knowledge_count ?? 0}
             </div>
-            <div className="text-xs text-gray-500">Chunks Learned</div>
+            <div className="text-xs text-gray-500">{t("setup.chunksLearned")}</div>
           </div>
           <div className="text-center">
             <div className="text-2xl font-bold text-gray-700">
-              {crawlStatus?.crawl_status === "running" ? (
+              {isRunning ? (
                 <RefreshCw className="w-6 h-6 text-blue-500 animate-spin mx-auto" />
               ) : (
                 crawlStatus?.crawl_status ?? "idle"
               )}
             </div>
-            <div className="text-xs text-gray-500">Status</div>
+            <div className="text-xs text-gray-500">{t("setup.status")}</div>
           </div>
           <div className="text-center">
             <div className="text-sm font-medium text-gray-700">
               {crawlStatus?.last_crawled_at
                 ? new Date(crawlStatus.last_crawled_at).toLocaleDateString()
-                : "Never"}
+                : t("setup.never")}
             </div>
-            <div className="text-xs text-gray-500">Last Crawled</div>
+            <div className="text-xs text-gray-500">{t("setup.lastCrawled")}</div>
           </div>
         </div>
+
+        {/* Progress bar when running */}
+        {isRunning && (
+          <div className="mt-4">
+            <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
+              <span>{t("setup.crawlProgress")}</span>
+              <span>{runningJob?.pages_done ?? 0} / {maxPages} {t("setup.pages")}</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <div
+                className="bg-primary-600 h-2.5 rounded-full transition-all duration-500"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* ========== Manual Crawl ========== */}
+      {/* ===== SECTION 2: Manual Actions ===== */}
       <div className="bg-white p-6 rounded-xl border border-gray-200 mb-6">
         <h3 className="font-semibold mb-4 flex items-center gap-2">
-          <Globe className="w-5 h-5" /> Manual Crawl
+          <Globe className="w-5 h-5" /> {t("setup.manualActions")}
         </h3>
+        <p className="text-sm text-gray-500 mb-4">
+          Manually trigger a crawl or clear learned data.
+        </p>
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              URL (leave empty to use site URL: {site?.url})
+              {t("setup.crawlUrl").replace("{url}", site?.url || "")}
             </label>
             <input
               value={customUrl}
@@ -197,16 +228,26 @@ export default function Setup() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Max Pages
+              {t("setup.maxPages")}
             </label>
-            <input
-              type="number"
-              value={maxPages}
-              onChange={(e) => setMaxPages(parseInt(e.target.value) || 50)}
-              min={1}
-              max={500}
-              className="w-32 border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
-            />
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                value={maxPages}
+                onChange={(e) => setMaxPages(parseInt(e.target.value))}
+                min={1}
+                max={500}
+                className="flex-1"
+              />
+              <input
+                type="number"
+                value={maxPages}
+                onChange={(e) => setMaxPages(parseInt(e.target.value) || 50)}
+                min={1}
+                max={500}
+                className="w-20 border border-gray-300 rounded-lg px-2 py-1 text-sm text-center outline-none"
+              />
+            </div>
           </div>
           <div className="flex gap-3">
             {isRunning ? (
@@ -216,7 +257,7 @@ export default function Setup() {
                 className="flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 disabled:opacity-50"
               >
                 <Square className="w-4 h-4" />
-                {stopMutation.isPending ? "Stopping..." : "Stop Crawl"}
+                {stopMutation.isPending ? "Stopping..." : t("setup.stopCrawl")}
               </button>
             ) : (
               <button
@@ -225,31 +266,46 @@ export default function Setup() {
                 className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50"
               >
                 <Play className="w-4 h-4" />
-                {startMutation.isPending ? "Starting..." : "Start Crawl"}
+                {startMutation.isPending ? "Starting..." : t("setup.startCrawl")}
               </button>
             )}
 
-            <button
-              onClick={() => {
-                if (confirm("Delete all learned data? This action cannot be undone.")) {
-                  clearMutation.mutate();
-                }
-              }}
-              disabled={clearMutation.isPending || isRunning}
-              className="flex items-center gap-2 text-red-500 border border-red-200 px-4 py-2 rounded-lg hover:bg-red-50 disabled:opacity-50"
-            >
-              <Trash2 className="w-4 h-4" />
-              Clear All Knowledge
-            </button>
+            {showClearConfirm ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-red-600">{t("setup.clearConfirm")}</span>
+                <button
+                  onClick={() => clearMutation.mutate()}
+                  disabled={clearMutation.isPending}
+                  className="text-sm bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
+                >
+                  {t("common.confirm")}
+                </button>
+                <button
+                  onClick={() => setShowClearConfirm(false)}
+                  className="text-sm text-gray-500 hover:text-gray-700"
+                >
+                  {t("common.cancel")}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowClearConfirm(true)}
+                disabled={clearMutation.isPending || isRunning}
+                className="flex items-center gap-2 text-red-500 border border-red-200 px-4 py-2 rounded-lg hover:bg-red-50 disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                {t("setup.clearAll")}
+              </button>
+            )}
           </div>
         </div>
       </div>
 
-      {/* ========== Crawl History ========== */}
+      {/* ===== SECTION 3: Crawl History ===== */}
       {jobs.length > 0 && (
         <div className="bg-white p-6 rounded-xl border border-gray-200">
           <h3 className="font-semibold mb-4 flex items-center gap-2">
-            <Database className="w-5 h-5" /> Crawl History
+            <Database className="w-5 h-5" /> {t("setup.crawlHistory")}
           </h3>
           <div className="space-y-3">
             {jobs.map((job: any) => (
@@ -262,7 +318,7 @@ export default function Setup() {
                   <div>
                     <span className="text-sm font-medium capitalize">{job.status}</span>
                     <span className="text-xs text-gray-400 ml-2">
-                      {job.pages_done} pages
+                      {job.pages_done} {t("setup.pages")}
                     </span>
                   </div>
                 </div>

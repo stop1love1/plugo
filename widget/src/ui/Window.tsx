@@ -15,12 +15,15 @@ type WindowProps = {
   suggestions: string[];
   onSend: (message: string) => void;
   onClose: () => void;
+  onFeedback?: (index: number, rating: "up" | "down") => void;
+  onFileUpload?: (file: File) => void;
 };
 
-export function ChatWindow({ messages, isTyping, position, suggestions, onSend, onClose }: WindowProps) {
+export function ChatWindow({ messages, isTyping, position, suggestions, onSend, onClose, onFeedback, onFileUpload }: WindowProps) {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const lang = detectLanguage();
 
   // Auto-scroll to bottom
@@ -49,6 +52,15 @@ export function ChatWindow({ messages, isTyping, position, suggestions, onSend, 
     setInput("");
   };
 
+  const handleFileChange = (e: Event) => {
+    const target = e.target as HTMLInputElement;
+    const file = target.files?.[0];
+    if (file && onFileUpload) {
+      onFileUpload(file);
+      target.value = "";
+    }
+  };
+
   return (
     <div class={`plugo-window ${position}`}>
       <div class="plugo-header">
@@ -58,7 +70,13 @@ export function ChatWindow({ messages, isTyping, position, suggestions, onSend, 
 
       <div class="plugo-messages" role="log" aria-live="polite" aria-label="Chat messages">
         {messages.map((msg, i) => (
-          <Message key={i} role={msg.role} content={msg.content} />
+          <Message
+            key={i}
+            role={msg.role}
+            content={msg.content}
+            index={i}
+            onFeedback={msg.role === "bot" && msg.content ? onFeedback : undefined}
+          />
         ))}
         {isTyping && messages[messages.length - 1]?.content === "" && (
           <div class="plugo-typing">
@@ -87,6 +105,26 @@ export function ChatWindow({ messages, isTyping, position, suggestions, onSend, 
       </div>
 
       <form class="plugo-input-area" onSubmit={handleSubmit}>
+        {onFileUpload && (
+          <>
+            <button
+              type="button"
+              class="plugo-attach-btn"
+              onClick={() => fileInputRef.current?.click()}
+              aria-label="Attach file"
+              title="Attach file"
+            >
+              &#128206;
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,.txt,.pdf,.md"
+              style={{ display: "none" }}
+              onChange={handleFileChange}
+            />
+          </>
+        )}
         <input
           ref={inputRef}
           type="text"

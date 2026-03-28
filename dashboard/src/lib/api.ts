@@ -72,6 +72,9 @@ export const getKnowledge = (siteId: string, page = 1, search?: string) => {
   if (search) url += `&search=${encodeURIComponent(search)}`;
   return api.get(url).then((r) => r.data);
 };
+export const getChunk = (id: string) => api.get(`/knowledge/${id}`).then((r) => r.data);
+export const updateChunk = (id: string, data: { title?: string; content?: string }) =>
+  api.put(`/knowledge/${id}`, data).then((r) => r.data);
 export const deleteChunk = (id: string) => api.delete(`/knowledge/${id}`).then((r) => r.data);
 export const addManualChunk = (data: any) => api.post("/knowledge/manual", data).then((r) => r.data);
 export const uploadFile = (siteId: string, file: File) => {
@@ -94,5 +97,21 @@ export const testTool = (id: string, params: any) =>
 export const getSessions = (siteId: string) =>
   api.get(`/sessions?site_id=${siteId}`).then((r) => r.data);
 export const getSession = (id: string) => api.get(`/sessions/${id}`).then((r) => r.data);
+
+// Users
+export const getUsers = () => api.get("/users").then((r) => r.data);
+export const createUser = (data: { username: string; password: string; role: string }) =>
+  api.post("/users", data).then((r) => r.data);
+export const updateUserRole = (id: string, role: string) =>
+  api.put(`/users/${id}/role`, { role }).then((r) => r.data);
+export const deleteUser = (id: string) => api.delete(`/users/${id}`).then((r) => r.data);
+
+// Audit
+export const getAuditLogs = (page = 1) =>
+  api.get(`/audit?page=${page}`).then((r) => r.data);
+
+// Feedback
+export const submitFeedback = (sessionId: string, messageIndex: number, rating: "up" | "down") =>
+  api.post(`/sessions/${sessionId}/feedback`, { message_index: messageIndex, rating }).then((r) => r.data);
 
 export default api;

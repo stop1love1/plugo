@@ -15,6 +15,8 @@ from config import settings, validate_settings
 from logging_config import logger
 from routers import chat, sites, crawl, knowledge, tools, sessions, memory, analytics
 from routers import auth as auth_router
+from routers import users as users_router
+from routers import audit as audit_router
 
 
 # --- Rate limiter ---
@@ -106,6 +108,8 @@ app.include_router(tools.router)
 app.include_router(sessions.router)
 app.include_router(memory.router)
 app.include_router(analytics.router)
+app.include_router(users_router.router)
+app.include_router(audit_router.router)
 
 
 @app.get("/")

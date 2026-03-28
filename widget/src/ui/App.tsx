@@ -83,6 +83,7 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
         // Save session_id for future reconnections
         if (data.session_id) {
           saveSessionId(token, data.session_id);
+          sessionIdRef.current = data.session_id;
         }
 
         // Set initial suggestions from server
@@ -164,6 +165,37 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
     isOpenRef.current = false;
   }, []);
 
+  const sessionIdRef = useRef<string | null>(null);
+
+  // Store session_id when connected
+  const handleFeedback = useCallback(
+    (messageIndex: number, rating: "up" | "down") => {
+      const sid = sessionIdRef.current || getSavedSessionId(token);
+      if (!sid) return;
+      // Fire and forget — send feedback to backend
+      const baseUrl = serverUrl || `${window.location.protocol}//${window.location.host}`;
+      const httpUrl = baseUrl.replace(/^ws/, "http");
+      fetch(`${httpUrl}/api/sessions/${sid}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message_index: messageIndex, rating }),
+      }).catch(() => {});
+    },
+    [token, serverUrl]
+  );
+
+  const handleFileUpload = useCallback(
+    (file: File) => {
+      // For now, send the file name as a message — full file upload requires backend support
+      const message = `[Attached file: ${file.name} (${(file.size / 1024).toFixed(1)}KB)]`;
+      setMessages((prev) => [...prev, { role: "user", content: message }]);
+      if (ws) {
+        ws.send(message, getPageContext());
+      }
+    },
+    [ws, getPageContext]
+  );
+
   const handleSend = useCallback(
     (message: string) => {
       if (!ws || !message.trim()) return;
@@ -188,6 +220,8 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
           suggestions={suggestions}
           onSend={handleSend}
           onClose={handleClose}
+          onFeedback={handleFeedback}
+          onFileUpload={handleFileUpload}
         />
       )}
       <Bubble

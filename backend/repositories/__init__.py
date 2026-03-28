@@ -11,6 +11,7 @@ from repositories.base import (
     BaseSiteRepo, BaseKnowledgeRepo, BaseToolRepo,
     BaseChatSessionRepo, BaseCrawlJobRepo, BaseUserRepo,
     BaseVisitorMemoryRepo, BaseConversationSummaryRepo,
+    BaseAuditLogRepo,
 )
 
 
@@ -26,6 +27,7 @@ class Repositories:
         users: BaseUserRepo,
         visitor_memories: BaseVisitorMemoryRepo,
         conversation_summaries: BaseConversationSummaryRepo,
+        audit_logs: BaseAuditLogRepo,
     ):
         self.sites = sites
         self.knowledge = knowledge
@@ -35,6 +37,7 @@ class Repositories:
         self.users = users
         self.visitor_memories = visitor_memories
         self.conversation_summaries = conversation_summaries
+        self.audit_logs = audit_logs
 
 
 # --- MongoDB connection (lazy init) ---
@@ -73,6 +76,7 @@ async def get_repos() -> Repositories:
             MongoSiteRepo, MongoKnowledgeRepo, MongoToolRepo,
             MongoChatSessionRepo, MongoCrawlJobRepo, MongoUserRepo,
             MongoVisitorMemoryRepo, MongoConversationSummaryRepo,
+            MongoAuditLogRepo,
         )
         db = _get_mongo_db()
         return Repositories(
@@ -84,6 +88,7 @@ async def get_repos() -> Repositories:
             users=MongoUserRepo(db),
             visitor_memories=MongoVisitorMemoryRepo(db),
             conversation_summaries=MongoConversationSummaryRepo(db),
+            audit_logs=MongoAuditLogRepo(db),
         )
     else:
         # Default: SQLite
@@ -91,6 +96,7 @@ async def get_repos() -> Repositories:
             SQLiteSiteRepo, SQLiteKnowledgeRepo, SQLiteToolRepo,
             SQLiteChatSessionRepo, SQLiteCrawlJobRepo, SQLiteUserRepo,
             SQLiteVisitorMemoryRepo, SQLiteConversationSummaryRepo,
+            SQLiteAuditLogRepo,
         )
         session_factory = _get_sqlite_session()
         db = session_factory()
@@ -103,6 +109,7 @@ async def get_repos() -> Repositories:
             users=SQLiteUserRepo(db),
             visitor_memories=SQLiteVisitorMemoryRepo(db),
             conversation_summaries=SQLiteConversationSummaryRepo(db),
+            audit_logs=SQLiteAuditLogRepo(db),
         )
 
 
