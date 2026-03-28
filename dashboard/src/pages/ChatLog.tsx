@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getSessions, getSession } from "../lib/api";
 import { MessageCircle, User, Bot, Search, Globe, Clock } from "lucide-react";
 import { useLocale } from "../lib/useLocale";
+import { SkeletonList } from "../components/Skeleton";
 
 function formatDuration(startedAt: string, endedAt?: string | null): string {
   if (!startedAt) return "";
@@ -62,11 +63,11 @@ export default function ChatLog() {
         />
       </div>
 
-      <div className="flex gap-6">
+      <div className="flex flex-col lg:flex-row gap-6">
         {/* Session list */}
-        <div className="w-80 flex-shrink-0">
+        <div className="w-full lg:w-80 lg:flex-shrink-0">
           {isLoading ? (
-            <div className="text-gray-400">{t("common.loading")}</div>
+            <SkeletonList items={4} />
           ) : filteredSessions.length === 0 ? (
             <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
               <MessageCircle className="w-10 h-10 text-gray-300 mx-auto mb-3" />

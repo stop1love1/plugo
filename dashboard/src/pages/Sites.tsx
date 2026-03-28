@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
@@ -11,6 +11,12 @@ export default function Sites() {
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
+  const [urlError, setUrlError] = useState("");
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (showCreate) nameInputRef.current?.focus();
+  }, [showCreate]);
 
   const { data: sites = [], isLoading } = useQuery({
     queryKey: ["sites"],
@@ -30,9 +36,19 @@ export default function Sites() {
     onError: () => toast.error("Failed to create site"),
   });
 
+  const validateUrl = (value: string) => {
+    if (!value) { setUrlError(""); return; }
+    try {
+      new URL(value);
+      setUrlError("");
+    } catch {
+      setUrlError("Please enter a valid URL (e.g. https://example.com)");
+    }
+  };
+
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !url) return;
+    if (!name || !url || urlError) return;
     mutation.mutate({ name, url });
   };
 
@@ -58,6 +74,7 @@ export default function Sites() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Website Name</label>
               <input
+                ref={nameInputRef}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="My Website"
@@ -68,10 +85,11 @@ export default function Sites() {
               <label className="block text-sm font-medium text-gray-700 mb-1">URL</label>
               <input
                 value={url}
-                onChange={(e) => setUrl(e.target.value)}
+                onChange={(e) => { setUrl(e.target.value); validateUrl(e.target.value); }}
                 placeholder="https://example.com"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                className={`w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none ${urlError ? "border-red-300" : "border-gray-300"}`}
               />
+              {urlError && <p className="text-xs text-red-500 mt-1">{urlError}</p>}
             </div>
             <div className="flex gap-3">
               <button type="submit" disabled={mutation.isPending} className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700">

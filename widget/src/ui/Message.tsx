@@ -6,17 +6,18 @@ type MessageProps = {
   role: "user" | "bot";
   content: string;
   index?: number;
+  isError?: boolean;
   onFeedback?: (index: number, rating: "up" | "down") => void;
 };
 
-export function Message({ role, content, index, onFeedback }: MessageProps) {
+export function Message({ role, content, index, isError, onFeedback }: MessageProps) {
   const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
 
   if (!content) return null;
 
   const html = useMemo(
-    () => (role === "bot" ? parseMarkdown(content) : null),
-    [role, content]
+    () => (role === "bot" && !isError ? parseMarkdown(content) : null),
+    [role, content, isError]
   );
 
   const handleFeedback = (rating: "up" | "down") => {
@@ -25,6 +26,11 @@ export function Message({ role, content, index, onFeedback }: MessageProps) {
       onFeedback(index, rating);
     }
   };
+
+  // Error messages get special styling
+  if (isError) {
+    return <div class="plugo-msg bot plugo-error">{content}</div>;
+  }
 
   if (role === "bot" && html) {
     return (

@@ -5,6 +5,8 @@ import toast from "react-hot-toast";
 import { Users, Trash2, ChevronRight, Brain, ShieldAlert, Search, Filter, ArrowUpDown } from "lucide-react";
 import api from "../lib/api";
 import { useLocale } from "../lib/useLocale";
+import { SkeletonList } from "../components/Skeleton";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 
 const getVisitors = (siteId: string) =>
   api.get(`/memory/visitors?site_id=${siteId}`).then((r) => r.data);
@@ -32,6 +34,7 @@ export default function Visitors() {
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [sortBy, setSortBy] = useState<"memories" | "recent">("memories");
+  const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
 
   const { data: visitors = [], isLoading } = useQuery({
     queryKey: ["visitors", siteId],
@@ -92,16 +95,16 @@ export default function Visitors() {
       </div>
 
       {isLoading ? (
-        <div className="text-gray-400">{t("common.loading")}</div>
+        <SkeletonList items={4} />
       ) : visitors.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
           <Brain className="w-12 h-12 text-gray-300 mx-auto mb-4" />
           <p className="text-gray-500">{t("visitors.noMemories")}</p>
         </div>
       ) : (
-        <div className="flex gap-6">
+        <div className="flex flex-col lg:flex-row gap-6">
           {/* Visitor list */}
-          <div className="w-72 shrink-0">
+          <div className="w-full lg:w-72 lg:shrink-0">
             {/* Search */}
             <div className="relative mb-3">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -167,16 +170,21 @@ export default function Visitors() {
                     {t("chatLog.visitor")}: {selectedVisitor.substring(0, 16)}...
                   </h3>
                   <button
-                    onClick={() => {
-                      if (confirm("Delete ALL memories for this visitor? This cannot be undone.")) {
-                        deleteAllMutation.mutate();
-                      }
-                    }}
+                    onClick={() => setShowDeleteAllConfirm(true)}
                     className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700"
                   >
                     <ShieldAlert className="w-3.5 h-3.5" />
                     {t("visitors.deleteAll")}
                   </button>
+                  <ConfirmDialog
+                    open={showDeleteAllConfirm}
+                    title={t("visitors.deleteAll")}
+                    message="Delete ALL memories for this visitor? This cannot be undone."
+                    danger
+                    loading={deleteAllMutation.isPending}
+                    onConfirm={() => { deleteAllMutation.mutate(); setShowDeleteAllConfirm(false); }}
+                    onCancel={() => setShowDeleteAllConfirm(false)}
+                  />
                 </div>
 
                 {/* Category filter */}

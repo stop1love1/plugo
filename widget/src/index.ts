@@ -49,7 +49,9 @@ function init() {
   // Render app into shadow DOM
   const container = document.createElement("div");
   container.id = "plugo-root";
-  if (config.darkMode) {
+  // Auto-detect dark mode from system preference if not explicitly set
+  const isDark = config.darkMode ?? window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+  if (isDark) {
     container.classList.add("plugo-dark");
   }
   shadow.appendChild(container);
@@ -67,7 +69,18 @@ function init() {
   );
 }
 
+/** Calculate relative luminance and choose black or white text */
+function getContrastTextColor(hex: string): string {
+  const c = hex.replace("#", "");
+  const r = parseInt(c.substring(0, 2), 16) / 255;
+  const g = parseInt(c.substring(2, 4), 16) / 255;
+  const b = parseInt(c.substring(4, 6), 16) / 255;
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminance > 0.5 ? "#000000" : "#ffffff";
+}
+
 function getWidgetStyles(primaryColor: string): string {
+  const textOnPrimary = getContrastTextColor(primaryColor);
   return `
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -78,7 +91,7 @@ function getWidgetStyles(primaryColor: string): string {
       height: 60px;
       border-radius: 50%;
       background: ${primaryColor};
-      color: white;
+      color: ${textOnPrimary};
       border: none;
       cursor: pointer;
       display: flex;
@@ -119,7 +132,7 @@ function getWidgetStyles(primaryColor: string): string {
 
     .plugo-header {
       background: ${primaryColor};
-      color: white;
+      color: ${textOnPrimary};
       padding: 16px;
       display: flex;
       align-items: center;
@@ -154,7 +167,7 @@ function getWidgetStyles(primaryColor: string): string {
     .plugo-msg.user {
       align-self: flex-end;
       background: ${primaryColor};
-      color: white;
+      color: ${textOnPrimary};
       border-bottom-right-radius: 4px;
     }
     .plugo-msg.bot {
@@ -204,7 +217,7 @@ function getWidgetStyles(primaryColor: string): string {
     .plugo-input-area input:focus { border-color: ${primaryColor}; }
     .plugo-input-area button {
       background: ${primaryColor};
-      color: white;
+      color: ${textOnPrimary};
       border: none;
       border-radius: 8px;
       padding: 10px 16px;
@@ -215,13 +228,7 @@ function getWidgetStyles(primaryColor: string): string {
     .plugo-input-area button:hover { opacity: 0.9; }
     .plugo-input-area button:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    .plugo-suggestions {
-      padding: 8px 16px 0;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-    .plugo-suggestions button {
+    .plugo-suggestion-btn {
       background: #f1f3f5;
       border: 1px solid #e0e0e0;
       border-radius: 16px;
@@ -232,7 +239,7 @@ function getWidgetStyles(primaryColor: string): string {
       font-family: inherit;
       color: #333;
     }
-    .plugo-suggestions button:hover { background: #e2e8f0; }
+    .plugo-suggestion-btn:hover { background: #e2e8f0; }
 
     @media (max-width: 480px) {
       .plugo-window {
@@ -345,11 +352,16 @@ function getWidgetStyles(primaryColor: string): string {
     .plugo-feedback-btn {
       background: #f5f5f5;
       border: 1px solid #e0e0e0;
-      border-radius: 6px;
+      border-radius: 8px;
       cursor: pointer;
-      font-size: 14px;
-      padding: 3px 8px;
+      font-size: 16px;
+      min-width: 44px;
+      min-height: 44px;
+      padding: 8px 12px;
       line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       transition: background 0.2s, border-color 0.2s;
     }
     .plugo-feedback-btn:hover {
@@ -361,25 +373,77 @@ function getWidgetStyles(primaryColor: string): string {
       border-color: ${primaryColor};
     }
 
-    /* File attach button */
-    .plugo-attach-btn {
-      background: none;
-      border: 1px solid #ddd;
-      border-radius: 8px;
+    /* Connection status bar */
+    .plugo-status-bar {
+      padding: 6px 16px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 500;
+      animation: plugo-slide-down 0.2s ease;
+    }
+    .plugo-status-bar.connecting { background: #dbeafe; color: #1e40af; }
+    .plugo-status-bar.reconnecting { background: #fef3c7; color: #92400e; }
+    .plugo-status-bar.disconnected { background: #fee2e2; color: #991b1b; }
+    @keyframes plugo-slide-down {
+      from { max-height: 0; padding: 0 16px; opacity: 0; }
+      to { max-height: 40px; opacity: 1; }
+    }
+
+    /* Error messages */
+    .plugo-msg.plugo-error {
+      background: #fef2f2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+      border-bottom-left-radius: 4px;
+    }
+
+    /* New message indicator */
+    .plugo-new-msg-btn {
+      position: absolute;
+      bottom: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: ${primaryColor};
+      color: ${textOnPrimary};
+      border: none;
+      border-radius: 20px;
+      padding: 6px 16px;
+      font-size: 12px;
+      font-weight: 500;
       cursor: pointer;
-      font-size: 18px;
-      padding: 6px 10px;
-      line-height: 1;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      z-index: 1;
+      animation: plugo-slide-up 0.2s ease;
+      font-family: inherit;
+    }
+    .plugo-new-msg-btn:hover { opacity: 0.9; }
+
+    /* Character counter */
+    .plugo-char-counter {
+      text-align: right;
+      padding: 0 16px 4px;
+      font-size: 10px;
+      color: #999;
+    }
+
+    /* Suggestion label */
+    .plugo-suggestions {
+      padding: 8px 0 0;
+    }
+    .plugo-suggestions-label {
+      font-size: 11px;
+      color: #999;
+      display: block;
+      margin-bottom: 4px;
+    }
+    .plugo-suggestions-list {
       display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      transition: border-color 0.2s, background 0.2s;
+      flex-wrap: wrap;
+      gap: 6px;
     }
-    .plugo-attach-btn:hover {
-      border-color: ${primaryColor};
-      background: #f9f9f9;
-    }
+
+    /* Window needs position:relative for new-msg-btn */
+    .plugo-window { position: relative; }
 
     /* Accessibility */
     .plugo-messages { -webkit-overflow-scrolling: touch; }

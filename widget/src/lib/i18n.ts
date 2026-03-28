@@ -1,15 +1,15 @@
 export type WidgetLocale = "vi" | "en" | "ja" | "ko" | "zh" | "fr" | "de" | "es" | "th";
 
 const widgetStrings: Record<string, Record<string, string>> = {
-  vi: { placeholder: "Nhập tin nhắn...", send: "Gửi", powered: "Powered by Plugo" },
-  en: { placeholder: "Type a message...", send: "Send", powered: "Powered by Plugo" },
-  ja: { placeholder: "メッセージを入力...", send: "送信", powered: "Powered by Plugo" },
-  ko: { placeholder: "메시지를 입력하세요...", send: "전송", powered: "Powered by Plugo" },
-  zh: { placeholder: "输入消息...", send: "发送", powered: "Powered by Plugo" },
-  fr: { placeholder: "Tapez un message...", send: "Envoyer", powered: "Powered by Plugo" },
-  de: { placeholder: "Nachricht eingeben...", send: "Senden", powered: "Powered by Plugo" },
-  es: { placeholder: "Escribe un mensaje...", send: "Enviar", powered: "Powered by Plugo" },
-  th: { placeholder: "พิมพ์ข้อความ...", send: "ส่ง", powered: "Powered by Plugo" },
+  vi: { placeholder: "Nhập tin nhắn...", send: "Gửi", powered: "Powered by Plugo", connecting: "Đang kết nối...", reconnecting: "Đang kết nối lại...", disconnected: "Mất kết nối", newMessages: "Tin nhắn mới", charLimit: "ký tự", suggestions: "Gợi ý:", error: "Đã xảy ra lỗi", chatTitle: "Chat hỗ trợ" },
+  en: { placeholder: "Type a message...", send: "Send", powered: "Powered by Plugo", connecting: "Connecting...", reconnecting: "Reconnecting...", disconnected: "Disconnected", newMessages: "New messages", charLimit: "chars", suggestions: "Suggestions:", error: "An error occurred", chatTitle: "Chat Support" },
+  ja: { placeholder: "メッセージを入力...", send: "送信", powered: "Powered by Plugo", connecting: "接続中...", reconnecting: "再���続中...", disconnected: "切断されました", newMessages: "新着メッセージ", charLimit: "文字", suggestions: "提案:", error: "エラーが発生しました", chatTitle: "チャットサポート" },
+  ko: { placeholder: "메시��를 입력하세요...", send: "전송", powered: "Powered by Plugo", connecting: "연결 중...", reconnecting: "재연결 중...", disconnected: "연결 끊김", newMessages: "새 메시지", charLimit: "자", suggestions: "제안:", error: "오류가 발생했습니다", chatTitle: "채팅 지원" },
+  zh: { placeholder: "输入��息...", send: "发送", powered: "Powered by Plugo", connecting: "连接中...", reconnecting: "重新连接...", disconnected: "已断开", newMessages: "新消息", charLimit: "字符", suggestions: "建议:", error: "发生错误", chatTitle: "在线客服" },
+  fr: { placeholder: "Tapez un message...", send: "Envoyer", powered: "Powered by Plugo", connecting: "Connexion...", reconnecting: "Reconnexion...", disconnected: "Déconnecté", newMessages: "Nouveaux messages", charLimit: "car.", suggestions: "Suggestions:", error: "Une erreur est survenue", chatTitle: "Support Chat" },
+  de: { placeholder: "Nachricht eingeben...", send: "Senden", powered: "Powered by Plugo", connecting: "Verbindung...", reconnecting: "Erneut verbinden...", disconnected: "Getrennt", newMessages: "Neue Nachrichten", charLimit: "Zeichen", suggestions: "Vorschläge:", error: "Ein Fehler ist aufgetreten", chatTitle: "Chat-Support" },
+  es: { placeholder: "Escribe un mensaje...", send: "Enviar", powered: "Powered by Plugo", connecting: "Conectando...", reconnecting: "Reconectando...", disconnected: "Desconectado", newMessages: "Nuevos mensajes", charLimit: "car.", suggestions: "Sugerencias:", error: "Se produjo un error", chatTitle: "Soporte Chat" },
+  th: { placeholder: "พิมพ์ข้อความ...", send: "ส่ง", powered: "Powered by Plugo", connecting: "กำลังเชื่อมต่อ...", reconnecting: "กำลังเชื่อ��ต่อใหม���...", disconnected: "ขาดการเชื่อมต่อ", newMessages: "ข้อความใหม่", charLimit: "ตัวอักษร", suggestions: "คำแนะนำ:", error: "เกิดข้อผิดพลาด", chatTitle: "แชทสนับสนุน" },
 };
 
 /** Map a raw language code to a supported locale key */

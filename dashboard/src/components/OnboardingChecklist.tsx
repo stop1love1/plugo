@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { getSite } from "../lib/api";
+import { getSite, getSessions } from "../lib/api";
 import { Check, Circle, ArrowRight } from "lucide-react";
 import { useLocale } from "../lib/useLocale";
 import api from "../lib/api";
@@ -24,6 +24,15 @@ export function OnboardingChecklist() {
     queryFn: () => getCrawlStatus(siteId!),
     enabled: !!siteId,
   });
+
+  // Check if widget has been embedded by looking for sessions
+  const { data: sessions } = useQuery({
+    queryKey: ["sessions", siteId],
+    queryFn: () => getSessions(siteId!),
+    enabled: !!siteId,
+  });
+
+  const hasEmbedded = Array.isArray(sessions) && sessions.length > 0;
 
   if (!site || !siteId) return null;
 
@@ -58,7 +67,7 @@ export function OnboardingChecklist() {
     {
       key: "embed",
       label: t("onboarding.step5"),
-      done: false, // Can't detect this from API
+      done: hasEmbedded,
       action: () => navigate(`/site/${siteId}/embed`),
       actionLabel: t("onboarding.goToEmbed"),
     },

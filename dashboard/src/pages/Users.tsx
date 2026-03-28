@@ -1,18 +1,26 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { getUsers, createUser, updateUserRole, deleteUser } from "../lib/api";
+import { getUsers, createUser, updateUserRole, deleteUser, getErrorMessage } from "../lib/api";
 import { Users as UsersIcon, Plus, Trash2, Shield, Eye, X } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { FormField } from "../components/FormField";
 import { EmptyState } from "../components/EmptyState";
 import { useLocale } from "../lib/useLocale";
+import { SkeletonTable } from "../components/Skeleton";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 
 export default function UsersPage() {
   const queryClient = useQueryClient();
   const { t } = useLocale();
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ username: "", password: "", role: "viewer" });
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const firstInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (showAdd) firstInputRef.current?.focus();
+  }, [showAdd]);
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["users"],
@@ -27,7 +35,7 @@ export default function UsersPage() {
       setForm({ username: "", password: "", role: "viewer" });
       toast.success("User created");
     },
-    onError: (err: any) => toast.error(err.response?.data?.detail || "Failed to create user"),
+    onError: (err: unknown) => toast.error(getErrorMessage(err)),
   });
 
   const roleMutation = useMutation({
@@ -45,7 +53,7 @@ export default function UsersPage() {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       toast.success("User deleted");
     },
-    onError: (err: any) => toast.error(err.response?.data?.detail || "Failed to delete user"),
+    onError: (err: unknown) => toast.error(getErrorMessage(err)),
   });
 
   const handleCreate = (e: React.FormEvent) => {
@@ -75,7 +83,7 @@ export default function UsersPage() {
           </div>
           <div className="grid grid-cols-3 gap-4">
             <FormField label={t("users.username")}>
-              <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })}
+              <input ref={firstInputRef} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })}
                 placeholder="username" className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
             </FormField>
             <FormField label={t("login.password")}>
@@ -99,8 +107,18 @@ export default function UsersPage() {
         </form>
       )}
 
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={t("common.delete")}
+        message={t("users.deleteConfirm")}
+        danger
+        loading={deleteMutation.isPending}
+        onConfirm={() => { if (deleteTarget) deleteMutation.mutate(deleteTarget); setDeleteTarget(null); }}
+        onCancel={() => setDeleteTarget(null)}
+      />
+
       {isLoading ? (
-        <div className="text-gray-400">{t("common.loading")}</div>
+        <SkeletonTable rows={3} />
       ) : users.length === 0 ? (
         <EmptyState icon={UsersIcon} message={t("users.noUsers")} />
       ) : (
@@ -135,11 +153,7 @@ export default function UsersPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
-                      onClick={() => {
-                        if (confirm(t("users.deleteConfirm"))) {
-                          deleteMutation.mutate(user.id);
-                        }
-                      }}
+                      onClick={() => setDeleteTarget(user.id)}
                       className="text-gray-400 hover:text-red-500 p-1"
                     >
                       <Trash2 className="w-4 h-4" />

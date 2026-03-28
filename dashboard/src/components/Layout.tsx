@@ -1,5 +1,5 @@
 import { Outlet, Link, useParams, useLocation, useNavigate } from "react-router-dom";
-import { MessageSquare, Database, Wrench, Code, Settings, LayoutDashboard, MessageCircle, LogOut, User, Brain, BarChart3, Globe, Users, FileText, Keyboard } from "lucide-react";
+import { MessageSquare, Database, Wrench, Code, Settings, LayoutDashboard, MessageCircle, LogOut, User, Brain, BarChart3, Globe, Users, FileText, Keyboard, Menu, X } from "lucide-react";
 import { useStore } from "../lib/store";
 import { useLocale } from "../lib/useLocale";
 import { NotificationBell } from "./NotificationBell";
@@ -29,6 +29,7 @@ export default function Layout() {
   const { user, logout } = useStore();
   const { locale, setLocale, t } = useLocale();
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useKeyboardShortcuts();
 
@@ -54,12 +55,31 @@ export default function Layout() {
     return val;
   };
 
+  // Close sidebar on navigation (mobile)
+  const handleNavClick = () => {
+    if (window.innerWidth < 1024) setSidebarOpen(false);
+  };
+
   return (
     <div className="min-h-screen flex">
+      {/* Mobile hamburger */}
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        className="lg:hidden fixed top-4 left-4 z-50 bg-white border border-gray-200 rounded-lg p-2 shadow-sm"
+        aria-label="Toggle menu"
+      >
+        {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+      </button>
+
+      {/* Sidebar overlay on mobile */}
+      {sidebarOpen && (
+        <div className="lg:hidden fixed inset-0 bg-black/30 z-30" onClick={() => setSidebarOpen(false)} />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
+      <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-200 flex flex-col transform transition-transform lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="p-4 border-b border-gray-200">
-          <Link to="/" className="flex items-center gap-2 text-xl font-bold text-primary-600">
+          <Link to="/" onClick={handleNavClick} className="flex items-center gap-2 text-xl font-bold text-primary-600">
             <MessageSquare className="w-6 h-6" />
             Plugo
           </Link>
@@ -74,6 +94,7 @@ export default function Layout() {
                 <Link
                   key={to}
                   to={path}
+                  onClick={handleNavClick}
                   className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
                     isActive
                       ? "bg-primary-50 text-primary-700 font-medium"
@@ -182,7 +203,7 @@ export default function Layout() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 p-8 overflow-auto">
+      <main className="flex-1 p-4 pt-16 lg:p-8 lg:pt-8 overflow-auto">
         <Outlet />
       </main>
     </div>

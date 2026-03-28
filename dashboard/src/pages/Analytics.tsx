@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recha
 import { TrendingUp, MessageSquare, Clock, Users, Download, Calendar } from "lucide-react";
 import api from "../lib/api";
 import { useLocale } from "../lib/useLocale";
+import { SkeletonCard, SkeletonChart } from "../components/Skeleton";
 
 const getOverview = (siteId: string, days = 30) =>
   api.get(`/analytics/overview?site_id=${siteId}&days=${days}`).then((r) => r.data);
@@ -46,13 +47,13 @@ export default function Analytics() {
   const { t } = useLocale();
   const [days, setDays] = useState(30);
 
-  const { data: overview } = useQuery({
+  const { data: overview, isLoading: overviewLoading } = useQuery({
     queryKey: ["analytics-overview", siteId, days],
     queryFn: () => getOverview(siteId!, days),
     enabled: !!siteId,
   });
 
-  const { data: chartData = [] } = useQuery({
+  const { data: chartData = [], isLoading: chartLoading } = useQuery({
     queryKey: ["analytics-chart", siteId, days],
     queryFn: () => getMessagesPerDay(siteId!, days),
     enabled: !!siteId,
@@ -127,7 +128,12 @@ export default function Analytics() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      {overviewLoading ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
+        </div>
+      ) : null}
+      {!overviewLoading && <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard
           icon={Users}
           label={t("analytics.totalSessions")}
@@ -152,9 +158,11 @@ export default function Analytics() {
           value={formatDuration(overview?.avg_session_duration_seconds ?? 0)}
           color="bg-orange-50 text-orange-600"
         />
-      </div>
+      </div>}
 
       {/* Messages per day chart */}
+      {chartLoading ? <SkeletonChart /> : null}
+      {!chartLoading && (
       <div className="bg-white p-6 rounded-xl border border-gray-200 mb-8">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold">{t("analytics.messagesPerDay")}</h3>
@@ -186,7 +194,7 @@ export default function Analytics() {
             </div>
           )}
         </div>
-      </div>
+      </div>)}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Popular questions */}
