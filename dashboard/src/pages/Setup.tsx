@@ -6,6 +6,7 @@ import { getSite } from "../lib/api";
 import {
   Globe, Play, Square, RefreshCw, CheckCircle, XCircle,
   Clock, Database, Trash2, Power, PowerOff, Settings2,
+  ChevronDown, ChevronUp, Terminal,
 } from "lucide-react";
 import api from "../lib/api";
 import { useLocale } from "../lib/useLocale";
@@ -24,6 +25,8 @@ const getCrawlJobs = (siteId: string) =>
   api.get(`/crawl/jobs/${siteId}`).then((r) => r.data);
 const clearKnowledge = (siteId: string) =>
   api.delete(`/crawl/knowledge/${siteId}`).then((r) => r.data);
+const getCrawlLogs = (jobId: string) =>
+  api.get(`/crawl/job/${jobId}/logs`).then((r) => r.data);
 
 export default function Setup() {
   const { siteId } = useParams<{ siteId: string }>();
@@ -32,6 +35,10 @@ export default function Setup() {
   const [maxPages, setMaxPages] = useState(50);
   const [customUrl, setCustomUrl] = useState("");
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  const [selectedLogJobId, setSelectedLogJobId] = useState<string | null>(null);
+  const [logsExpanded, setLogsExpanded] = useState(true);
+  const logContainerRef = useRef<HTMLDivElement>(null);
 
   const { data: site } = useQuery({
     queryKey: ["site", siteId],
@@ -45,6 +52,13 @@ export default function Setup() {
     enabled: !!siteId,
     refetchInterval: (query) => query.state.data?.crawl_status === "running" ? 2000 : false,
   });
+
+  // Tick every second while crawl is running so elapsed time updates
+  useEffect(() => {
+    if (crawlStatus?.crawl_status !== "running") return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [crawlStatus?.crawl_status]);
 
   // Detect crawl completion/failure and push notification
   const prevCrawlStatus = useRef<string | null>(null);
@@ -73,6 +87,33 @@ export default function Setup() {
     queryFn: () => getCrawlJobs(siteId!),
     enabled: !!siteId,
   });
+
+  // Find the running job (used for progress + logs)
+  const runningJob = jobs.find((j: any) => j.status === "running");
+
+  // Determine which job to show logs for: running job or user-selected historical job
+  const activeLogJobId = runningJob?.id || selectedLogJobId;
+
+  const { data: logData } = useQuery({
+    queryKey: ["crawl-logs", activeLogJobId],
+    queryFn: () => getCrawlLogs(activeLogJobId!),
+    enabled: !!activeLogJobId,
+    refetchInterval: runningJob?.id === activeLogJobId && runningJob?.status === "running" ? 2000 : false,
+  });
+
+  // Auto-scroll log container when new entries appear
+  useEffect(() => {
+    if (logContainerRef.current && logsExpanded) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    }
+  }, [logData?.logs?.length, logsExpanded]);
+
+  // Clear selected log job when a new crawl starts
+  useEffect(() => {
+    if (runningJob?.id) {
+      setSelectedLogJobId(null);
+    }
+  }, [runningJob?.id]);
 
   const toggleMutation = useMutation({
     mutationFn: (enabled: boolean) =>
@@ -122,7 +163,6 @@ export default function Setup() {
   const isEnabled = crawlStatus?.crawl_enabled ?? false;
 
   // Progress estimate for running crawls
-  const runningJob = jobs.find((j: any) => j.status === "running");
   const progressPercent = runningJob && maxPages > 0
     ? Math.min(100, Math.round((runningJob.pages_done / maxPages) * 100))
     : 0;
@@ -138,7 +178,7 @@ export default function Setup() {
   };
 
   return (
-    <div className="max-w-3xl">
+    <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-2">{t("setup.title")}</h1>
       <p className="text-gray-500 mb-6">{t("setup.subtitle")}</p>
 
@@ -225,6 +265,72 @@ export default function Setup() {
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
+            {runningJob?.started_at && (
+              <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  Elapsed: {(() => {
+                    const elapsed = Math.max(0, Math.floor((now - new Date(runningJob.started_at).getTime()) / 1000));
+                    const mins = Math.floor(elapsed / 60);
+                    const secs = elapsed % 60;
+                    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+                  })()}
+                </span>
+                <span>
+                  Speed: {(() => {
+                    const elapsedMin = Math.max(0, (now - new Date(runningJob.started_at).getTime()) / 60000);
+                    if (elapsedMin < 0.1) return "calculating...";
+                    return `${(runningJob.pages_done / elapsedMin).toFixed(1)} pages/min`;
+                  })()}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Crawl Log Panel (visible during running crawl) */}
+        {isRunning && logData?.logs?.length > 0 && (
+          <div className="mt-4">
+            <button
+              onClick={() => setLogsExpanded(!logsExpanded)}
+              className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-2"
+            >
+              <Terminal className="w-4 h-4" />
+              <span className="font-medium">Crawl Log ({logData.logs.length} entries)</span>
+              {logsExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+            {logsExpanded && (
+              <div
+                ref={logContainerRef}
+                className="bg-gray-900 rounded-lg p-4 max-h-64 overflow-y-auto font-mono text-xs"
+              >
+                {logData.logs.map((log: any, i: number) => (
+                  <div key={i} className="flex items-start gap-2 py-1 border-b border-gray-800 last:border-0">
+                    <span className="text-gray-500 shrink-0">
+                      {new Date(log.timestamp).toLocaleTimeString()}
+                    </span>
+                    {log.status === "success" ? (
+                      <span className="text-green-400 shrink-0">OK</span>
+                    ) : log.status === "skipped" ? (
+                      <span className="text-yellow-400 shrink-0">--</span>
+                    ) : (
+                      <span className="text-red-400 shrink-0">ERR</span>
+                    )}
+                    <span className="text-gray-300 truncate flex-1" title={log.url}>
+                      {log.url}
+                    </span>
+                    {log.status === "success" && (
+                      <span className="text-blue-400 shrink-0">{log.chunks} chunks</span>
+                    )}
+                    {log.error && (
+                      <span className="text-red-400 shrink-0 truncate max-w-[200px]" title={log.error}>
+                        {log.error}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -330,28 +436,89 @@ export default function Setup() {
           <h3 className="font-semibold mb-4 flex items-center gap-2">
             <Database className="w-5 h-5" /> {t("setup.crawlHistory")}
           </h3>
-          <div className="space-y-3">
-            {jobs.map((job: any) => (
-              <div
-                key={job.id}
-                className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0"
-              >
-                <div className="flex items-center gap-3">
-                  {statusIcon(job.status)}
-                  <div>
-                    <span className="text-sm font-medium capitalize">{job.status}</span>
-                    <span className="text-xs text-gray-400 ml-2">
-                      {job.pages_done} {t("setup.pages")}
-                    </span>
-                  </div>
+          <div className="space-y-1">
+            {jobs.map((job: any) => {
+              const isSelected = selectedLogJobId === job.id;
+              const isJobRunning = job.status === "running";
+              return (
+                <div key={job.id}>
+                  <button
+                    onClick={() => {
+                      if (isJobRunning) return;
+                      setSelectedLogJobId(isSelected ? null : job.id);
+                      setLogsExpanded(true);
+                    }}
+                    className={`w-full flex items-center justify-between py-2 px-3 rounded-lg transition-colors ${
+                      isSelected
+                        ? "bg-gray-100 border border-gray-200"
+                        : "hover:bg-gray-50 border border-transparent"
+                    } ${isJobRunning ? "cursor-default" : "cursor-pointer"}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {statusIcon(job.status)}
+                      <div className="text-left">
+                        <span className="text-sm font-medium capitalize">{job.status}</span>
+                        <span className="text-xs text-gray-400 ml-2">
+                          {job.pages_done} {t("setup.pages")}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400">
+                        {job.started_at
+                          ? new Date(job.started_at).toLocaleString()
+                          : ""}
+                      </span>
+                      {!isJobRunning && (
+                        isSelected
+                          ? <ChevronUp className="w-4 h-4 text-gray-400" />
+                          : <ChevronDown className="w-4 h-4 text-gray-400" />
+                      )}
+                    </div>
+                  </button>
+
+                  {/* Expanded log view for selected historical job */}
+                  {isSelected && logData?.logs?.length > 0 && (
+                    <div className="mt-2 mb-3 ml-2">
+                      <div className="bg-gray-900 rounded-lg p-4 max-h-64 overflow-y-auto font-mono text-xs">
+                        {logData.logs.map((log: any, i: number) => (
+                          <div key={i} className="flex items-start gap-2 py-1 border-b border-gray-800 last:border-0">
+                            <span className="text-gray-500 shrink-0">
+                              {new Date(log.timestamp).toLocaleTimeString()}
+                            </span>
+                            {log.status === "success" ? (
+                              <span className="text-green-400 shrink-0">OK</span>
+                            ) : log.status === "skipped" ? (
+                              <span className="text-yellow-400 shrink-0">--</span>
+                            ) : (
+                              <span className="text-red-400 shrink-0">ERR</span>
+                            )}
+                            <span className="text-gray-300 truncate flex-1" title={log.url}>
+                              {log.url}
+                            </span>
+                            {log.status === "success" && (
+                              <span className="text-blue-400 shrink-0">{log.chunks} chunks</span>
+                            )}
+                            {log.error && (
+                              <span className="text-red-400 shrink-0 truncate max-w-[200px]" title={log.error}>
+                                {log.error}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {isSelected && (!logData?.logs || logData.logs.length === 0) && (
+                    <div className="mt-2 mb-3 ml-2">
+                      <div className="bg-gray-900 rounded-lg p-4 font-mono text-xs text-gray-500">
+                        No crawl logs available for this job.
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <span className="text-xs text-gray-400">
-                  {job.started_at
-                    ? new Date(job.started_at).toLocaleString()
-                    : ""}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

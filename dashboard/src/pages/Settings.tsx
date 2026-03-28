@@ -97,6 +97,37 @@ export default function Settings() {
     onError: () => toast.error("Failed to save settings"),
   });
 
+  // Ctrl+S / Cmd+S keyboard shortcut to save
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (hasChanges && Object.keys(errors).length === 0) {
+          const { suggestions: suggestionsStr, ...rest } = form;
+          const suggestions = suggestionsStr
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+          mutation.mutate({ ...rest, suggestions });
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [hasChanges, form, errors, mutation]);
+
+  // Prevent navigate-away with unsaved changes
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (hasChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasChanges]);
+
   const deletesMutation = useMutation({
     mutationFn: () => deleteSite(siteId!),
     onSuccess: () => {
@@ -121,7 +152,7 @@ export default function Settings() {
   const currentProvider = providers.find((p: any) => p.id === form.llm_provider);
 
   return (
-    <div className="max-w-2xl">
+    <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-2">{t("settings.title")}</h1>
       <p className="text-gray-500 mb-8">{t("settings.widget")}</p>
 
@@ -242,9 +273,11 @@ export default function Settings() {
         </div>
 
         <button type="submit" disabled={mutation.isPending || Object.keys(errors).length > 0}
+          title="Ctrl+S"
           className="flex items-center gap-2 bg-primary-600 text-white px-6 py-2.5 rounded-lg hover:bg-primary-700 disabled:opacity-50">
           <Save className="w-4 h-4" />
           {mutation.isPending ? t("settings.saving") : t("settings.saveChanges")}
+          <kbd className="ml-1 text-xs bg-primary-700 px-1.5 py-0.5 rounded opacity-75">Ctrl+S</kbd>
         </button>
       </form>
 

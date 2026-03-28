@@ -1,6 +1,6 @@
 """Analytics router — aggregate stats from chat sessions."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import Counter
 from fastapi import APIRouter, Depends, Query
 from repositories import get_repos, Repositories
@@ -17,8 +17,8 @@ async def get_overview(
     _user: TokenData = Depends(get_current_user),
 ):
     """Get overview stats: total sessions, messages, avg duration."""
-    sessions = await repos.chat_sessions.list_by_site(site_id)
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    sessions = await repos.chat_sessions.list_by_site_since(site_id, cutoff)
 
     total_sessions = 0
     total_messages = 0
@@ -26,16 +26,13 @@ async def get_overview(
     sessions_with_duration = 0
 
     for s in sessions:
-        started = s.get("started_at")
-        if isinstance(started, str):
-            started = datetime.fromisoformat(started)
-        if started and started < cutoff:
-            continue
-
         total_sessions += 1
         msg_count = s.get("message_count", len(s.get("messages", [])))
         total_messages += msg_count
 
+        started = s.get("started_at")
+        if isinstance(started, str):
+            started = datetime.fromisoformat(started)
         ended = s.get("ended_at")
         if started and ended:
             if isinstance(ended, str):
@@ -64,8 +61,8 @@ async def get_messages_per_day(
     _user: TokenData = Depends(get_current_user),
 ):
     """Get daily message counts for chart."""
-    sessions = await repos.chat_sessions.list_by_site(site_id)
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    sessions = await repos.chat_sessions.list_by_site_since(site_id, cutoff)
     daily_counts: dict[str, int] = {}
 
     for s in sessions:
@@ -89,7 +86,7 @@ async def get_messages_per_day(
     # Fill in missing days
     result = []
     for i in range(days):
-        day = (datetime.utcnow() - timedelta(days=days - 1 - i)).strftime("%Y-%m-%d")
+        day = (datetime.now(timezone.utc) - timedelta(days=days - 1 - i)).strftime("%Y-%m-%d")
         result.append({"date": day, "messages": daily_counts.get(day, 0)})
 
     return result
@@ -103,7 +100,8 @@ async def get_popular_questions(
     _user: TokenData = Depends(get_current_user),
 ):
     """Get most common user questions."""
-    sessions = await repos.chat_sessions.list_by_site(site_id)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+    sessions = await repos.chat_sessions.list_by_site_since(site_id, cutoff)
     questions = []
 
     for s in sessions:
@@ -127,7 +125,8 @@ async def get_knowledge_gaps(
     _user: TokenData = Depends(get_current_user),
 ):
     """Find user questions where bot responses indicated no knowledge was found."""
-    sessions = await repos.chat_sessions.list_by_site(site_id)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+    sessions = await repos.chat_sessions.list_by_site_since(site_id, cutoff)
     gap_indicators = [
         "i don't have", "i'm not sure", "i couldn't find", "no information",
         "không tìm thấy", "không có thông tin", "tôi không biết",
@@ -162,21 +161,12 @@ async def get_tool_usage(
     _user: TokenData = Depends(get_current_user),
 ):
     """Get tool call statistics from chat sessions."""
-    sessions = await repos.chat_sessions.list_by_site(site_id)
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    sessions = await repos.chat_sessions.list_by_site_since(site_id, cutoff)
     tool_calls: Counter = Counter()
     tool_errors: Counter = Counter()
 
     for s in sessions:
-        started = s.get("started_at")
-        if isinstance(started, str):
-            try:
-                started = datetime.fromisoformat(started)
-            except ValueError:
-                started = None
-        if started and started < cutoff:
-            continue
-
         messages = s.get("messages", [])
         for msg in messages:
             if msg.get("role") != "assistant":

@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getSessions, getSession } from "../lib/api";
-import { MessageCircle, User, Bot, Search, Globe, Clock } from "lucide-react";
+import { MessageCircle, User, Bot, Search, Globe, Clock, Download } from "lucide-react";
 import { useLocale } from "../lib/useLocale";
 import { SkeletonList } from "../components/Skeleton";
 
@@ -22,6 +22,8 @@ export default function ChatLog() {
   const { t } = useLocale();
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const { data: sessions = [], isLoading } = useQuery({
     queryKey: ["sessions", siteId],
@@ -35,32 +37,92 @@ export default function ChatLog() {
     enabled: !!selectedSession,
   });
 
-  // Filter sessions by search query (matches message content)
+  // Filter sessions by search query and date range
   const filteredSessions = useMemo(() => {
-    if (!searchQuery.trim()) return sessions;
-    const q = searchQuery.toLowerCase();
     return sessions.filter((s: any) => {
-      if (s.visitor_id?.toLowerCase().includes(q)) return true;
-      if (s.page_url?.toLowerCase().includes(q)) return true;
-      if (s.first_message?.toLowerCase().includes(q)) return true;
-      return false;
+      // Text search
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesText =
+          s.visitor_id?.toLowerCase().includes(q) ||
+          s.page_url?.toLowerCase().includes(q) ||
+          s.first_message?.toLowerCase().includes(q);
+        if (!matchesText) return false;
+      }
+      // Date filter
+      if (dateFrom && s.started_at) {
+        if (new Date(s.started_at) < new Date(dateFrom)) return false;
+      }
+      if (dateTo && s.started_at) {
+        const toEnd = new Date(dateTo);
+        toEnd.setDate(toEnd.getDate() + 1);
+        if (new Date(s.started_at) >= toEnd) return false;
+      }
+      return true;
     });
-  }, [sessions, searchQuery]);
+  }, [sessions, searchQuery, dateFrom, dateTo]);
+
+  const exportSessionCsv = () => {
+    if (!sessionDetail?.messages) return;
+    const rows = sessionDetail.messages.map((msg: any) => {
+      const content = (msg.content || "").replace(/"/g, '""');
+      const timestamp = msg.created_at || "";
+      return `"${timestamp}","${msg.role}","${content}"`;
+    });
+    const csv = "Timestamp,Role,Content\n" + rows.join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `chat-session-${selectedSession}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
-    <div className="max-w-5xl">
+    <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-2">{t("chatLog.title")}</h1>
       <p className="text-gray-500 mb-6">{t("chatLog.subtitle")}</p>
 
-      {/* Search */}
-      <div className="relative mb-6">
-        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder={t("chatLog.searchMessages")}
-          className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
-        />
+      {/* Search + Date Filters */}
+      <div className="space-y-3 mb-6">
+        <div className="relative">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t("chatLog.searchMessages")}
+            className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500 shrink-0">From:</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500 shrink-0">To:</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          {(dateFrom || dateTo) && (
+            <button
+              onClick={() => { setDateFrom(""); setDateTo(""); }}
+              className="text-xs text-gray-400 hover:text-gray-600"
+            >
+              Clear dates
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6">
@@ -126,6 +188,16 @@ export default function ChatLog() {
         <div className="flex-1">
           {selectedSession && sessionDetail?.messages ? (
             <div>
+              {/* Export button */}
+              <div className="flex justify-end mb-2">
+                <button
+                  onClick={exportSessionCsv}
+                  className="flex items-center gap-1 text-sm text-gray-600 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50"
+                >
+                  <Download className="w-4 h-4" />
+                  Export CSV
+                </button>
+              </div>
               {/* Session metadata */}
               {(sessionDetail.visitor_id || sessionDetail.page_url) && (
                 <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 mb-3 text-xs text-gray-500 space-y-1">

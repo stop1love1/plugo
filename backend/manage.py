@@ -20,45 +20,47 @@ load_dotenv()
 
 from database import init_db, async_session
 from auth import hash_password, verify_password
-from repositories import get_repos
+from repositories import create_repos
 import models  # noqa: F401 — ensure all models registered for create_all
 
 
 async def create_admin(username: str, password: str):
     """Create an admin user."""
     await init_db()
-    repos = await get_repos()
+    repos = await create_repos()
+    try:
+        # Check if username already exists
+        existing = await repos.users.get_by_username(username)
+        if existing:
+            print(f"Error: User '{username}' already exists.")
+            return False
 
-    # Check if username already exists
-    existing = await repos.users.get_by_username(username)
-    if existing:
-        print(f"Error: User '{username}' already exists.")
-        return False
+        await repos.users.create({
+            "username": username,
+            "password_hash": hash_password(password),
+            "role": "admin",
+        })
 
-    await repos.users.create({
-        "username": username,
-        "password_hash": hash_password(password),
-        "role": "admin",
-    })
-
-    print(f"Admin user '{username}' created successfully.")
-    return True
+        print(f"Admin user '{username}' created successfully.")
+        return True
+    finally:
+        await repos.close()
 
 
 async def reset_password(username: str, new_password: str):
     """Reset a user's password."""
     await init_db()
-    repos = await get_repos()
 
-    user = await repos.users.get_by_username(username)
-    if not user:
-        print(f"Error: User '{username}' not found.")
-        return False
-
-    # Update password via raw SQL since repos may not have an update method for users
-    from sqlalchemy import update
+    # Use a single DB session for both lookup and update to avoid transaction split
+    from sqlalchemy import select, update
     from models.user import User
     async with async_session() as db:
+        result = await db.execute(select(User).where(User.username == username))
+        user = result.scalar_one_or_none()
+        if not user:
+            print(f"Error: User '{username}' not found.")
+            return False
+
         await db.execute(
             update(User)
             .where(User.username == username)
@@ -73,25 +75,26 @@ async def reset_password(username: str, new_password: str):
 async def list_users():
     """List all users."""
     await init_db()
-    repos = await get_repos()
+    repos = await create_repos()
+    try:
+        users = await repos.users.list_all()
 
-    # Get all users through the repo
-    from sqlalchemy import select
-    from models.user import User
-    async with async_session() as db:
-        result = await db.execute(select(User).order_by(User.created_at))
-        users = result.scalars().all()
+        if not users:
+            print("No users found. Run 'python manage.py create-admin' to create one.")
+            return
 
-    if not users:
-        print("No users found. Run 'python manage.py create-admin' to create one.")
-        return
-
-    print(f"\n{'Username':<20} {'Role':<10} {'Created At'}")
-    print("-" * 55)
-    for u in users:
-        created = u.created_at.strftime("%Y-%m-%d %H:%M") if u.created_at else "N/A"
-        print(f"{u.username:<20} {u.role:<10} {created}")
-    print(f"\nTotal: {len(users)} user(s)")
+        print(f"\n{'Username':<20} {'Role':<10} {'Created At'}")
+        print("-" * 55)
+        for u in users:
+            # Support both dict and ORM object access
+            username = u.get("username", "") if isinstance(u, dict) else u.username
+            role = u.get("role", "") if isinstance(u, dict) else u.role
+            created_at = u.get("created_at") if isinstance(u, dict) else u.created_at
+            created = created_at.strftime("%Y-%m-%d %H:%M") if created_at else "N/A"
+            print(f"{username:<20} {role:<10} {created}")
+        print(f"\nTotal: {len(users)} user(s)")
+    finally:
+        await repos.close()
 
 
 def prompt_password(confirm: bool = True) -> str:

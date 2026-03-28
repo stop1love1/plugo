@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { getKnowledge, getChunk, updateChunk, deleteChunk, addManualChunk, uploadFile } from "../lib/api";
-import { Trash2, Plus, Upload, FileText, Search, Pencil, X, ExternalLink } from "lucide-react";
+import { Trash2, Plus, Upload, FileText, Search, Pencil, X, ExternalLink, Download } from "lucide-react";
 import api from "../lib/api";
 import { PageHeader } from "../components/PageHeader";
 import { EmptyState } from "../components/EmptyState";
@@ -23,6 +23,9 @@ export default function Knowledge() {
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+
+  // Preview/expand state
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // Edit state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -127,6 +130,18 @@ export default function Knowledge() {
     updateMutation.mutate({ id: editingId, data: { title: editTitle, content: editContent } });
   };
 
+  const exportAllJson = () => {
+    if (!data?.chunks?.length) return;
+    const json = JSON.stringify(data.chunks, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `knowledge-${siteId}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -149,6 +164,13 @@ export default function Knowledge() {
   return (
     <div className="max-w-4xl">
       <PageHeader title={t("knowledge.title")} subtitle={`${data?.total || 0} ${t("knowledge.chunks")}`}>
+        <button
+          onClick={exportAllJson}
+          disabled={!data?.chunks?.length}
+          className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+        >
+          <Download className="w-4 h-4" /> Export JSON
+        </button>
         <label className={`flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 cursor-pointer ${uploading ? "opacity-50 pointer-events-none" : ""}`}>
           <Upload className="w-4 h-4" /> {uploading ? t("knowledge.uploading") : t("knowledge.bulkUpload")}
           <input type="file" accept=".txt,.md" multiple onChange={handleUpload} className="hidden" />
@@ -293,7 +315,29 @@ export default function Knowledge() {
                 />
                 <div className="flex-1 min-w-0">
                   <h4 className="font-medium text-gray-900 truncate">{chunk.title || "Untitled"}</h4>
-                  <p className="text-sm text-gray-500 mt-1">{chunk.content}</p>
+                  {expandedId === chunk.id ? (
+                    <div className="mt-1">
+                      <p className="text-sm text-gray-500 whitespace-pre-wrap">{chunk.content}</p>
+                      <button
+                        onClick={() => setExpandedId(null)}
+                        className="text-xs text-primary-600 hover:text-primary-700 mt-1"
+                      >
+                        Show less
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-1">
+                      <p className="text-sm text-gray-500 line-clamp-2">{chunk.content}</p>
+                      {chunk.content && chunk.content.length > 150 && (
+                        <button
+                          onClick={() => setExpandedId(chunk.id)}
+                          className="text-xs text-primary-600 hover:text-primary-700 mt-1"
+                        >
+                          Read more
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <div className="flex gap-3 mt-2 text-xs text-gray-400">
                     <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100">{chunk.source_type}</span>
                     {chunk.source_url && (

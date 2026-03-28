@@ -79,7 +79,7 @@ p{text-align:center;font-size:14px;}</style></head>
         doc.close();
       }
     }
-  }, [showPreview, previewHtml]);
+  }, [showPreview, previewHtml, previewColor, previewPosition, previewGreeting, previewDarkMode]);
 
   const handleCopy = (code: string, id: string) => {
     navigator.clipboard.writeText(code);
@@ -88,7 +88,7 @@ p{text-align:center;font-size:14px;}</style></head>
   };
 
   return (
-    <div className="max-w-3xl">
+    <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-2">{t("embed.title")}</h1>
       <p className="text-gray-500 mb-8">{t("embed.subtitle")}</p>
 
@@ -109,7 +109,7 @@ p{text-align:center;font-size:14px;}</style></head>
         </div>
 
         {/* Configurator controls */}
-        <div className="p-4 grid grid-cols-2 gap-4">
+        <div className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Primary Color</label>
             <div className="flex items-center gap-2">
@@ -137,7 +137,7 @@ p{text-align:center;font-size:14px;}</style></head>
               <option value="bottom-left">Bottom Left</option>
             </select>
           </div>
-          <div className="col-span-2">
+          <div className="lg:col-span-2">
             <label className="block text-xs font-medium text-gray-600 mb-1">Greeting</label>
             <input
               value={previewGreeting}

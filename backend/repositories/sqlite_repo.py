@@ -1,7 +1,7 @@
 """SQLite implementation using SQLAlchemy async."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -78,6 +78,7 @@ def _job_to_dict(j: CrawlJob) -> dict:
         "id": j.id, "site_id": j.site_id, "status": j.status,
         "start_url": j.start_url, "pages_found": j.pages_found,
         "pages_done": j.pages_done, "error_log": j.error_log,
+        "crawl_log": j.crawl_log,
         "started_at": j.started_at.isoformat() if j.started_at else None,
         "finished_at": j.finished_at.isoformat() if j.finished_at else None,
     }
@@ -207,8 +208,26 @@ class SQLiteKnowledgeRepo(BaseKnowledgeRepo):
         return True
 
     async def create_many(self, chunks: list[dict]) -> list[str]:
+        if not chunks:
+            return []
+
+        # Batch dedup: get all existing hashes for this site in one query
+        hashes_to_check = [c.get("content_hash") for c in chunks if c.get("content_hash")]
+        existing_hashes: set[str] = set()
+        if hashes_to_check:
+            existing_hashes_result = await self.db.execute(
+                select(KnowledgeChunk.content_hash).where(
+                    KnowledgeChunk.site_id == chunks[0]["site_id"],
+                    KnowledgeChunk.content_hash.in_(hashes_to_check),
+                )
+            )
+            existing_hashes = set(row[0] for row in existing_hashes_result.fetchall())
+
         ids = []
         for data in chunks:
+            content_hash = data.get("content_hash")
+            if content_hash and content_hash in existing_hashes:
+                continue  # Duplicate — skip
             chunk = KnowledgeChunk(**data)
             self.db.add(chunk)
             ids.append(data.get("id", chunk.id))
@@ -287,6 +306,15 @@ class SQLiteChatSessionRepo(BaseChatSessionRepo):
         )
         return [_session_to_dict(s) for s in result.scalars().all()]
 
+    async def list_by_site_since(self, site_id: str, since: datetime) -> list[dict]:
+        result = await self.db.execute(
+            select(ChatSession).where(
+                ChatSession.site_id == site_id,
+                ChatSession.started_at >= since,
+            ).order_by(ChatSession.started_at.desc())
+        )
+        return [_session_to_dict(s) for s in result.scalars().all()]
+
     async def update_messages(self, session_id: str, messages: list[dict]) -> bool:
         session = await self.db.get(ChatSession, session_id)
         if not session:
@@ -295,11 +323,11 @@ class SQLiteChatSessionRepo(BaseChatSessionRepo):
         await self.db.commit()
         return True
 
-    async def set_ended(self, session_id: str) -> bool:
+    async def set_ended(self, session_id: str, clear: bool = False) -> bool:
         session = await self.db.get(ChatSession, session_id)
         if not session:
             return False
-        session.ended_at = datetime.utcnow()
+        session.ended_at = None if clear else datetime.now(timezone.utc)
         await self.db.commit()
         return True
 
@@ -428,7 +456,7 @@ class SQLiteVisitorMemoryRepo(BaseVisitorMemoryRepo):
             for k, v in data.items():
                 if v is not None:
                     setattr(existing, k, v)
-            existing.updated_at = datetime.utcnow()
+            existing.updated_at = datetime.now(timezone.utc)
             await self.db.commit()
             return _memory_to_dict(existing)
         else:
@@ -490,7 +518,7 @@ class SQLiteConversationSummaryRepo(BaseConversationSummaryRepo):
             for k, v in data.items():
                 if v is not None:
                     setattr(existing, k, v)
-            existing.updated_at = datetime.utcnow()
+            existing.updated_at = datetime.now(timezone.utc)
             await self.db.commit()
             return _summary_to_dict(existing)
         else:

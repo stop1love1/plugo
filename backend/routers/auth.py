@@ -4,6 +4,7 @@ Authentication router — login, token management.
 Admin accounts are created via CLI: python manage.py create-admin
 """
 
+import json
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from repositories import get_repos, Repositories
@@ -11,6 +12,7 @@ from auth import (
     hash_password, verify_password, create_access_token,
     get_current_user, TokenData,
 )
+from logging_config import logger
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -45,11 +47,29 @@ async def login(data: LoginRequest, repos: Repositories = Depends(get_repos)):
         )
 
     token = create_access_token(subject=user["id"], role=user["role"])
+    try:
+        await repos.audit_logs.create({
+            "user_id": user["id"],
+            "username": user["username"],
+            "action": "login",
+            "resource_type": "auth",
+            "resource_id": user["id"],
+            "details": json.dumps({"username": user["username"]}),
+        })
+    except Exception as e:
+        logger.warning("Failed to create audit log", error=str(e))
     return TokenResponse(
         access_token=token,
         role=user["role"],
         username=user["username"],
     )
+
+
+@router.post("/refresh")
+async def refresh_token(user: TokenData = Depends(get_current_user)):
+    """Issue a new access token using the current valid token."""
+    new_token = create_access_token(subject=user.sub, role=user.role)
+    return {"access_token": new_token, "token_type": "bearer"}
 
 
 @router.get("/me")

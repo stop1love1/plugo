@@ -4,7 +4,13 @@ from openai import AsyncOpenAI
 from providers.base import BaseLLMProvider
 
 
+_EMBEDDING_MODELS = {"text-embedding-ada-002", "text-embedding-3-small", "text-embedding-3-large"}
+
+
 class OpenAIProvider(BaseLLMProvider):
+    def is_embedding_model(self) -> bool:
+        return self.model in _EMBEDDING_MODELS or "embed" in self.model
+
     def __init__(self, api_key: str, model: str = "gpt-4o"):
         self.client = AsyncOpenAI(api_key=api_key)
         self.model = model
@@ -57,8 +63,9 @@ class OpenAIProvider(BaseLLMProvider):
                 yield chunk.choices[0].delta.content
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
+        embed_model = self.model if self.is_embedding_model() else "text-embedding-3-small"
         response = await self.client.embeddings.create(
-            model="text-embedding-3-small",
+            model=embed_model,
             input=texts,
         )
         return [item.embedding for item in response.data]

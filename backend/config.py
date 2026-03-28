@@ -84,8 +84,14 @@ class Settings(BaseSettings):
     backend_port: int = _get("server", "backend_port", 8000)
     widget_cdn_url: str = _get("server", "widget_cdn_url", "http://localhost:8000/static/widget.js")
 
+    # --- Crawl (from config.json → crawl) ---
+    crawl_verify_ssl: bool = _get("crawl", "verify_ssl", True)
+
     # --- Auth (from config.json → auth) ---
     auth_enabled: bool = _get("auth", "enabled", True)
+
+    # --- Agent (from config.json → agent) ---
+    no_tool_providers: list[str] = _get("agent", "no_tool_providers", ["ollama", "lmstudio"])
 
     class Config:
         env_file = ".env"

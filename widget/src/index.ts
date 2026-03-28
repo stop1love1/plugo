@@ -183,6 +183,7 @@ function getWidgetStyles(primaryColor: string): string {
       background: #f1f3f5;
       border-radius: 12px;
       display: flex;
+      align-items: center;
       gap: 4px;
     }
     .plugo-typing span {
@@ -244,11 +245,14 @@ function getWidgetStyles(primaryColor: string): string {
     @media (max-width: 480px) {
       .plugo-window {
         width: 100vw;
-        height: 100vh;
+        height: 100dvh;
         bottom: 0;
         right: 0;
         left: 0;
         border-radius: 0;
+      }
+      .plugo-input-area {
+        padding-bottom: env(safe-area-inset-bottom, 8px);
       }
     }
 
@@ -441,6 +445,52 @@ function getWidgetStyles(primaryColor: string): string {
       flex-wrap: wrap;
       gap: 6px;
     }
+
+    /* Timestamp */
+    .plugo-msg-time { font-size: 10px; color: #999; margin-top: 2px; }
+    .plugo-dark .plugo-msg-time { color: #666; }
+
+    /* Copy button */
+    .plugo-msg-wrapper { position: relative; }
+    .plugo-copy-btn {
+      position: absolute; top: 4px; right: 4px;
+      background: rgba(255,255,255,0.9); border: 1px solid #e5e7eb;
+      border-radius: 4px; padding: 2px 4px; cursor: pointer;
+      opacity: 0; transition: opacity 0.2s; font-size: 11px;
+      display: inline-flex; align-items: center; justify-content: center;
+      z-index: 1; line-height: 1;
+    }
+    .plugo-msg-wrapper:hover .plugo-copy-btn { opacity: 1; }
+    .plugo-dark .plugo-copy-btn { background: rgba(45,45,68,0.9); border-color: #3d3d5c; color: #ccc; }
+
+    /* Retry button */
+    .plugo-retry-btn {
+      margin-top: 6px; padding: 4px 12px;
+      background: #fee2e2; color: #991b1b; border: 1px solid #fecaca;
+      border-radius: 6px; cursor: pointer; font-size: 12px;
+      font-family: inherit; display: inline-flex; align-items: center;
+    }
+    .plugo-retry-btn:hover { background: #fecaca; }
+    .plugo-dark .plugo-retry-btn { background: #3d2020; color: #fca5a5; border-color: #5c2d2d; }
+
+    /* Typing indicator text */
+    .plugo-typing-text {
+      font-size: 12px; color: #999; margin-left: 4px;
+      display: inline-flex; align-items: center;
+    }
+    .plugo-dark .plugo-typing-text { color: #888; }
+
+    /* Complete dark mode */
+    .plugo-dark .plugo-error { background: #3d2020; color: #fca5a5; border-color: #5c2d2d; }
+    .plugo-dark .plugo-markdown a { color: #93c5fd; }
+    .plugo-dark .plugo-markdown code { background: #3d3d5c; color: #e0e0e0; }
+    .plugo-dark .plugo-markdown pre { background: #2d2d44; }
+    .plugo-dark .plugo-markdown blockquote { border-left-color: #3d3d5c; color: #aaa; }
+    .plugo-dark .plugo-status-bar { background: #2d2d44; color: #888; }
+
+    /* Character counter warning/danger */
+    .plugo-char-counter.warning { color: #f59e0b; }
+    .plugo-char-counter.danger { color: #ef4444; font-weight: 600; }
 
     /* Accessibility */
     .plugo-messages { -webkit-overflow-scrolling: touch; }

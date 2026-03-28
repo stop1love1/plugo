@@ -1,6 +1,7 @@
 import json
 from typing import Optional
 import httpx
+from utils.crypto import decrypt_value
 
 
 class ToolExecutor:
@@ -36,11 +37,21 @@ class ToolExecutor:
                     "method": tool["method"],
                     "url": tool["url"],
                     "auth_type": tool.get("auth_type"),
-                    "auth_value": tool.get("auth_value"),
+                    "auth_value": self._decrypt_auth(tool.get("auth_value")),
                     "headers": tool.get("headers", {}),
                 },
             })
         return formatted
+
+    @staticmethod
+    def _decrypt_auth(auth_value: str | None) -> str | None:
+        """Decrypt an encrypted auth_value, falling back to raw value for legacy data."""
+        if not auth_value:
+            return auth_value
+        try:
+            return decrypt_value(auth_value)
+        except Exception:
+            return auth_value  # Legacy plaintext value
 
     async def execute_tool(
         self,

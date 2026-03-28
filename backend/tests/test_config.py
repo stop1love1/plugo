@@ -10,7 +10,7 @@ def test_settings_defaults():
     """Settings should have sensible defaults."""
     from config import settings
 
-    assert settings.llm_provider in ("claude", "openai", "gemini", "ollama")
+    assert settings.llm_provider in ("claude", "openai", "gemini", "ollama", "lmstudio")
     assert settings.database_provider in ("sqlite", "mongodb")
     assert settings.backend_port == 8000
     assert settings.chroma_path is not None
@@ -21,13 +21,14 @@ def test_provider_factory_valid():
     from providers.factory import get_all_providers
 
     providers = get_all_providers()
-    assert len(providers) == 4
+    assert len(providers) == 5
 
     provider_ids = [p["id"] for p in providers]
     assert "claude" in provider_ids
     assert "openai" in provider_ids
     assert "gemini" in provider_ids
     assert "ollama" in provider_ids
+    assert "lmstudio" in provider_ids
 
 
 def test_provider_factory_invalid():

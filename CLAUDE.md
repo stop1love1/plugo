@@ -4,7 +4,7 @@
 
 Plugo is an embeddable AI chat widget platform. It has three components:
 - **backend/** — Python FastAPI (port 8000)
-- **dashboard/** — React + Tailwind management UI (port 3000/5173)
+- **dashboard/** — React + Vite + Tailwind management UI (port 3000/5173)
 - **widget/** — Preact embeddable chat widget (~50KB)
 
 ## Quick Commands
@@ -12,28 +12,28 @@ Plugo is an embeddable AI chat widget platform. It has three components:
 ```bash
 make setup          # One-time: create venv, install all deps
 make dev            # Start all 3 services concurrently
+make dev-backend    # Start backend only
+make dev-dashboard  # Start dashboard only
+make dev-widget     # Start widget dev server
 make test           # Run all tests
+make test-backend   # Run backend tests only
+make test-dashboard # Run dashboard tests only
+make test-widget    # Run widget tests only
 make lint           # Run all linters
+make lint-fix       # Run linters with auto-fix
 make format         # Format all code
 make check          # Run lint + format-check + typecheck
+make build          # Build all production assets
+make up             # Start with Docker Compose
+make down           # Stop Docker services
 ```
 
 ## User Management (CLI)
 
-Admin accounts are managed via CLI — there is no registration page on the dashboard.
-
 ```bash
 cd backend
-
-# First-time setup: create admin account
-python manage.py create-admin
 python manage.py create-admin -u admin -p yourpassword
-
-# Reset forgotten password
-python manage.py reset-password -u admin
 python manage.py reset-password -u admin -p newpassword
-
-# List all users
 python manage.py list-users
 ```
 
@@ -56,9 +56,10 @@ python manage.py list-users
 
 ## Architecture Patterns
 
-- **Repository pattern**: `backend/repositories/` — swap SQLite/MongoDB via env var
-- **Provider factory**: `backend/providers/factory.py` — swap LLM providers
-- **RAG pipeline**: Crawl → chunk → embed → ChromaDB → query at chat time
+- **Repository pattern**: `backend/repositories/` — swap SQLite/MongoDB via `config.json → database.provider`
+- **Provider factory**: `backend/providers/factory.py` — swap LLM providers (claude, openai, gemini, ollama, lmstudio)
+- **RAG pipeline**: Crawl → semantic chunk → embed → ChromaDB → query at chat time
+- **Agent system**: `backend/agent/core.py` — ChatAgent with Knowledge Mode + Action Mode
 - **Tool calling**: LLM decides to call HTTP APIs configured per site
 
 ## Testing
@@ -68,28 +69,22 @@ python manage.py list-users
 - Widget tests: `widget/src/**/*.test.ts` (Vitest)
 - Always run `make test` before creating a PR
 
-## Important Files
-
-- `backend/agent/core.py` — Main ChatAgent orchestrator
-- `backend/knowledge/crawler.py` — Web crawler with graceful stop
-- `backend/providers/base.py` — LLM provider interface
-- `widget/src/ui/App.tsx` — Widget entry point
-- `dashboard/src/App.tsx` — Dashboard router
-
 ## Configuration
 
 Two config files at project root:
 
-- **`config.json`** — all project settings (LLM, database, RAG, server, rate limits). Committed to repo.
+- **`config.json`** — all project settings. Committed to repo.
 - **`.env`** — secrets only (API keys, SECRET_KEY). Never committed.
 
 ```
 config.json          ← project config (safe to commit)
 ├── llm.provider/model
+├── ollama.base_url/model
 ├── embedding.provider/model/cache_size/cache_ttl
-├── database.provider/url
+├── database.provider/url/mongodb_url/mongodb_database
+├── vector_store.chroma_path
 ├── rag.min_score/max_chunks
-├── server.backend_port/cors_origins
+├── server.backend_port/cors_origins/widget_cdn_url
 ├── auth.enabled
 └── rate_limit.default/chat/crawl
 
@@ -105,5 +100,6 @@ Environment variables override both (for Docker/CI).
 ## Environment
 
 - Python deps in `.venv/` (project-local)
-- Node deps in `node_modules/` (per package)
+- Node deps in `node_modules/` (per package, managed with pnpm)
 - Database: SQLite (dev) or MongoDB (prod) — set in `config.json → database.provider`
+- Vector store: ChromaDB at `config.json → vector_store.chroma_path`

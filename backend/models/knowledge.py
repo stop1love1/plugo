@@ -15,6 +15,7 @@ class KnowledgeChunk(Base):
     title = Column(String(500), nullable=True)
     content = Column(Text, nullable=False)
     chunk_index = Column(Integer, default=0)
+    content_hash = Column(String(64), nullable=True, index=True)
 
     # Reference to ChromaDB
     embedding_id = Column(String(255), nullable=True)

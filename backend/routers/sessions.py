@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional
 from repositories import get_repos, Repositories
@@ -40,14 +40,21 @@ async def submit_feedback(
     session_id: str,
     data: FeedbackRequest,
     repos: Repositories = Depends(get_repos),
-    _user: TokenData = Depends(get_current_user),
+    site_token: Optional[str] = None,
 ):
     session = await repos.chat_sessions.get_by_id(session_id)
     if not session:
-        return {"error": "Session not found"}
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # If a site_token is provided, verify the session belongs to that site
+    if site_token:
+        site = await repos.sites.get_by_token(site_token)
+        if not site or site.get("id") != session.get("site_id"):
+            raise HTTPException(status_code=403, detail="Session does not belong to this site")
+
     messages = session.get("messages", [])
     if data.message_index >= len(messages):
-        return {"error": "Invalid message index"}
+        raise HTTPException(status_code=400, detail="Invalid message index")
     messages[data.message_index]["feedback"] = data.rating
     await repos.chat_sessions.update_messages(session_id, messages)
     return {"message": "Feedback recorded"}

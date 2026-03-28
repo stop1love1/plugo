@@ -46,6 +46,9 @@ export default function Analytics() {
   const { siteId } = useParams<{ siteId: string }>();
   const { t } = useLocale();
   const [days, setDays] = useState(30);
+  const [showCustomRange, setShowCustomRange] = useState(false);
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
 
   const { data: overview, isLoading: overviewLoading } = useQuery({
     queryKey: ["analytics-overview", siteId, days],
@@ -90,7 +93,7 @@ export default function Analytics() {
   };
 
   return (
-    <div className="max-w-4xl">
+    <div>
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{t("analytics.title")}</h1>
@@ -106,9 +109,9 @@ export default function Analytics() {
             ].map((opt) => (
               <button
                 key={opt.value}
-                onClick={() => setDays(opt.value)}
+                onClick={() => { setDays(opt.value); setShowCustomRange(false); }}
                 className={`px-3 py-1.5 text-xs font-medium ${
-                  days === opt.value
+                  days === opt.value && !showCustomRange
                     ? "bg-primary-50 text-primary-700"
                     : "text-gray-500 hover:bg-gray-50"
                 }`}
@@ -116,7 +119,46 @@ export default function Analytics() {
                 {opt.label}
               </button>
             ))}
+            <button
+              onClick={() => setShowCustomRange(!showCustomRange)}
+              className={`px-3 py-1.5 text-xs font-medium ${
+                showCustomRange
+                  ? "bg-primary-50 text-primary-700"
+                  : "text-gray-500 hover:bg-gray-50"
+              }`}
+            >
+              Custom
+            </button>
           </div>
+          {showCustomRange && (
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(e) => {
+                  setCustomFrom(e.target.value);
+                  if (e.target.value && customTo) {
+                    const diff = Math.ceil((new Date(customTo).getTime() - new Date(e.target.value).getTime()) / 86400000);
+                    if (diff > 0) setDays(diff);
+                  }
+                }}
+                className="border border-gray-200 rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <span className="text-xs text-gray-400">to</span>
+              <input
+                type="date"
+                value={customTo}
+                onChange={(e) => {
+                  setCustomTo(e.target.value);
+                  if (customFrom && e.target.value) {
+                    const diff = Math.ceil((new Date(e.target.value).getTime() - new Date(customFrom).getTime()) / 86400000);
+                    if (diff > 0) setDays(diff);
+                  }
+                }}
+                className="border border-gray-200 rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+          )}
           <button
             onClick={exportCsv}
             className="flex items-center gap-1 text-sm text-gray-600 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50"

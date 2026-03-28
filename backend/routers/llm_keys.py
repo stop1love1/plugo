@@ -4,10 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from database import async_session
 from models.llm_key import LLMKey
 from auth import get_current_user, TokenData
+from utils.crypto import encrypt_value, decrypt_value
 
 router = APIRouter(prefix="/api/llm-keys", tags=["llm-keys"])
 
@@ -24,14 +24,10 @@ class KeyUpdate(BaseModel):
 
 
 def _mask_key(key: str) -> str:
-    """Show first 8 and last 4 chars, mask the rest."""
-    if len(key) <= 16:
-        return key[:4] + "..." + key[-4:]
-    return key[:8] + "..." + key[-4:]
-
-
-async def _get_db() -> AsyncSession:
-    return async_session()
+    """Show only last 4 chars for security."""
+    if len(key) <= 4:
+        return "****"
+    return "****" + key[-4:]
 
 
 @router.get("")
@@ -49,12 +45,20 @@ async def list_keys(
             {
                 "id": k.id,
                 "provider": k.provider,
-                "api_key_masked": _mask_key(k.api_key),
+                "api_key_masked": _mask_key(_decrypt_key_safe(k.api_key)),
                 "label": k.label,
                 "updated_at": k.updated_at.isoformat() if k.updated_at else None,
             }
             for k in keys
         ]
+
+
+def _decrypt_key_safe(encrypted_key: str) -> str:
+    """Decrypt a key, falling back to raw value for legacy unencrypted data."""
+    try:
+        return decrypt_value(encrypted_key)
+    except Exception:
+        return encrypted_key
 
 
 @router.post("")
@@ -70,11 +74,12 @@ async def save_key(
         result = await db.execute(select(LLMKey).where(LLMKey.provider == data.provider))
         existing = result.scalar_one_or_none()
 
+        encrypted_key = encrypt_value(data.api_key)
         if existing:
-            existing.api_key = data.api_key
+            existing.api_key = encrypted_key
             existing.label = data.label
         else:
-            db.add(LLMKey(provider=data.provider, api_key=data.api_key, label=data.label))
+            db.add(LLMKey(provider=data.provider, api_key=encrypted_key, label=data.label))
 
         await db.commit()
 
@@ -110,6 +115,8 @@ async def get_key_for_provider(provider: str) -> Optional[str]:
         async with async_session() as db:
             result = await db.execute(select(LLMKey).where(LLMKey.provider == provider))
             key = result.scalar_one_or_none()
-            return key.api_key if key else None
+            if not key:
+                return None
+            return _decrypt_key_safe(key.api_key)
     except Exception:
         return None

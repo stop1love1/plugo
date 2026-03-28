@@ -16,54 +16,200 @@
 </p>
 
 <p align="center">
-  Plugo turns any website, web app, or platform into an AI-powered system.<br/>
-  Customers interact through a single chat window to understand your product,<br/>
-  look up information, and take actions — the bot calls your APIs on their behalf.<br/>
-  Self-hosted, open source, multi-LLM support.
+  Add a smart chat widget to your website so visitors can ask questions,<br/>
+  get instant answers from your content, and take actions like searching products<br/>
+  or placing orders — all through a single conversation window.<br/>
+  Self-hosted, open source, works with Claude, GPT, Gemini, or local models.
 </p>
 
 ---
 
-## Features
+## What Can Plugo Do?
 
-- **One Script Tag** — Embed a chat widget on any website in seconds
-- **Auto-Learn from Website** — Crawls your site and answers questions based on your content
-- **API Actions** — Bot can call your APIs to perform real actions (search products, place orders, etc.)
-- **Multi-LLM** — Supports Claude, GPT-4o, Gemini, and Ollama (local models)
-- **Real-time Streaming** — Responses stream token-by-token via WebSocket
-- **Self-Hosted** — MIT license, deploy anywhere, keep your data
+**For your visitors:**
+- Ask questions and get instant answers based on your website content
+- Perform actions like searching products, placing orders, or checking status — through chat
+- Get responses in their own language, automatically
+- Receive answers relevant to the page they're currently viewing
+
+**For you:**
+- Manage everything from a simple admin dashboard — no coding needed after setup
+- See what visitors are asking, what the bot can't answer, and which tools are used most
+- Add knowledge by crawling your website, uploading files, or typing content manually
+- Connect any API so the bot can take real actions on behalf of visitors
 
 ---
 
 ## Quick Start
 
-### 1. Clone & Setup
+### 1. Clone & Install
 
 ```bash
 git clone https://github.com/stop1love1/plugo.git
 cd plugo
-cp .env.example .env
-# Add your API keys to .env
+make setup
 ```
 
-### 2. Run with Docker
+`make setup` automatically creates the environment and installs all dependencies.
+
+### 2. Add Your API Key
+
+Open `.env` and fill in the key for the AI provider you want to use:
+
+```env
+ANTHROPIC_API_KEY=sk-ant-...    # For Claude
+OPENAI_API_KEY=sk-...           # For GPT
+GEMINI_API_KEY=...              # For Gemini
+SECRET_KEY=any-random-string    # Change this to something unique
+```
+
+You only need one provider key — not all of them.
+
+### 3. Create Admin Account
 
 ```bash
+cd backend
+python manage.py create-admin -u admin -p yourpassword
+```
+
+### 4. Start
+
+```bash
+make dev
+```
+
+Open your browser:
+
+| Page | URL |
+|------|-----|
+| Admin Dashboard | http://localhost:3000 |
+| API Docs | http://localhost:8000/docs |
+
+### 5. Run with Docker (Optional)
+
+```bash
+cp .env.example .env
+# Add your API key to .env
 docker compose up --build
 ```
 
-| Service       | URL                         |
-| ------------- | --------------------------- |
-| Dashboard     | http://localhost:3000        |
-| Backend API   | http://localhost:8000        |
-| API Docs      | http://localhost:8000/docs   |
+---
 
-### 3. Embed on Your Website
+## How It Works
+
+```
+Visitor types a message
+  → Widget sends it to the backend
+  → Backend searches your knowledge base for relevant content
+  → AI generates a response using that context
+  → Response streams back to the visitor in real time
+```
+
+The bot works in two modes:
+
+| Mode | What it does |
+|------|-------------|
+| **Answer questions** | Uses your website content, uploaded files, and manual entries to respond |
+| **Take actions** | Calls your APIs to do things like search, order, register, look up status, etc. |
+
+---
+
+## Dashboard Guide
+
+### Sites
+
+Each website you connect is a "site" with its own settings, knowledge, tools, and chat history.
+
+- Create a site by entering a name and URL
+- Each site gets a unique token for embedding the widget
+
+### Knowledge Base
+
+This is the content your bot uses to answer questions. Three ways to add:
+
+| Method | Description |
+|--------|-------------|
+| **Crawl website** | Automatically scan your website and extract content |
+| **Upload files** | Upload `.txt` or `.md` files |
+| **Manual entry** | Type a title and content directly |
+
+### Crawl Settings
+
+- Turn crawling on/off per site
+- Set max pages to crawl (1–500, default 50)
+- Start or stop a crawl at any time
+- Clear all knowledge to start fresh
+- View crawl history with status and page counts
+
+### Tools (API Actions)
+
+Connect API endpoints so your bot can take real actions during conversations.
+
+**Examples:**
+- Search products by name or category
+- Place orders or reservations
+- Look up order status
+- Register user accounts
+- Any action your backend supports via HTTP
+
+You can test each tool directly from the dashboard before going live.
+
+### Chat Log
+
+- Browse all chat sessions with message counts and timestamps
+- Click any session to read the full conversation
+- Leave feedback on sessions
+
+### Visitor Memory
+
+The bot automatically remembers facts about returning visitors across conversations.
+
+- View all visitors and what the bot has learned about them
+- Edit or delete individual memories
+- Clear all memories for a specific visitor
+
+### Analytics
+
+| Metric | What it shows |
+|--------|--------------|
+| Overview | Total sessions, messages, key numbers |
+| Messages per day | Daily message volume chart |
+| Popular questions | Most frequently asked questions |
+| Knowledge gaps | Questions the bot struggled to answer |
+| Tool usage | Which API tools are used most |
+
+### Settings
+
+**AI Provider** — each site can use a different provider and model:
+
+| Provider | Requirement |
+|----------|-------------|
+| **Claude** (Anthropic) | `ANTHROPIC_API_KEY` |
+| **OpenAI** (GPT-4o) | `OPENAI_API_KEY` |
+| **Gemini** (Google) | `GEMINI_API_KEY` |
+| **Ollama** (Local) | Install Ollama on your machine |
+
+API keys can also be managed from the dashboard under **LLM Keys** — no need to edit `.env`.
+
+**Widget appearance:**
+
+| Setting | Default |
+|---------|---------|
+| Primary color (hex) | `#6366f1` |
+| Position | Bottom-right |
+| Greeting message | `Hello! How can I help you?` |
+
+**Security:**
+- Domain whitelist — only allow specific domains to embed the widget. Leave blank to allow all.
+
+---
+
+## Embedding the Widget
 
 ```html
 <script>
   window.PlugoConfig = {
-    token: "YOUR_SITE_TOKEN",
+    token: "YOUR-SITE-TOKEN",
     serverUrl: "ws://localhost:8000",
     primaryColor: "#6366f1",
     greeting: "Hi! How can I help you?"
@@ -72,238 +218,48 @@ docker compose up --build
 <script src="http://localhost:8000/static/widget.js" async></script>
 ```
 
-Paste this code before the `</body>` tag. The widget loads asynchronously and appears after the page loads.
+Paste this before the `</body>` tag. The widget loads in the background and appears after the page is ready.
+
+The widget automatically sends the current page URL and title to the bot, so answers are relevant to what the visitor is viewing.
 
 ---
 
-## How It Works
+## Account Management
 
+Admin accounts are managed via the command line:
+
+```bash
+cd backend
+
+# Create admin
+python manage.py create-admin -u admin -p yourpassword
+
+# Reset password
+python manage.py reset-password -u admin -p newpassword
+
+# List all users
+python manage.py list-users
 ```
-Website visitor types a message
-  → Widget sends via WebSocket
-  → Backend retrieves relevant content (RAG)
-  → LLM generates a response
-  → Response streams back to the widget in real time
-```
-
-The bot operates in two modes:
-
-| Mode | Description |
-|------|-------------|
-| **Knowledge Mode** | Answers questions using crawled website content and uploaded documents |
-| **Action Mode** | Calls external APIs to perform actions on behalf of users (search, order, register, etc.) |
-
----
-
-## Dashboard
-
-The dashboard is the admin interface where you manage everything about your AI assistant.
-
-### Sites
-
-Manage all your connected websites. Each site gets its own configuration, knowledge base, tools, and chat history.
-
-- Create a new site by entering a name and URL
-- Each site receives a unique token for embedding
-- All settings below are configured per-site
-
-### Knowledge Base
-
-The knowledge base is the content your bot uses to answer questions. There are three ways to add content:
-
-| Method | Description |
-|--------|-------------|
-| **Website Crawling** | Automatically crawl your website and extract content (see Setup below) |
-| **File Upload** | Upload `.txt` or `.md` files |
-| **Manual Entry** | Type a title and content directly |
-
-Each piece of content is split into chunks, converted to vector embeddings, and stored for semantic search. When a visitor asks a question, the system finds the top 5 most relevant chunks and provides them as context to the LLM.
-
-### Setup (Crawling)
-
-Configure automatic website crawling to populate your knowledge base.
-
-- **Toggle crawling** on/off per site
-- **Max pages**: Set crawl depth from 1 to 500 pages (default: 50)
-- **Custom URL**: Override the default site URL to crawl specific sections
-- **Start/Stop**: Manually trigger or halt a crawl at any time
-- **Clear all knowledge**: Remove all learned data and start fresh
-- **Crawl history**: View past crawl jobs with status, page count, and timestamps
-
-Crawl statuses: `idle` → `running` → `completed` / `failed` / `stopped`
-
-### Tools (API Actions)
-
-Configure API endpoints that your bot can call during conversations. This enables the bot to perform real actions, not just answer questions.
-
-Each tool requires:
-
-| Field | Description |
-|-------|-------------|
-| **Name** | Identifier (e.g., `search_products`) |
-| **Description** | Tells the bot when to use this tool |
-| **Method** | GET, POST, PUT, or DELETE |
-| **URL** | The API endpoint |
-| **Auth Type** | None, Bearer Token, API Key, or Basic Auth |
-| **Params Schema** | JSON schema defining what parameters the tool accepts |
-
-**Example use cases:**
-- Search products by name or category
-- Place orders or reservations
-- Register user accounts
-- Look up order status
-- Any HTTP-based action your backend supports
-
-You can test each tool directly from the dashboard before going live.
-
-### Chat Log
-
-Monitor all conversations between visitors and your bot.
-
-- View all chat sessions with message counts and timestamps
-- Click any session to see the full conversation
-- User messages and bot responses are displayed with timestamps
-- Useful for monitoring quality, identifying common questions, and improving your knowledge base
-
-### Settings
-
-Configure your site's AI provider and widget appearance.
-
-**LLM Provider:**
-
-| Provider | Models | Requirement |
-|----------|--------|-------------|
-| **Claude** (Anthropic) | Sonnet 4, Opus 4, Haiku 3.5 | `ANTHROPIC_API_KEY` |
-| **OpenAI** | GPT-4o, GPT-4o Mini | `OPENAI_API_KEY` |
-| **Gemini** (Google) | Gemini 1.5 Flash, Gemini 1.5 Pro | `GEMINI_API_KEY` |
-| **Ollama** (Local) | Llama 3, Mistral 7B | `OLLAMA_BASE_URL` |
-
-Each site can use a different provider and model.
-
-**Widget Appearance:**
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| Primary Color | Theme color (hex) for the widget | `#6366f1` |
-| Position | `bottom-right` or `bottom-left` | `bottom-right` |
-| Greeting | Welcome message when chat opens | `Hello! How can I help you?` |
-
-**Security:**
-
-- **Domain Whitelist** — Comma-separated list of domains allowed to embed the widget. Leave blank to allow all domains.
-
-### Embed
-
-Get the embed code for your website. Two versions are provided:
-
-- **Development** — Points to `localhost:8000` for local testing
-- **Production** — Points to `https://cdn.plugo.dev/widget.js` for live sites
-
-One-click copy for both versions.
-
----
-
-## Widget
-
-The widget is a lightweight (~50KB) chat interface that appears on your website.
-
-**Visitor experience:**
-- Floating chat button in the bottom corner of the page
-- Click to open a chat window with your greeting message
-- Type questions and receive streaming responses in real-time
-- Bot answers based on your knowledge base and configured tools
-- Responds in the visitor's language automatically
-
-**Page context awareness:**
-The widget automatically sends the current page URL, title, and visible text (first 1500 characters) to the bot, so responses are relevant to what the visitor is currently viewing.
-
-**Widget configuration options:**
-
-```js
-window.PlugoConfig = {
-  token: "your-site-token",       // Required — authenticates the widget
-  serverUrl: "ws://localhost:8000", // Optional — backend WebSocket URL
-  primaryColor: "#6366f1",         // Optional — theme color
-  greeting: "Hi! How can I help?", // Optional — welcome message
-  position: "bottom-right"         // Optional — "bottom-right" or "bottom-left"
-};
-```
-
----
-
-## Environment Configuration
-
-All configuration is done via the `.env` file. Copy `.env.example` to get started.
-
-### LLM
-
-```env
-LLM_PROVIDER=claude                      # claude | openai | gemini | ollama
-LLM_MODEL=claude-sonnet-4-20250514       # Default model
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...
-GEMINI_API_KEY=...
-OLLAMA_BASE_URL=http://localhost:11434
-```
-
-### Embeddings (for knowledge search)
-
-```env
-EMBEDDING_PROVIDER=openai                # openai | ollama
-EMBEDDING_MODEL=text-embedding-3-small
-```
-
-### Database
-
-```env
-DATABASE_PROVIDER=sqlite                 # sqlite | mongodb
-DATABASE_URL=sqlite:///./data/plugo.db
-
-# MongoDB (optional)
-MONGODB_URL=mongodb://localhost:27017
-MONGODB_DATABASE=plugo
-```
-
-### Vector Store
-
-```env
-CHROMA_PATH=./data/chroma
-```
-
-### Security & Server
-
-```env
-SECRET_KEY=change-me-to-a-random-string
-CORS_ORIGINS=http://localhost:3000,http://localhost:5173
-BACKEND_PORT=8000
-DASHBOARD_PORT=3000
-```
-
----
-
-## API Reference
-
-Full interactive API documentation (Swagger UI): **http://localhost:8000/docs**
 
 ---
 
 ## Development
 
 ```bash
-make setup          # One-time: create venv, install all deps
-make dev            # Start all 3 services concurrently
+make setup          # First-time setup (venv + deps + .env)
+make dev            # Start all services
 make test           # Run all tests
-make lint           # Run all linters
-make format         # Format all code
-make check          # Run lint + format-check + typecheck
+make lint           # Run linters
+make format         # Format code
+make check          # Lint + format-check + typecheck
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 
 ## Security
 
-If you discover a security vulnerability, please report it responsibly. See [SECURITY.md](SECURITY.md) for details.
+If you find a security vulnerability, please report it responsibly. See [SECURITY.md](SECURITY.md).
 
 ## License
 
-This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
+MIT License — see [LICENSE](LICENSE).

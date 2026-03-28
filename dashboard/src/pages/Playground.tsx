@@ -189,21 +189,28 @@ export default function Playground() {
   );
 }
 
+// --- HTML escaping for safe injection into template strings ---
+
+const escapeHtml = (str: string) =>
+  str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
 // --- Demo page generators ---
 
 function getWidgetScript(site: any, darkMode: boolean): string {
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
+  const wsBackendUrl = backendUrl ? backendUrl.replace(/^http/, 'ws') : '';
   return `
 <script>
   window.PlugoConfig = {
-    token: "${site.token}",
-    serverUrl: "ws://" + window.location.hostname + ":8000",
-    primaryColor: "${site.primary_color || "#6366f1"}",
+    token: ${JSON.stringify(site.token || "")},
+    serverUrl: ${wsBackendUrl ? JSON.stringify(wsBackendUrl) : '"ws://" + window.location.hostname + ":" + window.location.port'},
+    primaryColor: ${JSON.stringify(site.primary_color || "#6366f1")},
     greeting: ${JSON.stringify(site.greeting || "Hello! How can I help you?")},
-    position: "${site.position || "bottom-right"}",
+    position: ${JSON.stringify(site.position || "bottom-right")},
     darkMode: ${darkMode}
   };
 </script>
-<script src="http://${window.location.hostname}:8000/static/widget.js" async></script>`;
+<script src="${backendUrl}/static/widget.js" async></script>`;
 }
 
 function baseStyles(dark: boolean): string {
@@ -226,8 +233,9 @@ function baseStyles(dark: boolean): string {
 function getDemoLandingPage(site: any, dark: boolean): string {
   if (!site) return "";
   const accent = site.primary_color || "#6366f1";
+  const safeName = escapeHtml(site.name || "");
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${site.name} - Demo</title>
+<title>${safeName} - Demo</title>
 <style>
   ${baseStyles(dark)}
   .hero { padding: 80px 0 60px; text-align: center; }
@@ -245,7 +253,7 @@ function getDemoLandingPage(site: any, dark: boolean): string {
 </style></head><body>
 <div class="container">
   <nav class="nav">
-    <div class="nav-brand">${site.name}</div>
+    <div class="nav-brand">${safeName}</div>
     <div class="nav-links">
       <a href="#">Features</a>
       <a href="#">Pricing</a>
@@ -254,7 +262,7 @@ function getDemoLandingPage(site: any, dark: boolean): string {
     </div>
   </nav>
   <div class="hero">
-    <h1>Welcome to ${site.name}</h1>
+    <h1>Welcome to ${safeName}</h1>
     <p class="muted">This is a demo website to test your Plugo chat widget. Try clicking the chat bubble in the bottom corner!</p>
     <a href="#" class="btn">Get Started</a>
   </div>
@@ -272,7 +280,7 @@ function getDemoLandingPage(site: any, dark: boolean): string {
       <p class="muted">Match your brand with custom colors, greetings, and positioning.</p>
     </div>
   </div>
-  <footer class="footer muted">© 2026 ${site.name}. This is a demo page for testing the Plugo widget.</footer>
+  <footer class="footer muted">© 2026 ${safeName}. This is a demo page for testing the Plugo widget.</footer>
 </div>
 ${getWidgetScript(site, dark)}
 </body></html>`;
@@ -281,8 +289,9 @@ ${getWidgetScript(site, dark)}
 function getDemoPricingPage(site: any, dark: boolean): string {
   if (!site) return "";
   const accent = site.primary_color || "#6366f1";
+  const safeName = escapeHtml(site.name || "");
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${site.name} - Pricing</title>
+<title>${safeName} - Pricing</title>
 <style>
   ${baseStyles(dark)}
   h1 { text-align: center; padding: 60px 0 16px; font-size: 2rem; }
@@ -330,8 +339,9 @@ ${getWidgetScript(site, dark)}
 
 function getDemoDocsPage(site: any, dark: boolean): string {
   if (!site) return "";
+  const safeName = escapeHtml(site.name || "");
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${site.name} - Documentation</title>
+<title>${safeName} - Documentation</title>
 <style>
   ${baseStyles(dark)}
   .docs { display: grid; grid-template-columns: 200px 1fr; gap: 32px; padding: 40px 0; min-height: 80vh; }
@@ -363,12 +373,12 @@ function getDemoDocsPage(site: any, dark: boolean): string {
     </nav>
     <div class="content">
       <h1>Getting Started</h1>
-      <p>Welcome to the ${site.name} documentation. This guide will help you set up and configure your chat widget.</p>
+      <p>Welcome to the ${safeName} documentation. This guide will help you set up and configure your chat widget.</p>
       <h2>Installation</h2>
       <p>Add the following code to your website, just before the closing <code>&lt;/body&gt;</code> tag:</p>
       <pre>&lt;script&gt;
   window.PlugoConfig = {
-    token: "${site.token}"
+    token: "${escapeHtml(site.token || "")}"
   };
 &lt;/script&gt;
 &lt;script src="https://cdn.plugo.dev/widget.js" async&gt;&lt;/script&gt;</pre>
@@ -389,8 +399,9 @@ ${getWidgetScript(site, dark)}
 
 function getDemoBlankPage(site: any, dark: boolean): string {
   if (!site) return "";
+  const safeName = escapeHtml(site.name || "");
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${site.name}</title>
+<title>${safeName}</title>
 <style>
   ${baseStyles(dark)}
   body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }

@@ -1,9 +1,11 @@
+import json
+import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional
 from repositories import get_repos, Repositories
 from auth import get_current_user, TokenData, hash_password
-import uuid
+from logging_config import logger
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -41,6 +43,17 @@ async def create_user(
         "password_hash": hash_password(data.password),
         "role": data.role,
     })
+    try:
+        await repos.audit_logs.create({
+            "user_id": user.sub,
+            "username": user.sub,
+            "action": "create",
+            "resource_type": "user",
+            "resource_id": new_user["id"],
+            "details": json.dumps({"username": data.username, "role": data.role}),
+        })
+    except Exception as e:
+        logger.warning("Failed to create audit log", error=str(e))
     return {"id": new_user["id"], "username": new_user["username"], "role": new_user["role"]}
 
 

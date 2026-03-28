@@ -7,6 +7,7 @@ import { PlugoWebSocket, ConnectionState } from "../lib/websocket";
 type Message = {
   role: "user" | "bot";
   content: string;
+  timestamp: number;
 };
 
 type AppProps = {
@@ -57,6 +58,31 @@ function getOrCreateVisitorId(token: string): string {
   }
 }
 
+let _audioCtx: AudioContext | null = null;
+function getAudioContext(): AudioContext | null {
+  try {
+    if (!_audioCtx) {
+      _audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    return _audioCtx;
+  } catch {
+    return null;
+  }
+}
+
+function playNotificationSound() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.frequency.value = 800;
+  gain.gain.value = 0.1;
+  osc.start();
+  osc.stop(ctx.currentTime + 0.1);
+}
+
 export function App({ token, serverUrl, primaryColor, greeting, position, getPageContext }: AppProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -66,6 +92,8 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
   const [unreadCount, setUnreadCount] = useState(0);
   const [connectionState, setConnectionState] = useState<ConnectionState>("disconnected");
   const isOpenRef = useRef(false);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
   const sessionIdRef = useRef<string | null>(null);
 
   const initWebSocket = useCallback(() => {
@@ -91,17 +119,18 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
           const restored: Message[] = data.history.map((m: any) => ({
             role: m.role === "user" ? "user" : "bot",
             content: m.content,
+            timestamp: m.timestamp || Date.now(),
           }));
           setMessages(restored);
-        } else if (data.greeting && messages.length === 0) {
-          setMessages([{ role: "bot", content: data.greeting }]);
+        } else if (data.greeting && messagesRef.current.length === 0) {
+          setMessages([{ role: "bot", content: data.greeting, timestamp: Date.now() }]);
         }
       },
       onStart: () => {
         setIsTyping(true);
         setSuggestions([]);
         setMessages((prev) => {
-          const updated = [...prev, { role: "bot", content: "" }];
+          const updated = [...prev, { role: "bot", content: "", timestamp: Date.now() }];
           return updated.length > MAX_MESSAGES ? updated.slice(-MAX_MESSAGES) : updated;
         });
       },
@@ -126,13 +155,16 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
         if (!isOpenRef.current) {
           setUnreadCount(prev => prev + 1);
         }
+        if (document.hidden) {
+          playNotificationSound();
+        }
       },
       onError: (error) => {
         setIsTyping(false);
         setMessages((prev) => {
           const updated = [
             ...prev,
-            { role: "bot", content: `\u26a0\ufe0f ${error}` },
+            { role: "bot", content: `\u26a0\ufe0f ${error}`, timestamp: Date.now() },
           ];
           return updated.length > MAX_MESSAGES ? updated.slice(-MAX_MESSAGES) : updated;
         });
@@ -181,7 +213,7 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
 
       setSuggestions([]);
       setMessages((prev) => {
-        const updated = [...prev, { role: "user", content: message }];
+        const updated = [...prev, { role: "user", content: message, timestamp: Date.now() }];
         return updated.length > MAX_MESSAGES ? updated.slice(-MAX_MESSAGES) : updated;
       });
       const sent = ws.send(message, getPageContext());
@@ -189,11 +221,31 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
         // Message failed to send — notify user
         setMessages((prev) => [
           ...prev,
-          { role: "bot", content: "\u26a0\ufe0f Message could not be sent. Please check your connection." },
+          { role: "bot", content: "\u26a0\ufe0f Message could not be sent. Please check your connection.", timestamp: Date.now() },
         ]);
       }
     },
     [ws, getPageContext]
+  );
+
+  const handleRetry = useCallback(
+    (errorIndex: number) => {
+      // Find the last user message before this error
+      let lastUserMsg = "";
+      const currentMessages = messagesRef.current;
+      for (let j = errorIndex - 1; j >= 0; j--) {
+        if (currentMessages[j].role === "user") {
+          lastUserMsg = currentMessages[j].content;
+          break;
+        }
+      }
+      if (!lastUserMsg) return;
+
+      // Remove the error message first, then resend
+      setMessages((prev) => prev.filter((_, i) => i !== errorIndex));
+      handleSend(lastUserMsg);
+    },
+    [handleSend]
   );
 
   return (
@@ -208,6 +260,7 @@ export function App({ token, serverUrl, primaryColor, greeting, position, getPag
           onSend={handleSend}
           onClose={handleClose}
           onFeedback={handleFeedback}
+          onRetry={handleRetry}
         />
       )}
       <Bubble

@@ -56,9 +56,9 @@ async def client():
 async def db_repos():
     """Get repository instances for direct DB manipulation in tests."""
     await _ensure_db()
-    from repositories import get_repos
+    from repositories import create_repos
 
-    return await get_repos()
+    return await create_repos()
 
 
 @pytest.fixture

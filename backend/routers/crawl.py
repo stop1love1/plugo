@@ -1,9 +1,15 @@
-from datetime import datetime
+import json
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional
-from repositories import get_repos, Repositories
+from repositories import get_repos, create_repos, Repositories
 from knowledge.crawler import WebCrawler
+from auth import get_current_user, TokenData
+from logging_config import logger
+
+# Crawls running longer than this are considered stale and auto-failed
+STALE_CRAWL_MINUTES = 30
 
 router = APIRouter(prefix="/api/crawl", tags=["crawl"])
 
@@ -35,6 +41,7 @@ async def toggle_crawl(
     data: CrawlToggleRequest,
     background_tasks: BackgroundTasks,
     repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
 ):
     """
     Enable or disable crawling for a site.
@@ -97,16 +104,47 @@ async def toggle_crawl(
 # 2. START CRAWL — Manual trigger (independent of toggle)
 # ============================================================
 
+async def _cleanup_stale_crawls(repos: Repositories, site_id: str) -> None:
+    """Auto-fail crawl jobs that have been running longer than STALE_CRAWL_MINUTES."""
+    stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=STALE_CRAWL_MINUTES)
+    jobs = await repos.crawl_jobs.list_by_site(site_id)
+    for job in jobs:
+        started = job.get("started_at")
+        if isinstance(started, str):
+            started = datetime.fromisoformat(started)
+        if (
+            job.get("status") == "running"
+            and isinstance(started, datetime)
+            and started < stale_cutoff
+        ):
+            logger.warning("Auto-failing stale crawl job", job_id=job["id"], site_id=site_id)
+            await repos.crawl_jobs.update(job["id"], {
+                "status": "failed",
+                "error_log": f"Auto-failed: crawl exceeded {STALE_CRAWL_MINUTES} minute timeout",
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+            })
+    # If the site is still marked as "running" but has no active crawler, reset it
+    site = await repos.sites.get_by_id(site_id)
+    if site and site.get("crawl_status") == "running" and site_id not in _active_crawlers:
+        await repos.sites.update(site_id, {"crawl_status": "idle"})
+
+
 @router.post("/start")
 async def start_crawl(
     data: CrawlStartRequest,
     background_tasks: BackgroundTasks,
     repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
 ):
     """Trigger a manual crawl, regardless of crawl_enabled state."""
     site = await repos.sites.get_by_id(data.site_id)
     if not site:
         raise HTTPException(status_code=404, detail="Site not found")
+
+    # Clean up stale "running" jobs before checking status
+    await _cleanup_stale_crawls(repos, data.site_id)
+    # Re-fetch site after cleanup
+    site = await repos.sites.get_by_id(data.site_id)
 
     if site.get("crawl_status") == "running":
         raise HTTPException(status_code=409, detail="Crawl already running. Stop it before starting a new one.")
@@ -141,6 +179,7 @@ async def start_crawl(
 async def stop_crawl(
     site_id: str,
     repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
 ):
     """Stop a running crawl. Data already crawled is retained in the database."""
     site = await repos.sites.get_by_id(site_id)
@@ -168,6 +207,7 @@ async def stop_crawl(
 async def get_crawl_status(
     site_id: str,
     repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
 ):
     """Get the current crawl status for a site."""
     site = await repos.sites.get_by_id(site_id)
@@ -194,6 +234,7 @@ async def get_crawl_status(
 async def get_crawl_jobs(
     site_id: str,
     repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
 ):
     return await repos.crawl_jobs.list_by_site(site_id)
 
@@ -202,11 +243,26 @@ async def get_crawl_jobs(
 async def get_crawl_job(
     job_id: str,
     repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
 ):
     job = await repos.crawl_jobs.get_by_id(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Crawl job not found")
     return job
+
+
+@router.get("/job/{job_id}/logs")
+async def get_crawl_logs(
+    job_id: str,
+    repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
+):
+    """Get structured crawl logs for a specific job."""
+    job = await repos.crawl_jobs.get_by_id(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    logs = json.loads(job.get("crawl_log") or "[]")
+    return {"logs": logs, "status": job.get("status"), "pages_done": job.get("pages_done", 0)}
 
 
 # ============================================================
@@ -217,6 +273,7 @@ async def get_crawl_job(
 async def clear_knowledge(
     site_id: str,
     repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
 ):
     """Delete all crawled knowledge for a site."""
     from agent.rag import rag_engine
@@ -252,7 +309,7 @@ async def _run_crawl_with_tracking(
     max_pages: int,
 ):
     """Background task: crawl + update site status when done."""
-    repos = await get_repos()
+    repos = await create_repos()
 
     crawler = WebCrawler(max_pages=max_pages)
     _active_crawlers[site_id] = crawler
@@ -266,14 +323,17 @@ async def _run_crawl_with_tracking(
 
         await repos.sites.update(site_id, {
             "crawl_status": "idle",
-            "last_crawled_at": datetime.utcnow().isoformat(),
+            "last_crawled_at": datetime.now(timezone.utc).isoformat(),
             "knowledge_count": total_chunks,
         })
     except Exception as e:
+        logger.error("Crawl failed", site_id=site_id, job_id=job_id, error=str(e))
         await repos.sites.update(site_id, {"crawl_status": "idle"})
         await repos.crawl_jobs.update(job_id, {
             "status": "failed",
             "error_log": str(e),
+            "finished_at": datetime.now(timezone.utc).isoformat(),
         })
     finally:
         _active_crawlers.pop(site_id, None)
+        await repos.close()

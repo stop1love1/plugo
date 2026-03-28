@@ -1,10 +1,18 @@
 """
 Database repository factory.
 
-Usage in routes:
+Usage in routes (via FastAPI Depends — session auto-closed):
     from repositories import get_repos
-    repos = await get_repos()
-    site = await repos.sites.get_by_id("...")
+    async def my_route(repos: Repositories = Depends(get_repos)):
+        site = await repos.sites.get_by_id("...")
+
+Usage in background tasks / scripts (caller must close):
+    from repositories import create_repos
+    repos = await create_repos()
+    try:
+        ...
+    finally:
+        await repos.close()
 """
 
 from repositories.base import (
@@ -38,6 +46,13 @@ class Repositories:
         self.visitor_memories = visitor_memories
         self.conversation_summaries = conversation_summaries
         self.audit_logs = audit_logs
+        self._db_session = None  # holds SQLite AsyncSession for cleanup
+
+    async def close(self) -> None:
+        """Close the underlying database session (SQLite only; MongoDB uses shared connection)."""
+        if self._db_session is not None:
+            await self._db_session.close()
+            self._db_session = None
 
 
 # --- MongoDB connection (lazy init) ---
@@ -67,8 +82,11 @@ def _get_sqlite_session():
     return _sqlite_session_factory
 
 
-async def get_repos() -> Repositories:
-    """FastAPI dependency — returns the right repos based on DATABASE_PROVIDER."""
+async def create_repos() -> Repositories:
+    """Create a Repositories instance. Caller is responsible for calling repos.close().
+
+    Use this for background tasks, scripts, and anywhere outside of FastAPI Depends.
+    """
     from config import settings
 
     if settings.database_provider == "mongodb":
@@ -100,7 +118,7 @@ async def get_repos() -> Repositories:
         )
         session_factory = _get_sqlite_session()
         db = session_factory()
-        return Repositories(
+        repos = Repositories(
             sites=SQLiteSiteRepo(db),
             knowledge=SQLiteKnowledgeRepo(db),
             tools=SQLiteToolRepo(db),
@@ -111,6 +129,17 @@ async def get_repos() -> Repositories:
             conversation_summaries=SQLiteConversationSummaryRepo(db),
             audit_logs=SQLiteAuditLogRepo(db),
         )
+        repos._db_session = db  # track session for cleanup
+        return repos
+
+
+async def get_repos():
+    """FastAPI dependency (async generator) — yields repos and closes the session when done."""
+    repos = await create_repos()
+    try:
+        yield repos
+    finally:
+        await repos.close()
 
 
 async def close_mongo():

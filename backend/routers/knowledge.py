@@ -1,3 +1,4 @@
+import json
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from pydantic import BaseModel, Field
@@ -108,7 +109,7 @@ class BulkDeleteRequest(BaseModel):
 async def bulk_delete_chunks(
     data: BulkDeleteRequest,
     repos: Repositories = Depends(get_repos),
-    _user: TokenData = Depends(get_current_user),
+    user: TokenData = Depends(get_current_user),
 ):
     """Delete multiple chunks at once."""
     deleted = 0
@@ -118,6 +119,17 @@ async def bulk_delete_chunks(
             await rag_engine.delete_chunks(chunk["site_id"], [chunk.get("embedding_id") or chunk["id"]])
             await repos.knowledge.delete(chunk_id)
             deleted += 1
+    try:
+        await repos.audit_logs.create({
+            "user_id": user.sub,
+            "username": user.sub,
+            "action": "delete",
+            "resource_type": "knowledge",
+            "resource_id": None,
+            "details": json.dumps({"deleted_count": deleted, "chunk_ids": data.chunk_ids[:10]}),
+        })
+    except Exception as e:
+        logger.warning("Failed to create audit log", error=str(e))
     return {"deleted": deleted}
 
 
@@ -132,7 +144,7 @@ class ManualChunkCreate(BaseModel):
 async def add_manual_chunk(
     data: ManualChunkCreate,
     repos: Repositories = Depends(get_repos),
-    _user: TokenData = Depends(get_current_user),
+    user: TokenData = Depends(get_current_user),
 ):
     chunk_id = str(uuid.uuid4())
     embedding_ok = False
@@ -158,6 +170,17 @@ async def add_manual_chunk(
         "content": data.content,
         "embedding_id": chunk_id,
     })
+    try:
+        await repos.audit_logs.create({
+            "user_id": user.sub,
+            "username": user.sub,
+            "action": "create",
+            "resource_type": "knowledge",
+            "resource_id": chunk_id,
+            "details": json.dumps({"title": data.title, "site_id": data.site_id}),
+        })
+    except Exception as e:
+        logger.warning("Failed to create audit log", error=str(e))
     return {
         "id": chunk_id,
         "message": "Chunk added",

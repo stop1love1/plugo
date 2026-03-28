@@ -1,7 +1,7 @@
 """MongoDB implementation using Motor (async driver)."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -49,8 +49,8 @@ class MongoSiteRepo(BaseSiteRepo):
             "last_crawled_at": None,
             "knowledge_count": 0,
             # Timestamps
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
         }
         await self.col.insert_one(doc)
         return _clean_doc(doc)
@@ -69,7 +69,7 @@ class MongoSiteRepo(BaseSiteRepo):
 
     async def update(self, site_id: str, data: dict) -> Optional[dict]:
         update_data = {k: v for k, v in data.items() if v is not None}
-        update_data["updated_at"] = datetime.utcnow()
+        update_data["updated_at"] = datetime.now(timezone.utc)
         result = await self.col.find_one_and_update(
             {"_id": site_id},
             {"$set": update_data},
@@ -97,7 +97,7 @@ class MongoKnowledgeRepo(BaseKnowledgeRepo):
             "content": data["content"],
             "chunk_index": data.get("chunk_index", 0),
             "embedding_id": data.get("embedding_id"),
-            "crawled_at": datetime.utcnow(),
+            "crawled_at": datetime.now(timezone.utc),
         }
         await self.col.insert_one(doc)
         return _clean_doc(doc)
@@ -126,9 +126,26 @@ class MongoKnowledgeRepo(BaseKnowledgeRepo):
         return result.deleted_count > 0
 
     async def create_many(self, chunks: list[dict]) -> list[str]:
+        if not chunks:
+            return []
+
+        # Batch dedup: get all existing hashes for this site in one query
+        hashes_to_check = [c.get("content_hash") for c in chunks if c.get("content_hash")]
+        existing_hashes: set[str] = set()
+        if hashes_to_check:
+            cursor = self.col.find(
+                {"site_id": chunks[0]["site_id"], "content_hash": {"$in": hashes_to_check}},
+                {"content_hash": 1},
+            )
+            existing_hashes = {doc["content_hash"] async for doc in cursor}
+
         docs = []
         ids = []
         for data in chunks:
+            content_hash = data.get("content_hash")
+            if content_hash and content_hash in existing_hashes:
+                continue  # Duplicate — skip
+
             doc_id = data.get("id", str(uuid.uuid4()))
             docs.append({
                 "_id": doc_id,
@@ -137,9 +154,10 @@ class MongoKnowledgeRepo(BaseKnowledgeRepo):
                 "source_type": data.get("source_type", "crawl"),
                 "title": data.get("title"),
                 "content": data["content"],
+                "content_hash": content_hash,
                 "chunk_index": data.get("chunk_index", 0),
                 "embedding_id": data.get("embedding_id", doc_id),
-                "crawled_at": datetime.utcnow(),
+                "crawled_at": datetime.now(timezone.utc),
             })
             ids.append(doc_id)
         if docs:
@@ -165,7 +183,7 @@ class MongoToolRepo(BaseToolRepo):
             "auth_type": data.get("auth_type"),
             "auth_value": data.get("auth_value"),
             "enabled": data.get("enabled", True),
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
         }
         await self.col.insert_one(doc)
         return _clean_doc(doc)
@@ -206,7 +224,7 @@ class MongoChatSessionRepo(BaseChatSessionRepo):
             "visitor_id": data.get("visitor_id"),
             "page_url": data.get("page_url"),
             "messages": data.get("messages", []),
-            "started_at": datetime.utcnow(),
+            "started_at": datetime.now(timezone.utc),
             "ended_at": None,
         }
         await self.col.insert_one(doc)
@@ -228,16 +246,26 @@ class MongoChatSessionRepo(BaseChatSessionRepo):
             results.append(_clean_doc(doc))
         return results
 
+    async def list_by_site_since(self, site_id: str, since: datetime) -> list[dict]:
+        cursor = self.col.find({
+            "site_id": site_id,
+            "started_at": {"$gte": since},
+        }).sort("started_at", -1)
+        results = []
+        async for doc in cursor:
+            doc["message_count"] = len(doc.get("messages", []))
+            results.append(_clean_doc(doc))
+        return results
+
     async def update_messages(self, session_id: str, messages: list[dict]) -> bool:
         result = await self.col.update_one(
             {"_id": session_id}, {"$set": {"messages": messages}}
         )
         return result.modified_count > 0
 
-    async def set_ended(self, session_id: str) -> bool:
-        result = await self.col.update_one(
-            {"_id": session_id}, {"$set": {"ended_at": datetime.utcnow()}}
-        )
+    async def set_ended(self, session_id: str, clear: bool = False) -> bool:
+        update = {"$set": {"ended_at": None}} if clear else {"$set": {"ended_at": datetime.now(timezone.utc)}}
+        result = await self.col.update_one({"_id": session_id}, update)
         return result.modified_count > 0
 
 
@@ -255,7 +283,8 @@ class MongoCrawlJobRepo(BaseCrawlJobRepo):
             "pages_found": 0,
             "pages_done": 0,
             "error_log": None,
-            "started_at": datetime.utcnow(),
+            "crawl_log": None,
+            "started_at": datetime.now(timezone.utc),
             "finished_at": None,
         }
         await self.col.insert_one(doc)
@@ -285,7 +314,7 @@ class MongoUserRepo(BaseUserRepo):
             "username": data["username"],
             "password_hash": data["password_hash"],
             "role": data.get("role", "admin"),
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
         }
         await self.col.insert_one(doc)
         return _clean_doc(doc)
@@ -336,8 +365,8 @@ class MongoVisitorMemoryRepo(BaseVisitorMemoryRepo):
             "value": data["value"],
             "confidence": data.get("confidence", "medium"),
             "source_session_id": data.get("source_session_id"),
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
         }
         await self.col.insert_one(doc)
         return _clean_doc(doc)
@@ -357,7 +386,7 @@ class MongoVisitorMemoryRepo(BaseVisitorMemoryRepo):
         existing = await self.col.find_one(filter_query)
         if existing:
             update_data = {k: v for k, v in data.items() if v is not None}
-            update_data["updated_at"] = datetime.utcnow()
+            update_data["updated_at"] = datetime.now(timezone.utc)
             result = await self.col.find_one_and_update(
                 filter_query, {"$set": update_data}, return_document=True,
             )
@@ -372,8 +401,8 @@ class MongoVisitorMemoryRepo(BaseVisitorMemoryRepo):
                 "value": data.get("value", ""),
                 "confidence": data.get("confidence", "medium"),
                 "source_session_id": data.get("source_session_id"),
-                "created_at": datetime.utcnow(),
-                "updated_at": datetime.utcnow(),
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc),
             }
             await self.col.insert_one(doc)
             return _clean_doc(doc)
@@ -400,8 +429,8 @@ class MongoConversationSummaryRepo(BaseConversationSummaryRepo):
             "summary_text": data["summary_text"],
             "message_count_summarized": data.get("message_count_summarized", 0),
             "total_message_count": data.get("total_message_count", 0),
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
         }
         await self.col.insert_one(doc)
         return _clean_doc(doc)
@@ -414,7 +443,7 @@ class MongoConversationSummaryRepo(BaseConversationSummaryRepo):
         existing = await self.col.find_one({"session_id": session_id})
         if existing:
             update_data = {k: v for k, v in data.items() if v is not None}
-            update_data["updated_at"] = datetime.utcnow()
+            update_data["updated_at"] = datetime.now(timezone.utc)
             result = await self.col.find_one_and_update(
                 {"session_id": session_id}, {"$set": update_data}, return_document=True,
             )
@@ -427,8 +456,8 @@ class MongoConversationSummaryRepo(BaseConversationSummaryRepo):
                 "summary_text": data.get("summary_text", ""),
                 "message_count_summarized": data.get("message_count_summarized", 0),
                 "total_message_count": data.get("total_message_count", 0),
-                "created_at": datetime.utcnow(),
-                "updated_at": datetime.utcnow(),
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc),
             }
             await self.col.insert_one(doc)
             return _clean_doc(doc)
@@ -452,7 +481,7 @@ class MongoAuditLogRepo(BaseAuditLogRepo):
             "resource_type": data["resource_type"],
             "resource_id": data.get("resource_id"),
             "details": data.get("details"),
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
         }
         await self.col.insert_one(doc)
         return _clean_doc(doc)

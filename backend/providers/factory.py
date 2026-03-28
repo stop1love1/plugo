@@ -105,7 +105,42 @@ def get_all_providers() -> list[dict]:
             "id": "lmstudio",
             "name": "LM Studio (Local)",
             "models": [
-                {"id": "qwen/qwen3.5-9b", "name": "Qwen 3.5 9B", "description": "Local model via LM Studio"},
+                {"id": "google/gemma-3-4b", "name": "Gemma 3 4B", "description": "Local model via LM Studio"},
+            ],
+            "requires_key": False,
+            "has_key": True,
+        },
+    ]
+
+
+def get_embedding_providers() -> list[dict]:
+    """Return info about providers that support embeddings."""
+    return [
+        {
+            "id": "openai",
+            "name": "OpenAI",
+            "models": [
+                {"id": "text-embedding-3-small", "name": "Embedding 3 Small"},
+                {"id": "text-embedding-3-large", "name": "Embedding 3 Large"},
+                {"id": "text-embedding-ada-002", "name": "Embedding Ada 002"},
+            ],
+            "requires_key": True,
+            "has_key": bool(_get_key("openai", settings.openai_api_key)),
+        },
+        {
+            "id": "ollama",
+            "name": "Ollama (Local)",
+            "models": [
+                {"id": "nomic-embed-text", "name": "Nomic Embed Text"},
+            ],
+            "requires_key": False,
+            "has_key": True,
+        },
+        {
+            "id": "lmstudio",
+            "name": "LM Studio (Local)",
+            "models": [
+                {"id": "text-embedding-nomic-embed-text-v1.5", "name": "Nomic Embed v1.5"},
             ],
             "requires_key": False,
             "has_key": True,

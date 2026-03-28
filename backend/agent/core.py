@@ -6,6 +6,7 @@ from agent.rag import rag_engine
 from agent.tools import tool_executor
 from knowledge.embed_cache import embed_cache
 from config import settings
+from logging_config import logger
 
 
 SYSTEM_PROMPT_TEMPLATE = """You are an AI assistant for the website "{site_name}" ({site_url}).
@@ -46,6 +47,9 @@ When API tools are available, you perform actions for the user:
 class ChatAgent:
     """Main chat agent — supports two modes: Knowledge (guidance) and Action (execute on behalf)."""
 
+    # Providers that typically don't support tool/function calling (read from config)
+    _NO_TOOL_PROVIDERS = set(settings.no_tool_providers)
+
     def __init__(
         self,
         site_id: str,
@@ -57,8 +61,10 @@ class ChatAgent:
         self.site_id = site_id
         self.site_name = site_name
         self.site_url = site_url
+        self.llm_provider_name = llm_provider
         self.provider: BaseLLMProvider = get_llm_provider(llm_provider, llm_model)
         self.messages: list[dict] = []
+        self.supports_tools = llm_provider not in self._NO_TOOL_PROVIDERS
 
     async def _build_system_prompt(
         self,
@@ -85,8 +91,10 @@ class ChatAgent:
                         + "\n\nUse this information naturally. Don't explicitly mention that you "
                         + "'remember' unless the visitor asks. Just apply the knowledge contextually."
                     )
-            except Exception:
-                pass  # visitor_memories repo may not exist yet
+            except AttributeError:
+                pass  # visitor_memories repo not available
+            except Exception as e:
+                logger.warning("Failed to load visitor memories", error=str(e))
 
         if conversation_summary:
             memory_section += f"\n\n## Earlier in this conversation\n{conversation_summary}"
@@ -105,38 +113,55 @@ class ChatAgent:
             # Check embedding cache first
             query_embedding = embed_cache.get(query)
             if query_embedding is None:
-                embedding_provider = get_llm_provider(
-                    settings.embedding_provider,
-                    settings.embedding_model,
-                )
-                query_embedding = (await embedding_provider.embed([query]))[0]
-                embed_cache.put(query, query_embedding)
-
-            chunks = await rag_engine.search(self.site_id, query_embedding, top_k=10)
-
-            if chunks:
-                knowledge_parts = []
-                for i, chunk in enumerate(chunks):
-                    source = chunk["metadata"].get("source_url", "")
-                    title = chunk["metadata"].get("title", "")
-                    score = chunk.get("score", 0)
-                    knowledge_parts.append(
-                        f"[{i+1}] {title} ({source}) [relevance: {score:.0%}]\n{chunk['content']}"
+                try:
+                    embedding_provider = get_llm_provider(
+                        settings.embedding_provider,
+                        settings.embedding_model,
                     )
-                knowledge_section = (
-                    "## Knowledge Base (crawled content)\n"
-                    "When answering from the knowledge base, cite sources using [1], [2] etc.\n\n"
-                    + "\n\n---\n\n".join(knowledge_parts)
-                )
-            else:
-                knowledge_section = "## Knowledge Base\n(No data available — direct the user to the main website page)"
-        except Exception:
+                    query_embedding = (await embedding_provider.embed([query]))[0]
+                    embed_cache.put(query, query_embedding)
+                except Exception as e:
+                    logger.warning(
+                        "Embedding failed, continuing without knowledge base",
+                        provider=settings.embedding_provider,
+                        model=settings.embedding_model,
+                        error=str(e),
+                    )
+                    knowledge_section = "## Knowledge Base\n(Temporarily unavailable)"
+                    query_embedding = None
+
+            if query_embedding is not None:
+                chunks = await rag_engine.search(self.site_id, query_embedding, top_k=10)
+
+                if chunks:
+                    knowledge_parts = []
+                    for i, chunk in enumerate(chunks):
+                        source = chunk["metadata"].get("source_url", "")
+                        title = chunk["metadata"].get("title", "")
+                        score = chunk.get("score", 0)
+                        knowledge_parts.append(
+                            f"[{i+1}] {title} ({source}) [relevance: {score:.0%}]\n{chunk['content']}"
+                        )
+                    knowledge_section = (
+                        "## Knowledge Base (crawled content)\n"
+                        "When answering from the knowledge base, cite sources using [1], [2] etc.\n\n"
+                        + "\n\n---\n\n".join(knowledge_parts)
+                    )
+                elif not knowledge_section:
+                    knowledge_section = (
+                        "## Knowledge Base\n(No data available — direct the user to the main website page)"
+                    )
+        except AttributeError:
             knowledge_section = "## Knowledge Base\n(Not configured)"
+        except Exception as e:
+            logger.warning("Failed to retrieve knowledge base", error=str(e))
+            knowledge_section = "## Knowledge Base\n(Temporarily unavailable)"
 
         # --- Tools (API actions) ---
+        # Skip tool loading for providers that don't support function calling (e.g. ollama, lmstudio)
         tools = []
         tools_section = ""
-        if repos:
+        if repos and self.supports_tools:
             tools = await tool_executor.get_tools_for_site(repos, self.site_id)
             if tools:
                 tool_names = [f"- {t['name']}: {t['description']}" for t in tools]
@@ -179,7 +204,7 @@ class ChatAgent:
         max_tool_rounds = 3
         round_count = 0
 
-        if tools:
+        if tools and self.supports_tools:
             result = await self.provider.chat(
                 messages=self.messages,
                 system_prompt=system_prompt,
@@ -245,10 +270,11 @@ class ChatAgent:
             message, page_context, repos, visitor_id, conversation_summary,
         )
 
+        effective_tools = tools if (tools and self.supports_tools) else None
         result = await self.provider.chat(
             messages=self.messages,
             system_prompt=system_prompt,
-            tools=tools if tools else None,
+            tools=effective_tools,
         )
 
         # Handle tool calls (Action mode)
@@ -276,7 +302,7 @@ class ChatAgent:
             result = await self.provider.chat(
                 messages=self.messages,
                 system_prompt=system_prompt,
-                tools=tools if tools else None,
+                tools=effective_tools,
             )
 
         self.messages.append({"role": "assistant", "content": result["content"]})

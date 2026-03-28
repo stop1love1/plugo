@@ -67,6 +67,8 @@ export const getProviders = () => api.get("/sites/providers/list").then((r) => r
 export const startCrawl = (data: any) => api.post("/crawl", data).then((r) => r.data);
 export const getCrawlStatus = (jobId: string) => api.get(`/crawl/${jobId}`).then((r) => r.data);
 export const getSiteCrawlJobs = (siteId: string) => api.get(`/crawl/site/${siteId}`).then((r) => r.data);
+export const getCrawlLogs = (jobId: string) =>
+  api.get(`/crawl/job/${jobId}/logs`).then((r) => r.data);
 
 // Knowledge
 export const getKnowledge = (siteId: string, page = 1, search?: string) => {

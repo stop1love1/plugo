@@ -15,6 +15,7 @@ class CrawlJob(Base):
     pages_found = Column(Integer, default=0)
     pages_done = Column(Integer, default=0)
     error_log = Column(Text, nullable=True)
+    crawl_log = Column(Text, nullable=True)  # JSON array of per-page log entries
 
     started_at = Column(DateTime, default=datetime.utcnow)
     finished_at = Column(DateTime, nullable=True)

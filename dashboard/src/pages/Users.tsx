@@ -16,6 +16,7 @@ export default function UsersPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ username: "", password: "", role: "viewer" });
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [pendingRoleChange, setPendingRoleChange] = useState<{ id: string; username: string; role: string } | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -117,6 +118,15 @@ export default function UsersPage() {
         onCancel={() => setDeleteTarget(null)}
       />
 
+      <ConfirmDialog
+        open={!!pendingRoleChange}
+        title={t("users.role")}
+        message={`Change role of ${pendingRoleChange?.username ?? ""} to ${pendingRoleChange?.role ?? ""}?`}
+        loading={roleMutation.isPending}
+        onConfirm={() => { if (pendingRoleChange) roleMutation.mutate({ id: pendingRoleChange.id, role: pendingRoleChange.role }); setPendingRoleChange(null); }}
+        onCancel={() => setPendingRoleChange(null)}
+      />
+
       {isLoading ? (
         <SkeletonTable rows={3} />
       ) : users.length === 0 ? (
@@ -141,7 +151,7 @@ export default function UsersPage() {
                   <td className="px-4 py-3">
                     <select
                       value={user.role}
-                      onChange={(e) => roleMutation.mutate({ id: user.id, role: e.target.value })}
+                      onChange={(e) => setPendingRoleChange({ id: user.id, username: user.username, role: e.target.value })}
                       className="text-xs border rounded px-2 py-1 outline-none"
                     >
                       <option value="admin">Admin</option>

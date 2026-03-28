@@ -34,10 +34,10 @@ export function useKeyboardShortcuts() {
           case "3": navigate(`${prefix}/knowledge`); break;
           case "4": navigate(`${prefix}/tools`); break;
           case "5": navigate(`${prefix}/embed`); break;
-          case "6": navigate(`${prefix}/chat-log`); break;
-          case "7": navigate(`${prefix}/visitors`); break;
-          case "8": navigate(`${prefix}/settings`); break;
-          case "9": navigate(`${prefix}/playground`); break;
+          case "6": navigate(`${prefix}/playground`); break;
+          case "7": navigate(`${prefix}/chat-log`); break;
+          case "8": navigate(`${prefix}/visitors`); break;
+          case "9": navigate(`${prefix}/settings`); break;
         }
       }
     };

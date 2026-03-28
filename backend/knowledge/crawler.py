@@ -1,7 +1,8 @@
+import json
 import re
 import uuid
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
@@ -26,6 +27,7 @@ class WebCrawler:
         self.visited: set[str] = set()
         self._stopped = False
         self.chunker = SemanticChunker()
+        self.logs: list[dict] = []
 
     def stop(self):
         """Signal the crawler to stop. Data already crawled will be persisted."""
@@ -68,6 +70,7 @@ class WebCrawler:
             async with httpx.AsyncClient(
                 timeout=30,
                 follow_redirects=True,
+                verify=settings.crawl_verify_ssl,
                 headers={"User-Agent": "PlugoBot/1.0 (+https://github.com/stop1love1/plugo)"},
             ) as client:
                 # Fetch and parse robots.txt before crawling
@@ -89,6 +92,13 @@ class WebCrawler:
                     try:
                         response = await client.get(url)
                         if response.status_code != 200:
+                            self.logs.append({
+                                "url": url,
+                                "status": "skipped",
+                                "chunks": 0,
+                                "error": f"HTTP {response.status_code}",
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                            })
                             continue
                         if "text/html" not in response.headers.get("content-type", ""):
                             continue
@@ -108,6 +118,15 @@ class WebCrawler:
                                 chunks = self._chunk_text(text, title, url, site_id)
                         all_chunks.extend(chunks)
 
+                        # Log successful page crawl
+                        self.logs.append({
+                            "url": url,
+                            "status": "success",
+                            "chunks": len(chunks),
+                            "error": None,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        })
+
                         for link in soup.find_all("a", href=True):
                             href = urljoin(url, link["href"])
                             parsed = urlparse(href)
@@ -119,17 +138,30 @@ class WebCrawler:
                             ):
                                 queue.append(clean_url)
 
+                        # Save progress and logs to job (last 50 entries for live viewing)
                         await repos.crawl_jobs.update(job_id, {
                             "pages_found": len(self.visited) + len(queue),
                             "pages_done": len(self.visited),
+                            "crawl_log": json.dumps(self.logs[-50:]),
                         })
 
                         await asyncio.sleep(self.delay)
 
                     except Exception as e:
+                        # Log error for this page
+                        self.logs.append({
+                            "url": url,
+                            "status": "error",
+                            "chunks": 0,
+                            "error": str(e),
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        })
                         job = await repos.crawl_jobs.get_by_id(job_id)
                         error_log = (job.get("error_log") or "") + f"\n{url}: {str(e)}"
-                        await repos.crawl_jobs.update(job_id, {"error_log": error_log})
+                        await repos.crawl_jobs.update(job_id, {
+                            "error_log": error_log,
+                            "crawl_log": json.dumps(self.logs[-50:]),
+                        })
                         continue
 
             # Always persist crawled data, whether stopped or completed
@@ -140,14 +172,15 @@ class WebCrawler:
             await repos.crawl_jobs.update(job_id, {
                 "status": final_status,
                 "pages_done": len(self.visited),
-                "finished_at": datetime.utcnow().isoformat(),
+                "crawl_log": json.dumps(self.logs),
+                "finished_at": datetime.now(timezone.utc).isoformat(),
             })
 
         except Exception as e:
             await repos.crawl_jobs.update(job_id, {
                 "status": "failed",
                 "error_log": str(e),
-                "finished_at": datetime.utcnow().isoformat(),
+                "finished_at": datetime.now(timezone.utc).isoformat(),
             })
 
     def _extract_text(self, soup: BeautifulSoup) -> str:

@@ -9,6 +9,7 @@ const MAX_INPUT_LENGTH = 500;
 type ChatMessage = {
   role: "user" | "bot";
   content: string;
+  timestamp: number;
 };
 
 type WindowProps = {
@@ -20,13 +21,15 @@ type WindowProps = {
   onSend: (message: string) => void;
   onClose: () => void;
   onFeedback?: (index: number, rating: "up" | "down") => void;
+  onRetry?: (errorIndex: number) => void;
 };
 
-export function ChatWindow({ messages, isTyping, position, suggestions, connectionState, onSend, onClose, onFeedback }: WindowProps) {
+export function ChatWindow({ messages, isTyping, position, suggestions, connectionState, onSend, onClose, onFeedback, onRetry }: WindowProps) {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const windowRef = useRef<HTMLDivElement>(null);
   const lang = detectLanguage();
   const [userScrolledUp, setUserScrolledUp] = useState(false);
   const [newMessageCount, setNewMessageCount] = useState(0);
@@ -79,6 +82,28 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
+  // Focus trap: keep Tab cycling within the widget window
+  useEffect(() => {
+    const handleTab = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      const focusable = windowRef.current?.querySelectorAll<HTMLElement>(
+        'button, input, [tabindex]:not([tabindex="-1"])'
+      );
+      if (!focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleTab);
+    return () => document.removeEventListener('keydown', handleTab);
+  }, []);
+
   const handleSubmit = (e: Event) => {
     e.preventDefault();
     if (!input.trim() || isTyping || isOffline) return;
@@ -94,7 +119,7 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
   };
 
   return (
-    <div class={`plugo-window ${position}`}>
+    <div class={`plugo-window ${position}`} ref={windowRef} role="dialog" aria-modal="true">
       <div class="plugo-header">
         <h3>{getWidgetString("chatTitle", lang)}</h3>
         <button onClick={onClose} aria-label="Close">&times;</button>
@@ -119,21 +144,27 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
         aria-live="polite"
         aria-label="Chat messages"
       >
-        {messages.map((msg, i) => (
-          <Message
-            key={i}
-            role={msg.role}
-            content={msg.content}
-            index={i}
-            isError={msg.role === "bot" && msg.content.startsWith("\u26a0\ufe0f")}
-            onFeedback={msg.role === "bot" && msg.content && !msg.content.startsWith("\u26a0\ufe0f") ? onFeedback : undefined}
-          />
-        ))}
+        {messages.map((msg, i) => {
+          const msgIsError = msg.role === "bot" && msg.content.startsWith("\u26a0\ufe0f");
+          return (
+            <Message
+              key={i}
+              role={msg.role}
+              content={msg.content}
+              timestamp={msg.timestamp}
+              index={i}
+              isError={msgIsError}
+              onFeedback={msg.role === "bot" && msg.content && !msgIsError ? onFeedback : undefined}
+              onRetry={msgIsError && onRetry ? () => onRetry(i) : undefined}
+            />
+          );
+        })}
         {isTyping && (
           <div class="plugo-typing">
             <span />
             <span />
             <span />
+            <span class="plugo-typing-text">{getWidgetString("typing", lang)}</span>
           </div>
         )}
 
@@ -175,13 +206,13 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
           disabled={isTyping || isOffline}
           maxLength={MAX_INPUT_LENGTH}
         />
-        <button type="submit" disabled={!input.trim() || isTyping || isOffline}>
+        <button type="submit" disabled={!input.trim() || isTyping || isOffline} aria-label={getWidgetString("send", lang)}>
           {getWidgetString("send", lang)}
         </button>
       </form>
       {/* Character counter */}
-      {input.length > MAX_INPUT_LENGTH * 0.7 && (
-        <div class="plugo-char-counter">
+      {input.length > MAX_INPUT_LENGTH * 0.6 && (
+        <div class={`plugo-char-counter${input.length > MAX_INPUT_LENGTH * 0.95 ? " danger" : input.length > MAX_INPUT_LENGTH * 0.8 ? " warning" : ""}`}>
           {input.length}/{MAX_INPUT_LENGTH}
         </div>
       )}

@@ -29,6 +29,7 @@ export default function Tools() {
   const [form, setForm] = useState({ ...emptyForm });
   const [useBuilder, setUseBuilder] = useState(false);
   const [params, setParams] = useState<Array<{ name: string; type: string; description: string; required: boolean }>>([]);
+  const [testParamsJson, setTestParamsJson] = useState<Record<string, string>>({});
 
   const { data: tools = [], isLoading } = useQuery({
     queryKey: ["tools", siteId],
@@ -139,7 +140,12 @@ export default function Tools() {
     e.preventDefault();
     if (!siteId) return;
     let parsedParams = {};
-    try { parsedParams = JSON.parse(form.params_schema); } catch {}
+    try {
+      parsedParams = JSON.parse(form.params_schema);
+    } catch (e) {
+      toast.error("Invalid JSON in parameters schema");
+      return;
+    }
 
     const payload = {
       name: form.name,
@@ -159,8 +165,18 @@ export default function Tools() {
   };
 
   const handleTest = async (toolId: string) => {
+    let parsedTestParams = {};
+    const rawJson = testParamsJson[toolId];
+    if (rawJson && rawJson.trim()) {
+      try {
+        parsedTestParams = JSON.parse(rawJson);
+      } catch {
+        toast.error("Invalid JSON in test parameters");
+        return;
+      }
+    }
     try {
-      const result = await testTool(toolId, {});
+      const result = await testTool(toolId, parsedTestParams);
       setTestResults((prev) => ({ ...prev, [toolId]: result }));
       toast.success("Test completed");
     } catch {
@@ -179,7 +195,7 @@ export default function Tools() {
           <X className="w-4 h-4" />
         </button>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <FormField label={t("tools.toolName")}>
           <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
             placeholder="search_products" className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
@@ -190,11 +206,11 @@ export default function Tools() {
             <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option>
           </select>
         </FormField>
-        <FormField label={t("tools.description")} className="col-span-2">
+        <FormField label={t("tools.description")} className="lg:col-span-2">
           <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
             placeholder="Search products by name or category" className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
         </FormField>
-        <FormField label={t("tools.url")} className="col-span-2">
+        <FormField label={t("tools.url")} className="lg:col-span-2">
           <input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })}
             placeholder="https://api.example.com/products" className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
         </FormField>
@@ -209,7 +225,7 @@ export default function Tools() {
           <input value={form.auth_value} onChange={(e) => setForm({ ...form, auth_value: e.target.value })}
             placeholder="Token or key..." type="password" className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
         </FormField>
-        <div className="col-span-2">
+        <div className="lg:col-span-2">
           <div className="flex items-center justify-between mb-1">
             <label className="text-sm font-medium text-gray-700">
               {useBuilder ? t("tools.paramBuilder") : t("tools.paramsSchema")}
@@ -299,7 +315,7 @@ export default function Tools() {
   );
 
   return (
-    <div className="max-w-4xl">
+    <div>
       <PageHeader title={t("tools.title")} subtitle={t("tools.subtitle")}>
         <button
           onClick={() => { setShowAdd(true); cancelEdit(); }}
@@ -340,6 +356,15 @@ export default function Tools() {
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
+              </div>
+              <div className="mt-3">
+                <textarea
+                  value={testParamsJson[tool.id] || ""}
+                  onChange={(e) => setTestParamsJson((prev) => ({ ...prev, [tool.id]: e.target.value }))}
+                  placeholder='Test parameters JSON, e.g. {"q": "shoes"}'
+                  rows={2}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-primary-500"
+                />
               </div>
               {testResults[tool.id] && (
                 <pre className="mt-3 p-3 bg-gray-50 rounded-lg text-xs font-mono overflow-auto max-h-40">
