@@ -92,6 +92,15 @@ class Settings(BaseSettings):
 
     # --- Crawl (from config.json → crawl) ---
     crawl_verify_ssl: bool = _get("crawl", "verify_ssl", True)
+    crawl_request_delay: float = _get("crawl", "request_delay", 1.0)
+    crawl_request_timeout: int = _get("crawl", "request_timeout", 30)
+    crawl_max_concurrent_fetches: int = _get("crawl", "max_concurrent_fetches", 5)
+    crawl_max_concurrent_auto: int = _get("crawl", "max_concurrent_auto_crawls", 3)
+    crawl_stale_timeout_minutes: int = _get("crawl", "stale_timeout_minutes", 30)
+    crawl_max_continuous_rounds: int = _get("crawl", "max_continuous_rounds", 10)
+    crawl_max_retries: int = _get("crawl", "max_retries", 2)
+    crawl_scheduler_interval: int = _get("crawl", "scheduler_interval_seconds", 300)
+    crawl_embed_batch_size: int = _get("crawl", "embed_batch_size", 200)
 
     # --- Auth (from config.json → auth) ---
     auth_enabled: bool = _get("auth", "enabled", True)

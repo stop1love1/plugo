@@ -19,6 +19,7 @@ from routers import chat, sites, crawl, knowledge, tools, sessions, memory, anal
 from routers import auth as auth_router
 from routers import audit as audit_router
 from routers import llm_keys as llm_keys_router
+from routers import models as models_router
 from routers import demo_api
 import models  # noqa: F401 — ensure all models registered for Base.metadata.create_all
 
@@ -128,6 +129,7 @@ app.include_router(memory.router)
 app.include_router(analytics.router)
 app.include_router(audit_router.router)
 app.include_router(llm_keys_router.router)
+app.include_router(models_router.router)
 app.include_router(demo_api.router)
 
 
@@ -157,8 +159,6 @@ async def demo_page(site_token: str):
     js_widget_title = _json.dumps(site.get('widget_title') or '')
     dark_mode = site.get('dark_mode', 'auto')
     js_dark_mode = 'undefined' if dark_mode == 'auto' else ('true' if dark_mode == 'dark' else 'false')
-    js_show_branding = 'true' if site.get('show_branding', True) else 'false'
-
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -217,8 +217,7 @@ async def demo_page(site_token: str):
     greeting: {js_greeting},
     position: {js_position},
     widgetTitle: {js_widget_title},
-    darkMode: {js_dark_mode},
-    showBranding: {js_show_branding}
+    darkMode: {js_dark_mode}
   }};
 </script>
 <script src="/static/widget.js" async></script>

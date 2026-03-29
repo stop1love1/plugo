@@ -2,10 +2,9 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { getSite, updateSite, deleteSite, getProviders, type UpdateSiteData } from "../lib/api";
+import { getSite, updateSite, deleteSite, getModelsProviders, type UpdateSiteData } from "../lib/api";
 import { Save, Trash2, AlertTriangle } from "lucide-react";
 import { useLocale } from "../lib/useLocale";
-import { LLMKeysSection } from "../components/LLMKeysSection";
 
 export default function Settings() {
   const { siteId } = useParams<{ siteId: string }>();
@@ -19,12 +18,13 @@ export default function Settings() {
   });
 
   const { data: providers = [] } = useQuery({
-    queryKey: ["providers"],
-    queryFn: getProviders,
+    queryKey: ["models-providers"],
+    queryFn: getModelsProviders,
   });
 
   const [form, setForm] = useState({
     name: "",
+    url: "",
     llm_provider: "",
     llm_model: "",
     primary_color: "#6366f1",
@@ -32,9 +32,15 @@ export default function Settings() {
     position: "bottom-right",
     widget_title: "",
     dark_mode: "auto",
-    show_branding: true,
+    bot_avatar: "",
+    header_subtitle: "",
+    input_placeholder: "",
+    auto_open_delay: 0,
+    bubble_size: "medium",
     allowed_domains: "",
     suggestions: "",
+    system_prompt: "",
+    bot_rules: "",
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -44,6 +50,7 @@ export default function Settings() {
     if (site) {
       setForm({
         name: site.name,
+        url: site.url || "",
         llm_provider: site.llm_provider,
         llm_model: site.llm_model,
         primary_color: site.primary_color,
@@ -51,9 +58,15 @@ export default function Settings() {
         position: site.position,
         widget_title: site.widget_title || "",
         dark_mode: site.dark_mode || "auto",
-        show_branding: site.show_branding !== false,
+        bot_avatar: site.bot_avatar || "",
+        header_subtitle: site.header_subtitle || "",
+        input_placeholder: site.input_placeholder || "",
+        auto_open_delay: site.auto_open_delay || 0,
+        bubble_size: site.bubble_size || "medium",
         allowed_domains: site.allowed_domains,
         suggestions: (site.suggestions || []).join(", "),
+        system_prompt: site.system_prompt || "",
+        bot_rules: site.bot_rules || "",
       });
     }
   }, [site]);
@@ -63,6 +76,7 @@ export default function Settings() {
     if (!site) return false;
     return (
       form.name !== site.name ||
+      form.url !== (site.url || "") ||
       form.llm_provider !== site.llm_provider ||
       form.llm_model !== site.llm_model ||
       form.primary_color !== site.primary_color ||
@@ -70,9 +84,15 @@ export default function Settings() {
       form.position !== site.position ||
       form.widget_title !== (site.widget_title || "") ||
       form.dark_mode !== (site.dark_mode || "auto") ||
-      form.show_branding !== (site.show_branding !== false) ||
+      form.bot_avatar !== (site.bot_avatar || "") ||
+      form.header_subtitle !== (site.header_subtitle || "") ||
+      form.input_placeholder !== (site.input_placeholder || "") ||
+      form.auto_open_delay !== (site.auto_open_delay || 0) ||
+      form.bubble_size !== (site.bubble_size || "medium") ||
       form.allowed_domains !== site.allowed_domains ||
-      form.suggestions !== (site.suggestions || []).join(", ")
+      form.suggestions !== (site.suggestions || []).join(", ") ||
+      form.system_prompt !== (site.system_prompt || "") ||
+      form.bot_rules !== (site.bot_rules || "")
     );
   }, [form, site]);
 
@@ -161,6 +181,11 @@ export default function Settings() {
 
   const currentProvider = providers.find((p) => p.id === form.llm_provider);
 
+  // Build flat list of all models grouped by provider for display
+  const allModels = providers.flatMap((p) =>
+    p.models.map((m) => ({ ...m, provider_id: p.id, provider_name: p.name }))
+  );
+
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-2">{t("settings.title")}</h1>
@@ -184,6 +209,13 @@ export default function Settings() {
                 className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
             </div>
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.websiteUrl")}</label>
+              <input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })}
+                placeholder="https://example.com"
+                className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+              <p className="text-xs text-gray-400 mt-1">{t("settings.websiteUrlHint")}</p>
+            </div>
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.domainWhitelist")}</label>
               <input value={form.allowed_domains}
                 onChange={(e) => {
@@ -199,13 +231,15 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* API Keys */}
-        <LLMKeysSection providers={providers} />
-
-        {/* LLM */}
+        {/* Model Selection — simplified */}
         <div className="bg-white p-6 rounded-xl border border-gray-200">
-          <h3 className="font-semibold mb-4">{t("settings.llm")}</h3>
-          <div className="space-y-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold">{t("settings.model")}</h3>
+            <a href="/models" className="text-xs text-primary-600 hover:text-primary-700 font-medium">
+              {t("settings.manageModels")} &rarr;
+            </a>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.provider")}</label>
               <select value={form.llm_provider} onChange={(e) => {
@@ -233,12 +267,41 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Widget */}
+        {/* AI Rules & Instructions */}
         <div className="bg-white p-6 rounded-xl border border-gray-200">
-          <h3 className="font-semibold mb-4">{t("settings.widget")}</h3>
+          <h3 className="font-semibold mb-4">{t("settings.aiRules")}</h3>
           <div className="space-y-4">
-            <div className="flex gap-4">
-              <div className="flex-1">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.systemPrompt")}</label>
+              <textarea
+                value={form.system_prompt}
+                onChange={(e) => setForm({ ...form, system_prompt: e.target.value })}
+                placeholder={t("settings.systemPromptPlaceholder")}
+                rows={3}
+                className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+              />
+              <p className="text-xs text-gray-400 mt-1">{t("settings.systemPromptHint")}</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.botRules")}</label>
+              <textarea
+                value={form.bot_rules}
+                onChange={(e) => setForm({ ...form, bot_rules: e.target.value })}
+                placeholder={t("settings.botRulesPlaceholder")}
+                rows={5}
+                className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500 text-sm font-mono"
+              />
+              <p className="text-xs text-gray-400 mt-1">{t("settings.botRulesHint")}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Widget — Appearance */}
+        <div className="bg-white p-6 rounded-xl border border-gray-200">
+          <h3 className="font-semibold mb-4">{t("settings.widget")} — Appearance</h3>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.primaryColor")}</label>
                 <div className="flex items-center gap-2">
                   <input type="color" value={form.primary_color}
@@ -258,7 +321,7 @@ export default function Settings() {
                   <p className="text-xs text-red-500 mt-1">{errors.primary_color}</p>
                 )}
               </div>
-              <div className="flex-1">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.position")}</label>
                 <select value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })}
                   className="w-full border rounded-lg px-3 py-2 outline-none">
@@ -266,21 +329,7 @@ export default function Settings() {
                   <option value="bottom-left">Bottom Left</option>
                 </select>
               </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Widget Title</label>
-              <input value={form.widget_title} onChange={(e) => setForm({ ...form, widget_title: e.target.value })}
-                placeholder="Chat with us"
-                className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
-              <p className="text-xs text-gray-400 mt-1">Custom title in the widget header. Leave empty for default.</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.greetingMessage")}</label>
-              <input value={form.greeting} onChange={(e) => setForm({ ...form, greeting: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
-            </div>
-            <div className="flex gap-4">
-              <div className="flex-1">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Dark Mode</label>
                 <select value={form.dark_mode} onChange={(e) => setForm({ ...form, dark_mode: e.target.value })}
                   className="w-full border rounded-lg px-3 py-2 outline-none">
@@ -289,13 +338,65 @@ export default function Settings() {
                   <option value="dark">Always Dark</option>
                 </select>
               </div>
-              <div className="flex-1 flex items-end pb-1">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={form.show_branding}
-                    onChange={(e) => setForm({ ...form, show_branding: e.target.checked })}
-                    className="rounded" />
-                  <span className="text-sm text-gray-700">Show "Powered by Plugo"</span>
-                </label>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Bot Avatar</label>
+                <input value={form.bot_avatar} onChange={(e) => setForm({ ...form, bot_avatar: e.target.value })}
+                  placeholder="🤖"
+                  maxLength={4}
+                  className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+                <p className="text-xs text-gray-400 mt-1">Emoji hiển thị trong header và tin nhắn bot</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Bubble Size</label>
+                <select value={form.bubble_size} onChange={(e) => setForm({ ...form, bubble_size: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2 outline-none">
+                  <option value="small">Small (48px)</option>
+                  <option value="medium">Medium (56px)</option>
+                  <option value="large">Large (64px)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Widget — Content */}
+        <div className="bg-white p-6 rounded-xl border border-gray-200">
+          <h3 className="font-semibold mb-4">{t("settings.widget")} — Content</h3>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Widget Title</label>
+                <input value={form.widget_title} onChange={(e) => setForm({ ...form, widget_title: e.target.value })}
+                  placeholder="Chat with us"
+                  className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Header Subtitle</label>
+                <input value={form.header_subtitle} onChange={(e) => setForm({ ...form, header_subtitle: e.target.value })}
+                  placeholder="Online"
+                  className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.greetingMessage")}</label>
+              <input value={form.greeting} onChange={(e) => setForm({ ...form, greeting: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Input Placeholder</label>
+                <input value={form.input_placeholder} onChange={(e) => setForm({ ...form, input_placeholder: e.target.value })}
+                  placeholder="Type a message..."
+                  className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Auto Open (seconds)</label>
+                <input type="number" min={0} max={120} value={form.auto_open_delay}
+                  onChange={(e) => setForm({ ...form, auto_open_delay: parseInt(e.target.value) || 0 })}
+                  className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+                <p className="text-xs text-gray-400 mt-1">0 = tắt. Tự mở widget sau N giây khi user vào trang</p>
               </div>
             </div>
             <div>

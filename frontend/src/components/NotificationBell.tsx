@@ -32,7 +32,7 @@ export function pushNotification(n: Omit<Notification, "id" | "timestamp" | "rea
   pushNotificationFn?.(n);
 }
 
-export function NotificationBell() {
+export function NotificationBell({ variant = "icon" }: { variant?: "icon" | "sidebar" }) {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>(loadNotifications);
@@ -86,11 +86,20 @@ export function NotificationBell() {
           setOpen(!open);
           if (!open) markAllRead();
         }}
-        className="relative p-1 text-gray-400 hover:text-gray-600"
+        className={variant === "sidebar"
+          ? "flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors w-full"
+          : "relative p-1 text-gray-400 hover:text-gray-600"
+        }
       >
-        <Bell className="w-4 h-4" />
+        <Bell className={variant === "sidebar" ? "w-5 h-5" : "w-4 h-4"} />
+        {variant === "sidebar" && (
+          <span className="flex-1 text-left">{t("notifications.title")}</span>
+        )}
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] flex items-center justify-center">
+          <span className={variant === "sidebar"
+            ? "bg-red-500 text-white rounded-full text-[10px] px-1.5 py-0.5 min-w-[18px] text-center"
+            : "absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] flex items-center justify-center"
+          }>
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
@@ -99,7 +108,7 @@ export function NotificationBell() {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-8 z-50 w-80 bg-white rounded-xl border border-gray-200 shadow-lg">
+          <div className={`absolute z-50 w-80 bg-white rounded-xl border border-gray-200 shadow-lg ${variant === "sidebar" ? "left-0 bottom-full mb-1" : "right-0 top-8"}`}>
             <div className="flex items-center justify-between p-3 border-b border-gray-100">
               <span className="font-medium text-sm">{t("notifications.title")}</span>
               {notifications.length > 0 && (

@@ -12,6 +12,7 @@ import Visitors from "./pages/Visitors";
 import Settings from "./pages/Settings";
 import Analytics from "./pages/Analytics";
 import AuditLog from "./pages/AuditLog";
+import Models from "./pages/Models";
 import Playground from "./pages/Playground";
 import CrawledPages from "./pages/CrawledPages";
 
@@ -28,6 +29,7 @@ export default function App() {
         }
       >
         <Route index element={<Sites />} />
+        <Route path="models" element={<Models />} />
         <Route path="audit" element={<AuditLog />} />
         <Route path="site/:siteId">
           <Route path="analytics" element={<Analytics />} />

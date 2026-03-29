@@ -28,6 +28,34 @@ When API tools are available, you perform actions for the user:
 - ALWAYS explain the action before executing it
 - ALWAYS ask for confirmation before performing critical actions
 
+## Rich Content
+You can include rich elements in your responses using extended markdown:
+- **Images**: `![description](image_url)` — show product images, screenshots, banners
+- **Image gallery**: Multiple images in a row become a slideshow:
+  ```
+  ![Product front](url1)
+  ![Product side](url2)
+  ```
+- **Videos**: `![video](youtube_url)` — embed YouTube videos
+- **Buttons**: `[Label](url "button")` — action buttons with site primary color
+- **Button groups**: Consecutive buttons form a row:
+  ```
+  [Buy Now](/buy "button")
+  [Learn More](/info "button")
+  ```
+- **Tables**: Use markdown tables for pricing, comparison, specs, schedules
+- **Lists**: Use bullet/numbered lists for steps, features, FAQs
+- **Bold/Italic**: Emphasize key info like prices, names, deadlines
+- **Code blocks**: For technical content, API keys, config examples
+- **Links**: `[text](url)` — inline links to pages
+
+Use rich elements proactively when they improve the experience. For example:
+- E-commerce: show product images, price tables, "Add to Cart" buttons
+- SaaS: feature comparison tables, pricing, "Sign Up" buttons
+- Support: step-by-step lists, links to docs, video tutorials
+- Restaurant/Hotel: image galleries, booking buttons, menu tables
+- Education: video embeds, resource links, schedule tables
+
 ## Rules
 - Respond in the same language the user is using
 - ONLY answer questions related to the website, its products, services, and content from the knowledge base
@@ -36,6 +64,7 @@ When API tools are available, you perform actions for the user:
 - Prioritize answering from the knowledge base first
 - If a suitable tool exists, suggest performing the action
 - Keep responses concise and friendly
+- Use rich content (images, buttons, links) when it improves the user experience
 
 {memory_section}
 
@@ -60,10 +89,14 @@ class ChatAgent:
         site_url: str,
         llm_provider: str = "claude",
         llm_model: str = "claude-sonnet-4-20250514",
+        system_prompt: str = "",
+        bot_rules: str = "",
     ):
         self.site_id = site_id
         self.site_name = site_name
         self.site_url = site_url
+        self.custom_system_prompt = system_prompt
+        self.bot_rules = bot_rules
         self.llm_provider_name = llm_provider
         self.provider: BaseLLMProvider = get_llm_provider(llm_provider, llm_model)
         self.messages: list[dict] = []
@@ -185,6 +218,16 @@ class ChatAgent:
             knowledge_section=knowledge_section,
             tools_section=tools_section,
         )
+
+        # Inject custom system prompt from site settings
+        if self.custom_system_prompt:
+            prompt += f"\n\n## Custom Instructions\n{self.custom_system_prompt}"
+
+        # Inject bot rules from site settings
+        if self.bot_rules:
+            rules_list = [r.strip() for r in self.bot_rules.strip().splitlines() if r.strip()]
+            if rules_list:
+                prompt += "\n\n## Site-specific Rules\n" + "\n".join(f"- {r}" for r in rules_list)
 
         return prompt, tools
 

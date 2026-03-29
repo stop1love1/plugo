@@ -2,8 +2,10 @@ import json
 import re
 import uuid
 import asyncio
+import hashlib
+import fnmatch
+from collections import deque
 from datetime import datetime, timezone
-from typing import Optional
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 import httpx
@@ -18,30 +20,51 @@ from logging_config import logger
 class WebCrawler:
     """Crawls websites, extracts text, chunks, and embeds content.
 
-    Supports graceful stop: when an admin stops the crawl, the crawler
-    halts but still persists all data collected so far to the database.
+    Supports graceful stop and pause: when an admin stops/pauses the crawl,
+    the crawler halts but persists all data collected so far to the database.
     """
 
-    def __init__(self, max_pages: int = 50, delay: float = 1.0, force_recrawl: bool = False):
+    def __init__(
+        self,
+        max_pages: int = 50,
+        delay: float | None = None,
+        force_recrawl: bool = False,
+        max_depth: int = 0,
+        exclude_patterns: list[str] | None = None,
+    ):
         self.max_pages = max_pages
-        self.delay = delay
+        self.delay = delay if delay is not None else settings.crawl_request_delay
         self.visited: set[str] = set()
         self._stopped = False
+        self._paused = False
         self.chunker = SemanticChunker()
         self.logs: list[dict] = []
         self.pages_skipped = 0
         self.pages_failed = 0
+        self.pages_retried = 0
         self.chunks_created = 0
         self.current_url: str | None = None
         self.force_recrawl = force_recrawl
         self._already_crawled_urls: set[str] = set()
+        self._page_hashes: dict[str, str] = {}
+        self._queue_size = 0
+        self.max_depth = max_depth  # 0 = unlimited
+        self.exclude_patterns = exclude_patterns or []
+        self.max_retries = settings.crawl_max_retries
 
     def stop(self):
         """Signal the crawler to stop. Data already crawled will be persisted."""
         self._stopped = True
 
+    def pause(self):
+        """Signal the crawler to pause."""
+        self._paused = True
+
+    def resume(self):
+        """Resume a paused crawler."""
+        self._paused = False
+
     def _log(self, url: str, status: str, title: str = "", chunks: int = 0, error: str | None = None, action: str = ""):
-        """Add a structured log entry."""
         entry = {
             "url": url,
             "status": status,
@@ -57,8 +80,21 @@ class WebCrawler:
             logger.warning("Crawl page error", url=url, error=error)
         return entry
 
+    def _is_excluded(self, url: str) -> bool:
+        """Check if a URL matches any exclude pattern."""
+        for pattern in self.exclude_patterns:
+            pattern = pattern.strip()
+            if not pattern:
+                continue
+            # Support glob-style patterns
+            if fnmatch.fnmatch(url, pattern):
+                return True
+            # Also check if pattern is a substring (e.g. "/admin/")
+            if pattern in url:
+                return True
+        return False
+
     async def _check_robots_txt(self, client: httpx.AsyncClient, start_url: str) -> RobotFileParser:
-        """Fetch and parse robots.txt from the target domain."""
         parsed = urlparse(start_url)
         robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
         rp = RobotFileParser()
@@ -76,8 +112,33 @@ class WebCrawler:
             self._log(robots_url, "skipped", error=str(e), action="robots.txt fetch failed, allowing all")
         return rp
 
+    async def _parse_sitemap(self, client: httpx.AsyncClient, start_url: str, base_domain: str) -> list[str]:
+        """Try to discover URLs from sitemap.xml."""
+        parsed = urlparse(start_url)
+        sitemap_url = f"{parsed.scheme}://{parsed.netloc}/sitemap.xml"
+        urls = []
+        try:
+            response = await client.get(sitemap_url)
+            if response.status_code == 200 and "xml" in response.headers.get("content-type", ""):
+                soup = BeautifulSoup(response.text, "html.parser")
+                for loc in soup.find_all("loc"):
+                    url = loc.get_text(strip=True)
+                    url_parsed = urlparse(url)
+                    if url_parsed.netloc == base_domain:
+                        clean_url = f"{url_parsed.scheme}://{url_parsed.netloc}{url_parsed.path}"
+                        if not self._is_excluded(clean_url):
+                            urls.append(clean_url)
+                if urls:
+                    self._log(sitemap_url, "success", action=f"sitemap.xml: discovered {len(urls)} URLs")
+                else:
+                    self._log(sitemap_url, "skipped", action="sitemap.xml parsed but no usable URLs found")
+            else:
+                self._log(sitemap_url, "skipped", action="sitemap.xml not found or not XML")
+        except Exception as e:
+            self._log(sitemap_url, "skipped", error=str(e), action="sitemap.xml fetch failed")
+        return urls
+
     async def _save_progress(self, job_id: str, repos):
-        """Persist current progress and ALL logs to the job record."""
         await repos.crawl_jobs.update(job_id, {
             "pages_found": len(self.visited) + self._queue_size,
             "pages_done": len(self.visited),
@@ -88,6 +149,46 @@ class WebCrawler:
             "crawl_log": json.dumps(self.logs),
         })
 
+    def _compute_page_hash(self, html: str) -> str:
+        normalized = re.sub(r"\s+", " ", html).strip()
+        return hashlib.sha256(normalized.encode()).hexdigest()
+
+    async def _flush_chunks(self, site_id: str, chunks: list[dict], repos):
+        if not chunks:
+            return
+        self._log("", "success", action=f"embedding batch of {len(chunks)} chunks...")
+        await self._embed_and_store(site_id, chunks, repos)
+        self._log("", "success", action=f"stored batch of {len(chunks)} chunks")
+
+    async def _fetch_with_retry(
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+    ) -> tuple[int | None, str | None, str | None]:
+        """Fetch a URL with retry logic. Returns (status_code, content_type, html).
+        status_code: None=timeout, -1=error (html contains error message)."""
+        last_error = None
+        for attempt in range(1 + self.max_retries):
+            try:
+                response = await client.get(url)
+                return (response.status_code, response.headers.get("content-type", ""), response.text)
+            except httpx.TimeoutException:
+                last_error = "timeout"
+                if attempt < self.max_retries:
+                    self.pages_retried += 1
+                    self._log(url, "skipped", action=f"timeout, retrying ({attempt + 1}/{self.max_retries})...")
+                    await asyncio.sleep(self.delay * (attempt + 1))
+            except Exception as e:
+                last_error = str(e)
+                if attempt < self.max_retries:
+                    self.pages_retried += 1
+                    self._log(url, "skipped", action=f"error, retrying ({attempt + 1}/{self.max_retries})...")
+                    await asyncio.sleep(self.delay * (attempt + 1))
+
+        if last_error == "timeout":
+            return (None, None, None)
+        return (-1, None, last_error)
+
     async def crawl_site(
         self,
         site_id: str,
@@ -97,34 +198,51 @@ class WebCrawler:
     ):
         """Crawl a website starting from the given URL."""
         base_domain = urlparse(start_url).netloc
-        queue = [start_url]
+        # Queue stores (url, depth) tuples
+        queue: deque[tuple[str, int]] = deque([(start_url, 0)])
+        queued_urls: set[str] = {start_url}
         self._queue_size = len(queue)
-        all_chunks: list[dict] = []
+        pending_chunks: list[dict] = []
+        embed_batch_size = settings.crawl_embed_batch_size
 
-        # Update job status
         await repos.crawl_jobs.update(job_id, {
             "status": "running",
             "current_url": start_url,
         })
 
-        # Load already-crawled URLs for change detection (content-hash dedup handles duplicates at DB level)
+        # Load already-crawled URLs for change detection
         if not self.force_recrawl:
             existing_urls = await repos.knowledge.list_crawled_urls(site_id)
             self._already_crawled_urls = {u["source_url"] for u in existing_urls if u.get("source_url")}
             if self._already_crawled_urls:
                 self._log("", "success", action=f"found {len(self._already_crawled_urls)} previously crawled URLs")
 
-        self._log(start_url, "success", action=f"crawl started — target: {base_domain}, max {self.max_pages} pages")
+        features = []
+        if self.max_depth > 0:
+            features.append(f"depth≤{self.max_depth}")
+        if self.exclude_patterns:
+            features.append(f"{len(self.exclude_patterns)} exclude patterns")
+        if self.force_recrawl:
+            features.append("force-recrawl")
+        feature_str = f" [{', '.join(features)}]" if features else ""
+        self._log(start_url, "success", action=f"crawl started — target: {base_domain}, max {self.max_pages} pages{feature_str}")
 
         try:
             async with httpx.AsyncClient(
-                timeout=30,
+                timeout=settings.crawl_request_timeout,
                 follow_redirects=True,
                 verify=settings.crawl_verify_ssl,
                 headers={"User-Agent": "PlugoBot/1.0 (+https://github.com/stop1love1/plugo)"},
             ) as client:
-                # Fetch and parse robots.txt before crawling
                 robot_parser = await self._check_robots_txt(client, start_url)
+
+                # Seed queue from sitemap.xml
+                sitemap_urls = await self._parse_sitemap(client, start_url, base_domain)
+                for surl in sitemap_urls:
+                    if surl not in queued_urls:
+                        queue.append((surl, 1))
+                        queued_urls.add(surl)
+                self._queue_size = len(queue)
 
                 while queue and len(self.visited) < self.max_pages:
                     # Check stop signal
@@ -132,7 +250,14 @@ class WebCrawler:
                         self._log("", "success", action="crawl stopped by user")
                         break
 
-                    url = queue.pop(0)
+                    # Check pause signal — wait until resumed
+                    while self._paused and not self._stopped:
+                        await asyncio.sleep(1)
+                    if self._stopped:
+                        self._log("", "success", action="crawl stopped while paused")
+                        break
+
+                    url, depth = queue.popleft()
                     self._queue_size = len(queue)
                     if url in self.visited:
                         continue
@@ -143,99 +268,119 @@ class WebCrawler:
                         self.pages_skipped += 1
                         continue
 
+                    # Check exclude patterns
+                    if self._is_excluded(url):
+                        self._log(url, "skipped", action="matched exclude pattern")
+                        self.pages_skipped += 1
+                        continue
+
                     self.current_url = url
                     is_recrawl = url in self._already_crawled_urls
 
                     try:
-                        response = await client.get(url)
+                        status_code, content_type, html = await self._fetch_with_retry(client, url)
 
-                        if response.status_code != 200:
-                            self._log(url, "skipped", error=f"HTTP {response.status_code}", action="non-200 response")
+                        if status_code is None:
+                            self._log(url, "error", error="Request timed out (all retries exhausted)", action=f"timeout after {settings.crawl_request_timeout}s")
+                            self.pages_failed += 1
+                            await self._save_progress(job_id, repos)
+                            continue
+
+                        if status_code == -1:
+                            self._log(url, "error", error=html, action="fetch failed (all retries exhausted)")
+                            self.pages_failed += 1
+                            await self._save_progress(job_id, repos)
+                            continue
+
+                        if status_code != 200:
+                            self._log(url, "skipped", error=f"HTTP {status_code}", action="non-200 response")
                             self.pages_skipped += 1
                             await self._save_progress(job_id, repos)
                             continue
 
-                        content_type = response.headers.get("content-type", "")
-                        if "text/html" not in content_type:
-                            self._log(url, "skipped", action=f"non-HTML content: {content_type.split(';')[0]}")
+                        if "text/html" not in (content_type or ""):
+                            self._log(url, "skipped", action=f"non-HTML content: {(content_type or '').split(';')[0]}")
                             self.pages_skipped += 1
                             continue
 
                         self.visited.add(url)
-                        html = response.text
-                        soup = BeautifulSoup(html, "html.parser")
 
+                        # Change detection: skip if page content hasn't changed
+                        page_hash = self._compute_page_hash(html)
+                        if is_recrawl and not self.force_recrawl:
+                            old_hash = self._page_hashes.get(url)
+                            if old_hash and old_hash == page_hash:
+                                self._log(url, "skipped", action="content unchanged since last crawl")
+                                self.pages_skipped += 1
+                                continue
+                        self._page_hashes[url] = page_hash
+
+                        soup = BeautifulSoup(html, "html.parser")
                         title = (soup.title.string or "").strip() if soup.title else ""
 
-                        # Use semantic chunker for better quality
                         chunks = self.chunker.chunk_page(soup, title, url, site_id)
                         if not chunks:
-                            # Fallback to simple text extraction
                             text = self._extract_text(soup)
                             if text.strip():
                                 chunks = self._chunk_text(text, title, url, site_id)
 
-                        all_chunks.extend(chunks)
+                        pending_chunks.extend(chunks)
                         self.chunks_created += len(chunks)
 
-                        # Log successful page crawl with detail
                         recrawl_tag = " (re-crawl)" if is_recrawl else ""
+                        depth_tag = f" [depth={depth}]" if self.max_depth > 0 else ""
                         self._log(
                             url, "success",
                             title=title,
                             chunks=len(chunks),
-                            action=f"extracted {len(chunks)} chunks ({len(html)} bytes){recrawl_tag}",
+                            action=f"extracted {len(chunks)} chunks ({len(html)} bytes){recrawl_tag}{depth_tag}",
                         )
 
-                        # Discover new links (same domain)
-                        new_links = 0
-                        for link in soup.find_all("a", href=True):
-                            href = urljoin(url, link["href"])
-                            parsed = urlparse(href)
-                            clean_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
-                            if (
-                                parsed.netloc == base_domain
-                                and clean_url not in self.visited
-                                and clean_url not in queue
-                            ):
-                                queue.append(clean_url)
-                                new_links += 1
+                        # Discover new links (same domain, respecting depth limit)
+                        child_depth = depth + 1
+                        if self.max_depth == 0 or child_depth <= self.max_depth:
+                            for link in soup.find_all("a", href=True):
+                                href = urljoin(url, link["href"])
+                                parsed = urlparse(href)
+                                clean_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+                                if (
+                                    parsed.netloc == base_domain
+                                    and clean_url not in self.visited
+                                    and clean_url not in queued_urls
+                                    and not self._is_excluded(clean_url)
+                                ):
+                                    queue.append((clean_url, child_depth))
+                                    queued_urls.add(clean_url)
 
                         self._queue_size = len(queue)
 
-                        # Save progress after every page
-                        await self._save_progress(job_id, repos)
+                        # Flush chunks periodically
+                        if len(pending_chunks) >= embed_batch_size:
+                            await self._flush_chunks(site_id, pending_chunks, repos)
+                            pending_chunks.clear()
 
+                        await self._save_progress(job_id, repos)
                         await asyncio.sleep(self.delay)
-
-                    except httpx.TimeoutException:
-                        self._log(url, "error", error="Request timed out", action="timeout after 30s")
-                        self.pages_failed += 1
-                        await self._save_progress(job_id, repos)
-                        continue
 
                     except Exception as e:
                         self._log(url, "error", error=str(e), action="unexpected error")
                         self.pages_failed += 1
                         job = await repos.crawl_jobs.get_by_id(job_id)
                         error_log = (job.get("error_log") or "") + f"\n{url}: {str(e)}"
-                        await repos.crawl_jobs.update(job_id, {
-                            "error_log": error_log,
-                        })
+                        await repos.crawl_jobs.update(job_id, {"error_log": error_log})
                         await self._save_progress(job_id, repos)
                         continue
 
-            # Embed and store all chunks
-            if all_chunks:
-                self._log("", "success", action=f"embedding {len(all_chunks)} chunks into vector store...")
-                await self._save_progress(job_id, repos)
-                await self._embed_and_store(site_id, all_chunks, repos)
-                self._log("", "success", action=f"stored {len(all_chunks)} chunks successfully")
+            # Flush remaining chunks
+            if pending_chunks:
+                await self._flush_chunks(site_id, pending_chunks, repos)
+                pending_chunks.clear()
 
-            final_status = "stopped" if self._stopped else "completed"
+            final_status = "paused" if self._paused else ("stopped" if self._stopped else "completed")
+            retried_str = f", {self.pages_retried} retried" if self.pages_retried > 0 else ""
             summary = (
                 f"Crawl {final_status}: {len(self.visited)} pages crawled, "
-                f"{self.pages_skipped} skipped, {self.pages_failed} failed, "
+                f"{self.pages_skipped} skipped, {self.pages_failed} failed{retried_str}, "
                 f"{self.chunks_created} chunks created"
             )
             self._log("", "success", action=summary)
@@ -252,6 +397,12 @@ class WebCrawler:
             })
 
         except Exception as e:
+            if pending_chunks:
+                try:
+                    await self._flush_chunks(site_id, pending_chunks, repos)
+                except Exception:
+                    logger.error("Failed to flush chunks on error", site_id=site_id)
+
             self._log("", "error", error=str(e), action="crawl failed with fatal error")
             await repos.crawl_jobs.update(job_id, {
                 "status": "failed",
@@ -337,7 +488,6 @@ class WebCrawler:
 
         contents = [c["content"] for c in chunks]
 
-        # Parallel embedding with semaphore to respect rate limits
         semaphore = asyncio.Semaphore(3)
 
         async def _embed_batch(batch):
@@ -353,7 +503,6 @@ class WebCrawler:
 
         await rag_engine.add_chunks(site_id, chunks, all_embeddings)
 
-        # Store in DB via repository — strip extra fields from semantic chunker
         valid_fields = {"id", "site_id", "source_url", "source_type", "title", "content", "chunk_index", "content_hash", "embedding_id"}
         db_chunks = []
         for chunk in chunks:

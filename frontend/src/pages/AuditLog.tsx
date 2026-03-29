@@ -42,7 +42,7 @@ export default function AuditLog() {
   }, [data?.logs, searchFilter, actionFilter]);
 
   return (
-    <div className="max-w-4xl">
+    <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-2">{t("audit.title")}</h1>
       <p className="text-gray-500 mb-8">{t("audit.subtitle")}</p>
 

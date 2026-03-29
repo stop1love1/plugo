@@ -17,7 +17,11 @@ type AppProps = {
   greeting: string;
   position: "bottom-right" | "bottom-left";
   widgetTitle?: string;
-  showBranding?: boolean;
+  botAvatar?: string;
+  headerSubtitle?: string;
+  inputPlaceholder?: string;
+  autoOpenDelay?: number;
+  bubbleSize?: string;
   getPageContext: () => any;
 };
 
@@ -85,7 +89,7 @@ function playNotificationSound() {
   osc.stop(ctx.currentTime + 0.1);
 }
 
-export function App({ token, serverUrl, primaryColor, greeting, position, widgetTitle, showBranding = true, getPageContext }: AppProps) {
+export function App({ token, serverUrl, primaryColor, greeting, position, widgetTitle, botAvatar, headerSubtitle, inputPlaceholder, autoOpenDelay, bubbleSize, getPageContext }: AppProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -97,6 +101,19 @@ export function App({ token, serverUrl, primaryColor, greeting, position, widget
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
   const sessionIdRef = useRef<string | null>(null);
+
+  // Auto-open after delay
+  useEffect(() => {
+    if (autoOpenDelay && autoOpenDelay > 0) {
+      const timer = setTimeout(() => {
+        if (!isOpenRef.current) {
+          setIsOpen(true);
+          isOpenRef.current = true;
+        }
+      }, autoOpenDelay * 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [autoOpenDelay]);
 
   const initWebSocket = useCallback(() => {
     const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -278,7 +295,9 @@ export function App({ token, serverUrl, primaryColor, greeting, position, widget
           suggestions={suggestions}
           connectionState={connectionState}
           widgetTitle={widgetTitle}
-          showBranding={showBranding}
+          botAvatar={botAvatar}
+          headerSubtitle={headerSubtitle}
+          inputPlaceholder={inputPlaceholder}
           onSend={handleSend}
           onClose={handleClose}
           onMinimize={handleMinimize}
@@ -290,6 +309,7 @@ export function App({ token, serverUrl, primaryColor, greeting, position, widget
         position={position}
         isOpen={isOpen}
         unreadCount={unreadCount}
+        bubbleSize={bubbleSize}
         onClick={isOpen ? handleClose : handleOpen}
       />
     </div>

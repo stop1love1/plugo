@@ -37,6 +37,8 @@ class SiteUpdate(BaseModel):
     show_branding: Optional[bool] = None
     allowed_domains: Optional[str] = None
     suggestions: Optional[list[str]] = None
+    system_prompt: Optional[str] = None
+    bot_rules: Optional[str] = None
 
 
 class ApprovalUpdate(BaseModel):

@@ -43,6 +43,11 @@ class MongoSiteRepo(BaseSiteRepo):
             "widget_title": data.get("widget_title", ""),
             "dark_mode": data.get("dark_mode", "auto"),
             "show_branding": data.get("show_branding", True),
+            "bot_avatar": data.get("bot_avatar", ""),
+            "header_subtitle": data.get("header_subtitle", ""),
+            "input_placeholder": data.get("input_placeholder", ""),
+            "auto_open_delay": data.get("auto_open_delay", 0),
+            "bubble_size": data.get("bubble_size", "medium"),
             "allowed_domains": data.get("allowed_domains", ""),
             "suggestions": data.get("suggestions", []),
             # Crawl management

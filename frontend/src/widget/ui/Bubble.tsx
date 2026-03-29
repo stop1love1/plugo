@@ -4,13 +4,18 @@ type BubbleProps = {
   position: "bottom-right" | "bottom-left";
   isOpen: boolean;
   unreadCount?: number;
+  bubbleSize?: string;
   onClick: () => void;
 };
 
-export function Bubble({ position, isOpen, unreadCount = 0, onClick }: BubbleProps) {
+const sizeMap: Record<string, string> = { small: "48px", medium: "56px", large: "64px" };
+
+export function Bubble({ position, isOpen, unreadCount = 0, bubbleSize, onClick }: BubbleProps) {
+  const sz = sizeMap[bubbleSize || "medium"] || "56px";
   return (
     <button
       class={`plugo-bubble ${position}${isOpen ? " open" : ""}`}
+      style={`width:${sz};height:${sz}`}
       onClick={onClick}
       aria-label={isOpen ? "Close chat" : "Open chat"}
       aria-expanded={isOpen}

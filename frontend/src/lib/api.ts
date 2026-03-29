@@ -22,7 +22,14 @@ export type Site = {
   widget_title: string;
   dark_mode: string;
   show_branding: boolean;
+  bot_avatar: string;
+  header_subtitle: string;
+  input_placeholder: string;
+  auto_open_delay: number;
+  bubble_size: string;
   allowed_domains: string;
+  system_prompt: string;
+  bot_rules: string;
   suggestions: string[];
   is_approved: boolean;
   crawl_enabled: boolean;
@@ -124,6 +131,9 @@ export type CrawlStartData = {
   site_id: string;
   url?: string;
   max_pages?: number;
+  max_depth?: number;
+  force_recrawl?: boolean;
+  exclude_patterns?: string;
 };
 
 export type CrawlJob = {
@@ -133,10 +143,29 @@ export type CrawlJob = {
   start_url: string;
   pages_found: number;
   pages_done: number;
+  pages_skipped: number;
+  pages_failed: number;
+  chunks_created: number;
+  current_url: string | null;
   error_log: string | null;
   crawl_log: string | null;
   started_at: string | null;
   finished_at: string | null;
+};
+
+export type CrawlStatus = {
+  site_id: string;
+  crawl_enabled: boolean;
+  crawl_status: string;
+  crawl_auto_interval: number;
+  crawl_max_pages: number;
+  crawl_max_depth: number;
+  crawl_exclude_patterns: string;
+  knowledge_count: number;
+  last_crawled_at: string | null;
+  is_running: boolean;
+  is_paused: boolean;
+  current_url: string | null;
 };
 
 export type ManualChunkData = {
@@ -245,11 +274,24 @@ export const updateSiteApproval = (siteId: string, isApproved: boolean) =>
 export const getProviders = () => api.get<Provider[]>("/sites/providers/list").then((r) => r.data);
 
 // Crawl
-export const startCrawl = (data: CrawlStartData) => api.post<{ job_id: string; status: string; message: string }>("/crawl", data).then((r) => r.data);
-export const getCrawlStatus = (jobId: string) => api.get<CrawlJob>(`/crawl/${jobId}`).then((r) => r.data);
-export const getSiteCrawlJobs = (siteId: string) => api.get<CrawlJob[]>(`/crawl/site/${siteId}`).then((r) => r.data);
+export const startCrawl = (data: CrawlStartData) =>
+  api.post<{ job_id: string; status: string; message: string; force_recrawl?: boolean }>("/crawl/start", data).then((r) => r.data);
+export const stopCrawl = (siteId: string) =>
+  api.post<{ message: string; crawl_status: string; knowledge_count: number }>(`/crawl/stop/${siteId}`).then((r) => r.data);
+export const pauseCrawl = (siteId: string) =>
+  api.post<{ message: string; crawl_status: string }>(`/crawl/pause/${siteId}`).then((r) => r.data);
+export const resumeCrawl = (siteId: string) =>
+  api.post<{ message: string; crawl_status: string }>(`/crawl/resume/${siteId}`).then((r) => r.data);
+export const toggleCrawl = (siteId: string, data: { enabled: boolean; max_pages?: number; auto_interval?: number; max_depth?: number; exclude_patterns?: string }) =>
+  api.put(`/crawl/toggle/${siteId}`, data).then((r) => r.data);
+export const getCrawlSiteStatus = (siteId: string) =>
+  api.get<CrawlStatus>(`/crawl/status/${siteId}`).then((r) => r.data);
+export const getSiteCrawlJobs = (siteId: string) =>
+  api.get<CrawlJob[]>(`/crawl/jobs/${siteId}`).then((r) => r.data);
 export const getCrawlLogs = (jobId: string) =>
   api.get<{ logs: unknown[]; status: string; pages_done: number }>(`/crawl/job/${jobId}/logs`).then((r) => r.data);
+export const updateCrawlSettings = (siteId: string, data: { max_pages?: number; max_depth?: number; auto_interval?: number; exclude_patterns?: string }) =>
+  api.put(`/crawl/settings/${siteId}`, data).then((r) => r.data);
 
 // Knowledge
 export const getKnowledge = (siteId: string, page = 1, search?: string) => {
@@ -303,6 +345,21 @@ export const saveLLMKey = (data: { provider: string; api_key: string; label?: st
   api.post<{ message: string; provider: string }>("/llm-keys", data).then((r) => r.data);
 export const deleteLLMKey = (provider: string) =>
   api.delete<{ message: string }>(`/llm-keys/${provider}`).then((r) => r.data);
+
+// Models
+export type CustomModel = {
+  provider: string;
+  model_id: string;
+  model_name: string;
+  description: string;
+};
+
+export const getModelsProviders = () => api.get<Provider[]>("/models/providers").then((r) => r.data);
+export const getCustomModels = () => api.get<CustomModel[]>("/models/custom").then((r) => r.data);
+export const addCustomModel = (data: CustomModel) =>
+  api.post<{ message: string; provider: string; model_id: string }>("/models/custom", data).then((r) => r.data);
+export const deleteCustomModel = (provider: string, modelId: string) =>
+  api.delete<{ message: string }>("/models/custom", { data: { provider, model_id: modelId } }).then((r) => r.data);
 
 // Audit
 export const getAuditLogs = (page = 1) =>

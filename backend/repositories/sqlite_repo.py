@@ -30,7 +30,12 @@ def _site_to_dict(s: Site) -> dict:
         "primary_color": s.primary_color, "greeting": s.greeting,
         "position": s.position, "widget_title": s.widget_title or "",
         "dark_mode": s.dark_mode or "auto", "show_branding": s.show_branding if s.show_branding is not None else True,
+        "bot_avatar": s.bot_avatar or "", "header_subtitle": s.header_subtitle or "",
+        "input_placeholder": s.input_placeholder or "",
+        "auto_open_delay": s.auto_open_delay or 0, "bubble_size": s.bubble_size or "medium",
         "allowed_domains": s.allowed_domains or "",
+        "system_prompt": s.system_prompt or "",
+        "bot_rules": s.bot_rules or "",
         "suggestions": s.suggestions or [],
         "is_approved": s.is_approved,
         # Crawl management

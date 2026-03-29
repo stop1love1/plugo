@@ -19,7 +19,9 @@ type WindowProps = {
   suggestions: string[];
   connectionState: ConnectionState;
   widgetTitle?: string;
-  showBranding?: boolean;
+  botAvatar?: string;
+  headerSubtitle?: string;
+  inputPlaceholder?: string;
   onSend: (message: string) => void;
   onClose: () => void;
   onMinimize?: () => void;
@@ -27,7 +29,7 @@ type WindowProps = {
   onRetry?: (errorIndex: number) => void;
 };
 
-export function ChatWindow({ messages, isTyping, position, suggestions, connectionState, widgetTitle, showBranding = true, onSend, onClose, onMinimize, onFeedback, onRetry }: WindowProps) {
+export function ChatWindow({ messages, isTyping, position, suggestions, connectionState, widgetTitle, botAvatar, headerSubtitle, inputPlaceholder, onSend, onClose, onMinimize, onFeedback, onRetry }: WindowProps) {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -38,19 +40,20 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
   const [newMessageCount, setNewMessageCount] = useState(0);
 
   const isOffline = connectionState === "disconnected" || connectionState === "reconnecting";
+  const prevMsgCountRef = useRef(messages.length);
 
   // Smart auto-scroll: only scroll if user is near bottom
-  const scrollToBottom = useCallback(() => {
+  useEffect(() => {
+    const msgCountChanged = messages.length !== prevMsgCountRef.current;
+    prevMsgCountRef.current = messages.length;
+
     if (!userScrolledUp) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    } else {
+    } else if (msgCountChanged && messages.length > 0) {
+      // Only count genuinely new messages, not token updates
       setNewMessageCount((c) => c + 1);
     }
-  }, [userScrolledUp]);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, isTyping, scrollToBottom]);
+  }, [messages, isTyping, userScrolledUp]);
 
   // Detect manual scroll
   const handleScroll = useCallback(() => {
@@ -152,7 +155,7 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
     <div class={`plugo-window ${position}`} ref={windowRef} role="dialog" aria-modal="true">
       <div class="plugo-header">
         <div class="plugo-header-left">
-          <div class="plugo-header-avatar">{"\u{1F4AC}"}</div>
+          <div class="plugo-header-avatar">{botAvatar || "\u{1F4AC}"}</div>
           <div class="plugo-header-info">
             <h3>{widgetTitle || getWidgetString("chatTitle", lang)}</h3>
             <div class="plugo-header-status">
@@ -160,7 +163,7 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
                 class={`plugo-header-status-dot${connectionState === "connected" ? " online" : ""}`}
                 style={connectionState !== "connected" ? "background:#f59e0b" : ""}
               />
-              {connectionState === "connected" ? "Online" : getWidgetString(connectionState as any, lang)}
+              {headerSubtitle || (connectionState === "connected" ? "Online" : getWidgetString(connectionState as any, lang))}
             </div>
           </div>
         </div>
@@ -201,34 +204,26 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
               timestamp={msg.timestamp}
               index={i}
               isError={msgIsError}
+              isStreaming={isTyping && i === messages.length - 1 && msg.role === "bot" && !msgIsError}
               isLastInGroup={isLastInGroup(i)}
-              onFeedback={msg.role === "bot" && msg.content && !msgIsError ? onFeedback : undefined}
-              onRetry={msgIsError && onRetry ? () => onRetry(i) : undefined}
+              onFeedback={msg.role === "bot" && msg.content && !msgIsError && !isTyping ? onFeedback : undefined}
+              onRetry={msg.role === "bot" && msg.content && onRetry && !isTyping ? () => onRetry(i) : undefined}
             />
           );
         })}
-        {isTyping && (
+        {isTyping && !(messages.length > 0 && messages[messages.length - 1].role === "bot" && messages[messages.length - 1].content) && (
           <div class="plugo-msg-row bot">
-            <div class="plugo-avatar" aria-hidden="true">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                <path d="M2 17l10 5 10-5" />
-                <path d="M2 12l10 5 10-5" />
-              </svg>
-            </div>
             <div class="plugo-typing">
               <span />
               <span />
               <span />
-              <span class="plugo-typing-text">{getWidgetString("typing", lang)}</span>
             </div>
           </div>
         )}
 
-        {/* Suggestion buttons */}
-        {suggestions.length > 0 && !isTyping && (
+        {/* Suggestion buttons — only show when no conversation yet (just greeting) */}
+        {suggestions.length > 0 && !isTyping && messages.length <= 1 && (
           <div class="plugo-suggestions">
-            <span class="plugo-suggestions-label">{getWidgetString("suggestions", lang)}</span>
             <div class="plugo-suggestions-list">
               {suggestions.slice(0, 4).map((s, i) => (
                 <button
@@ -259,7 +254,7 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
           value={input}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
-          placeholder={getWidgetString("placeholder", lang)}
+          placeholder={inputPlaceholder || getWidgetString("placeholder", lang)}
           disabled={isTyping || isOffline}
           maxLength={MAX_INPUT_LENGTH}
           rows={1}
@@ -275,11 +270,6 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
       {input.length > MAX_INPUT_LENGTH * 0.6 && (
         <div class={`plugo-char-counter${input.length > MAX_INPUT_LENGTH * 0.95 ? " danger" : input.length > MAX_INPUT_LENGTH * 0.8 ? " warning" : ""}`}>
           {input.length}/{MAX_INPUT_LENGTH}
-        </div>
-      )}
-      {showBranding && (
-        <div class="plugo-branding">
-          Powered by <a href="https://plugo.dev" target="_blank" rel="noopener">Plugo</a>
         </div>
       )}
     </div>

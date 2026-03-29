@@ -40,7 +40,16 @@
     "password": "pluginme"
   },
   "crawl": {
-    "verify_ssl": false
+    "verify_ssl": false,
+    "request_delay": 1.0,
+    "request_timeout": 30,
+    "max_concurrent_fetches": 5,
+    "max_concurrent_auto_crawls": 3,
+    "stale_timeout_minutes": 30,
+    "max_continuous_rounds": 10,
+    "max_retries": 2,
+    "scheduler_interval_seconds": 300,
+    "embed_batch_size": 200
   },
   "rate_limit": {
     "default": "60/minute",

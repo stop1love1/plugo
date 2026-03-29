@@ -1,52 +1,52 @@
 import { Outlet, Link, useParams, useLocation, useNavigate } from "react-router-dom";
-import { Database, Wrench, Code, Settings, LayoutDashboard, MessageCircle, LogOut, User, Brain, BarChart3, Globe, FileText, Keyboard, Menu, X, Play, ExternalLink, Link2 } from "lucide-react";
+import { Database, Wrench, Code, Settings, LayoutDashboard, MessageCircle, LogOut, User, Brain, BarChart3, Globe, FileText, Menu, X, Play, Link2, Bell, Cpu } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { getSite } from "../lib/api";
+import { getSite, getSites } from "../lib/api";
 import { useStore } from "../lib/store";
 import { useLocale } from "../lib/useLocale";
 import { NotificationBell } from "./NotificationBell";
-import { useKeyboardShortcuts } from "../lib/useKeyboardShortcuts";
 import { useEffect, useState } from "react";
 
 const sidebarGroups = [
   {
     heading: null,
     links: [
-      { to: "analytics", label: "nav.analytics", icon: BarChart3, num: "1" },
+      { to: "analytics", label: "nav.analytics", icon: BarChart3 },
     ],
   },
   {
     heading: "nav.group.content",
     links: [
-      { to: "setup", label: "nav.setup", icon: LayoutDashboard, num: "2" },
-      { to: "knowledge", label: "nav.knowledge", icon: Database, num: "3" },
-      { to: "crawled-pages", label: "nav.crawledPages", icon: Link2, num: "" },
-      { to: "tools", label: "nav.tools", icon: Wrench, num: "4" },
+      { to: "setup", label: "nav.setup", icon: LayoutDashboard },
+      { to: "knowledge", label: "nav.knowledge", icon: Database },
+      { to: "crawled-pages", label: "nav.crawledPages", icon: Link2 },
+      { to: "tools", label: "nav.tools", icon: Wrench },
     ],
   },
   {
     heading: "nav.group.deploy",
     links: [
-      { to: "embed", label: "nav.embed", icon: Code, num: "5" },
-      { to: "playground", label: "nav.playground", icon: Play, num: "6" },
+      { to: "embed", label: "nav.embed", icon: Code },
+      { to: "playground", label: "nav.playground", icon: Play },
     ],
   },
   {
     heading: "nav.group.monitor",
     links: [
-      { to: "chat-log", label: "nav.chatLog", icon: MessageCircle, num: "7" },
-      { to: "visitors", label: "nav.visitors", icon: Brain, num: "8" },
+      { to: "chat-log", label: "nav.chatLog", icon: MessageCircle },
+      { to: "visitors", label: "nav.visitors", icon: Brain },
     ],
   },
   {
     heading: null,
     links: [
-      { to: "settings", label: "nav.settings", icon: Settings, num: "9" },
+      { to: "settings", label: "nav.settings", icon: Settings },
     ],
   },
 ];
 
 const globalLinks = [
+  { to: "/models", label: "nav.models", icon: Cpu },
   { to: "/audit", label: "nav.audit", icon: FileText },
 ];
 
@@ -56,10 +56,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const { user, logout } = useStore();
   const { locale, setLocale, t } = useLocale();
-  const [showShortcuts, setShowShortcuts] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  useKeyboardShortcuts();
 
   // Update document title based on current route
   useEffect(() => {
@@ -68,6 +65,8 @@ export default function Layout() {
     const match = allLinks.find((link) => path.endsWith(`/${link.to}`));
     if (match) {
       document.title = `${navT(match.label)} | Plugo`;
+    } else if (path === "/models") {
+      document.title = "Models | Plugo";
     } else if (path === "/audit") {
       document.title = "Audit Log | Plugo";
     } else if (path === "/login") {
@@ -81,6 +80,11 @@ export default function Layout() {
     queryKey: ["site", siteId],
     queryFn: () => getSite(siteId!),
     enabled: !!siteId,
+  });
+
+  const { data: sites = [] } = useQuery({
+    queryKey: ["sites"],
+    queryFn: getSites,
   });
 
   const handleLogout = () => {
@@ -98,6 +102,7 @@ export default function Layout() {
         "nav.embed": "Embed Code",
         "nav.chatLog": "Chat Log",
         "nav.users": "Users",
+        "nav.models": "Models",
         "nav.audit": "Audit Log",
         "nav.group.content": "Content",
         "nav.group.deploy": "Deploy",
@@ -140,15 +145,32 @@ export default function Layout() {
 
         {siteId && (
           <nav className="flex-1 p-4 overflow-y-auto">
+            {/* Site switcher */}
+            {sites.length > 0 && (
+              <div className="mb-4">
+                <select
+                  value={siteId}
+                  onChange={(e) => {
+                    navigate(`/site/${e.target.value}/analytics`);
+                    handleNavClick();
+                  }}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-primary-500 truncate"
+                >
+                  {sites.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             {sidebarGroups.map((group, gi) => (
-              <div key={gi} className={gi > 0 ? "mt-4" : ""}>
+              <div key={gi} className={group.heading ? "mt-4" : ""}>
                 {group.heading && (
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 px-3 pb-1">
                     {navT(group.heading)}
                   </p>
                 )}
                 <div className="space-y-0.5">
-                  {group.links.map(({ to, label, icon: Icon, num }) => {
+                  {group.links.map(({ to, label, icon: Icon }) => {
                     const path = `/site/${siteId}/${to}`;
                     const isActive = location.pathname === path;
                     return (
@@ -164,30 +186,9 @@ export default function Layout() {
                       >
                         <Icon className="w-5 h-5" />
                         <span className="flex-1">{navT(label)}</span>
-                        <kbd className="text-[10px] text-gray-300 bg-gray-50 px-1 rounded hidden lg:inline">{num}</kbd>
                       </Link>
                     );
                   })}
-                  {/* Demo page link in Deploy group */}
-                  {group.heading === "nav.group.deploy" && currentSite?.token && (
-                    <a
-                      href={`${import.meta.env.VITE_BACKEND_URL || __BACKEND_URL__}/demo/${currentSite.token}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={handleNavClick}
-                      className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-orange-600 hover:bg-orange-50 transition-colors"
-                    >
-                      <ExternalLink className="w-5 h-5" />
-                      <span className="flex-1">{navT("nav.demo")}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                        currentSite.is_approved
-                          ? "bg-green-100 text-green-700"
-                          : "bg-amber-100 text-amber-700"
-                      }`}>
-                        {currentSite.is_approved ? navT("sites.statusApproved") : navT("sites.statusPending")}
-                      </span>
-                    </a>
-                  )}
                 </div>
               </div>
             ))}
@@ -211,80 +212,98 @@ export default function Layout() {
                     </Link>
                   );
                 })}
+                <NotificationBell variant="sidebar" />
+                <button
+                  onClick={() => setLocale(locale === "vi" ? "en" : "vi")}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors w-full"
+                >
+                  <Globe className="w-5 h-5" />
+                  <span className="flex-1 text-left">{locale === "vi" ? "English" : "Tiếng Việt"}</span>
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-red-500 hover:bg-red-50 hover:text-red-600 transition-colors w-full"
+                >
+                  <LogOut className="w-5 h-5" />
+                  <span className="flex-1 text-left">{t("nav.logout")}</span>
+                </button>
               </div>
             </div>
           </nav>
         )}
 
         {!siteId && (
-          <nav className="flex-1 p-4">
-            <p className="text-sm text-gray-400 mb-4">Select a site to get started</p>
-            <div className="space-y-0.5">
-              {globalLinks.map(({ to, label, icon: Icon }) => (
-                <Link
-                  key={to}
-                  to={to}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                    location.pathname === to
-                      ? "bg-primary-50 text-primary-700 font-medium border-l-2 border-primary-600 pl-[10px]"
-                      : "text-gray-600 hover:bg-gray-100"
-                  }`}
+          <nav className="flex-1 p-4 overflow-y-auto">
+            {/* Site list */}
+            {sites.length > 0 && (
+              <div className="mb-4">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 px-3 pb-1">Sites</p>
+                <div className="space-y-0.5">
+                  {sites.map((s) => (
+                    <Link
+                      key={s.id}
+                      to={`/site/${s.id}/analytics`}
+                      onClick={handleNavClick}
+                      className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors"
+                    >
+                      <Globe className="w-4 h-4 text-gray-400" />
+                      <span className="truncate flex-1">{s.name}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+            {sites.length === 0 && (
+              <p className="text-sm text-gray-400 mb-4">Select a site to get started</p>
+            )}
+            <div className="border-t border-gray-200 pt-3">
+              <div className="space-y-0.5">
+                {globalLinks.map(({ to, label, icon: Icon }) => (
+                  <Link
+                    key={to}
+                    to={to}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      location.pathname === to
+                        ? "bg-primary-50 text-primary-700 font-medium border-l-2 border-primary-600 pl-[10px]"
+                        : "text-gray-600 hover:bg-gray-100"
+                    }`}
+                  >
+                    <Icon className="w-5 h-5" />
+                    {navT(label)}
+                  </Link>
+                ))}
+                <NotificationBell variant="sidebar" />
+                <button
+                  onClick={() => setLocale(locale === "vi" ? "en" : "vi")}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors w-full"
                 >
-                  <Icon className="w-5 h-5" />
-                  {navT(label)}
-                </Link>
-              ))}
+                  <Globe className="w-5 h-5" />
+                  <span className="flex-1 text-left">{locale === "vi" ? "English" : "Tiếng Việt"}</span>
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-red-500 hover:bg-red-50 hover:text-red-600 transition-colors w-full"
+                >
+                  <LogOut className="w-5 h-5" />
+                  <span className="flex-1 text-left">{t("nav.logout")}</span>
+                </button>
+              </div>
             </div>
           </nav>
         )}
 
-        {/* User menu */}
-        <div className="p-4 border-t border-gray-200 space-y-3">
-          {user && (
-            <>
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-7 h-7 rounded-full bg-primary-50 flex items-center justify-center shrink-0">
-                  <User className="w-4 h-4 text-primary-600" />
-                </div>
-                <span className="text-sm text-gray-700 font-medium truncate">{user.username}</span>
+        {/* User footer */}
+        {user && (
+          <div className="border-t border-gray-200 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-primary-50 flex items-center justify-center shrink-0">
+                <User className="w-3.5 h-3.5 text-primary-600" />
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-400">Plugo v1.0</span>
-                <div className="flex items-center gap-1">
-                  <NotificationBell />
-                  <button
-                    onClick={() => setLocale(locale === "vi" ? "en" : "vi")}
-                    className="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded font-medium text-gray-600 shrink-0 flex items-center gap-1"
-                    title={t("settings.language")}
-                  >
-                    <Globe className="w-3 h-3" />
-                    {locale === "vi" ? "EN" : "VI"}
-                  </button>
-                  <button
-                    onClick={() => setShowShortcuts(!showShortcuts)}
-                    className="text-gray-400 hover:text-gray-600 p-1"
-                    title="Keyboard shortcuts"
-                  >
-                    <Keyboard className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={handleLogout}
-                    className="text-gray-400 hover:text-red-500 p-1"
-                    title={t("nav.logout")}
-                  >
-                    <LogOut className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-          {showShortcuts && (
-            <div className="p-2 bg-gray-50 rounded text-xs text-gray-500 space-y-1">
-              <div className="flex justify-between"><span>Ctrl+K</span><span>Search</span></div>
-              <div className="flex justify-between"><span>1-9</span><span>Navigate pages</span></div>
+              <span className="text-sm text-gray-600 truncate flex-1">{user.username}</span>
+              <span className="text-[10px] text-gray-300">v1.0</span>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </aside>
 
       {/* Main content */}

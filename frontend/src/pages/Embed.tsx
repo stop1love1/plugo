@@ -44,7 +44,11 @@ export default function Embed() {
     lines.push(`    position: "${s.position || "bottom-right"}"`);
     if (s.dark_mode && s.dark_mode !== "auto") lines.push(`    darkMode: ${s.dark_mode === "dark"}`);
     if (s.widget_title) lines.push(`    widgetTitle: "${s.widget_title}"`);
-    if (s.show_branding === false) lines.push(`    showBranding: false`);
+    if (s.bot_avatar) lines.push(`    botAvatar: "${s.bot_avatar}"`);
+    if (s.header_subtitle) lines.push(`    headerSubtitle: "${s.header_subtitle}"`);
+    if (s.input_placeholder) lines.push(`    inputPlaceholder: "${s.input_placeholder}"`);
+    if (s.auto_open_delay) lines.push(`    autoOpenDelay: ${s.auto_open_delay}`);
+    if (s.bubble_size && s.bubble_size !== "medium") lines.push(`    bubbleSize: "${s.bubble_size}"`);
     return lines.join(",\n");
   };
 

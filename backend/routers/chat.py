@@ -178,6 +178,8 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
         site_url=site["url"],
         llm_provider=site["llm_provider"],
         llm_model=site["llm_model"],
+        system_prompt=site.get("system_prompt", ""),
+        bot_rules=site.get("bot_rules", ""),
     )
 
     # Restore agent conversation history from saved messages

@@ -158,7 +158,7 @@ export default function Knowledge() {
   };
 
   return (
-    <div className="max-w-4xl">
+    <div>
       <PageHeader title={t("knowledge.title")} subtitle={`${data?.total || 0} ${t("knowledge.chunks")}`}>
         <button
           onClick={exportAllJson}
