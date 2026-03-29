@@ -67,10 +67,17 @@ def _tool_to_dict(t: Tool) -> dict:
 
 
 def _session_to_dict(s: ChatSession) -> dict:
+    messages = s.messages if isinstance(s.messages, list) else []
+    first_msg = ""
+    for msg in messages:
+        if isinstance(msg, dict) and msg.get("role") == "user":
+            first_msg = (msg.get("content") or "")[:200]
+            break
     return {
         "id": s.id, "site_id": s.site_id, "visitor_id": s.visitor_id,
-        "page_url": s.page_url, "messages": s.messages or [],
-        "message_count": len(s.messages) if s.messages else 0,
+        "page_url": s.page_url, "messages": messages,
+        "message_count": len(messages),
+        "first_message": first_msg,
         "started_at": s.started_at.isoformat() if s.started_at else None,
         "ended_at": s.ended_at.isoformat() if s.ended_at else None,
     }

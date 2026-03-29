@@ -16,6 +16,35 @@ router = APIRouter()
 # Store active agents per session
 active_agents: dict[str, ChatAgent] = {}
 
+# --- WebSocket rate limiting ---
+WS_RATE_LIMIT_WINDOW = 60  # seconds
+WS_RATE_LIMIT_MAX = 20  # max messages per window per session
+
+
+class WSRateLimiter:
+    """Simple per-session rate limiter for WebSocket messages."""
+
+    def __init__(self):
+        self._timestamps: dict[str, list[float]] = {}
+
+    def is_allowed(self, session_id: str) -> bool:
+        now = time()
+        timestamps = self._timestamps.get(session_id, [])
+        # Remove expired timestamps
+        timestamps = [t for t in timestamps if now - t < WS_RATE_LIMIT_WINDOW]
+        if len(timestamps) >= WS_RATE_LIMIT_MAX:
+            self._timestamps[session_id] = timestamps
+            return False
+        timestamps.append(now)
+        self._timestamps[session_id] = timestamps
+        return True
+
+    def cleanup(self, session_id: str):
+        self._timestamps.pop(session_id, None)
+
+
+_ws_rate_limiter = WSRateLimiter()
+
 # --- Site config cache ---
 _site_cache: dict[str, tuple[dict, float]] = {}
 CACHE_TTL = 60  # seconds
@@ -113,10 +142,14 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
             if ended_at and isinstance(ended_at, str):
                 try:
                     ended_time = datetime.fromisoformat(ended_at)
+                    if ended_time.tzinfo is None:
+                        ended_time = ended_time.replace(tzinfo=timezone.utc)
                     can_resume = (datetime.now(timezone.utc) - ended_time).total_seconds() < 300
                 except ValueError:
                     pass
             elif ended_at and isinstance(ended_at, datetime):
+                if ended_at.tzinfo is None:
+                    ended_at = ended_at.replace(tzinfo=timezone.utc)
                 can_resume = (datetime.now(timezone.utc) - ended_at).total_seconds() < 300
 
             if can_resume:
@@ -220,6 +253,14 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
             if not message:
                 continue
 
+            # Rate limit WebSocket messages
+            if not _ws_rate_limiter.is_allowed(session_id):
+                await websocket.send_json({
+                    "type": "error",
+                    "message": "Too many messages. Please slow down.",
+                })
+                continue
+
             await _handle_message(
                 websocket, agent, repos, session_id, messages,
                 message, page_context, visitor_id, conversation_summary,
@@ -248,6 +289,7 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
         except Exception as e:
             logger.warning("Failed to mark session ended", session_id=session_id, error=str(e))
         active_agents.pop(session_id, None)
+        _ws_rate_limiter.cleanup(session_id)
         await repos.close()
 
         # Background: extract memories from this conversation

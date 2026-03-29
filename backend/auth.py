@@ -1,9 +1,8 @@
 """
 Authentication & authorization for Plugo API.
 
-Two auth mechanisms:
-1. JWT tokens — for dashboard users (admin/site owners)
-2. API keys — for programmatic access
+Single admin user with credentials from .env (USERNAME / PASSWORD).
+JWT tokens for dashboard session management.
 
 Public endpoints (no auth required):
 - GET /health, GET /
@@ -11,20 +10,15 @@ Public endpoints (no auth required):
 - GET /static/* (widget JS)
 """
 
-import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from pydantic import BaseModel
 
 from config import settings
-
-# --- Password hashing ---
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # --- JWT config ---
 ALGORITHM = "HS256"
@@ -35,17 +29,14 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 
 class TokenData(BaseModel):
-    sub: str  # username or user_id
-    role: str = "admin"  # admin | viewer
+    sub: str  # username
+    role: str = "admin"
     exp: Optional[datetime] = None
 
 
-def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
-
-
-def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+def verify_credentials(username: str, password: str) -> bool:
+    """Verify credentials against config."""
+    return username == settings.admin_username and password == settings.admin_password
 
 
 def create_access_token(subject: str, role: str = "admin", expires_delta: Optional[timedelta] = None) -> str:
@@ -66,20 +57,12 @@ def decode_access_token(token: str) -> TokenData:
         )
 
 
-def generate_api_key() -> str:
-    """Generate a secure API key for programmatic access."""
-    return f"plugo_{secrets.token_urlsafe(32)}"
-
-
 # --- FastAPI Dependencies ---
 
 async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
 ) -> TokenData:
-    """
-    Dependency: requires a valid JWT token.
-    Use on all dashboard/admin endpoints.
-    """
+    """Dependency: requires a valid JWT token."""
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

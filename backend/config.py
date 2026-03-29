@@ -13,7 +13,13 @@ import warnings
 from pathlib import Path
 from typing import Optional
 
+from dotenv import dotenv_values
 from pydantic_settings import BaseSettings
+
+# --- Load .env file directly (bypass OS env for specific keys) ---
+_dotenv = dotenv_values(Path(__file__).parent.parent / ".env")
+if not _dotenv:
+    _dotenv = dotenv_values(".env")
 
 # --- Load config.json ---
 _CONFIG_PATHS = [
@@ -90,6 +96,11 @@ class Settings(BaseSettings):
     # --- Auth (from config.json → auth) ---
     auth_enabled: bool = _get("auth", "enabled", True)
 
+    # --- Admin Login (.env USERNAME/PASSWORD → config.json → default) ---
+    # Read from .env directly to avoid Windows OS env conflict (USERNAME=Admin)
+    admin_username: str = _dotenv.get("USERNAME", _get("auth", "username", "plugo"))
+    admin_password: str = _dotenv.get("PASSWORD", _get("auth", "password", "pluginme"))
+
     # --- Agent (from config.json → agent) ---
     no_tool_providers: list[str] = _get("agent", "no_tool_providers", ["ollama", "lmstudio"])
 
@@ -118,3 +129,9 @@ def validate_settings():
                 "Set a strong SECRET_KEY in .env before deploying.",
                 stacklevel=2,
             )
+
+    if len(settings.secret_key) < 16 and settings.secret_key not in _INSECURE_KEYS:
+        warnings.warn(
+            "SECRET_KEY is shorter than 16 characters. Use a longer key for better security.",
+            stacklevel=2,
+        )

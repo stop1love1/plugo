@@ -1,25 +1,23 @@
 """
-Authentication router — login, token management.
+Authentication router — env-based single admin login.
 
-Admin accounts are created via CLI: python manage.py create-admin
+Credentials are set via USERNAME / PASSWORD in .env
 """
 
 import json
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from repositories import get_repos, Repositories
-from auth import (
-    hash_password, verify_password, create_access_token,
-    get_current_user, TokenData,
-)
+from auth import verify_credentials, create_access_token, get_current_user, TokenData
+from config import settings
 from logging_config import logger
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 class LoginRequest(BaseModel):
-    username: str = Field(min_length=3, max_length=50)
-    password: str = Field(min_length=8, max_length=128)
+    username: str = Field(min_length=1, max_length=50)
+    password: str = Field(min_length=1, max_length=128)
 
 
 class TokenResponse(BaseModel):
@@ -29,39 +27,31 @@ class TokenResponse(BaseModel):
     username: str
 
 
-@router.get("/setup-status")
-async def setup_status(repos: Repositories = Depends(get_repos)):
-    """Check if any users exist (public endpoint for login page)."""
-    count = await repos.users.count()
-    return {"has_users": count > 0}
-
-
 @router.post("/login", response_model=TokenResponse)
 async def login(data: LoginRequest, repos: Repositories = Depends(get_repos)):
-    """Authenticate and return a JWT token."""
-    user = await repos.users.get_by_username(data.username)
-    if not user or not verify_password(data.password, user["password_hash"]):
+    """Authenticate against env credentials and return a JWT token."""
+    if not verify_credentials(data.username, data.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
         )
 
-    token = create_access_token(subject=user["id"], role=user["role"])
+    token = create_access_token(subject=settings.admin_username, role="admin")
     try:
         await repos.audit_logs.create({
-            "user_id": user["id"],
-            "username": user["username"],
+            "user_id": settings.admin_username,
+            "username": settings.admin_username,
             "action": "login",
             "resource_type": "auth",
-            "resource_id": user["id"],
-            "details": json.dumps({"username": user["username"]}),
+            "resource_id": settings.admin_username,
+            "details": json.dumps({"username": settings.admin_username}),
         })
     except Exception as e:
         logger.warning("Failed to create audit log", error=str(e))
     return TokenResponse(
         access_token=token,
-        role=user["role"],
-        username=user["username"],
+        role="admin",
+        username=settings.admin_username,
     )
 
 
@@ -75,4 +65,4 @@ async def refresh_token(user: TokenData = Depends(get_current_user)):
 @router.get("/me")
 async def get_me(user: TokenData = Depends(get_current_user)):
     """Return current user info from token."""
-    return {"user_id": user.sub, "role": user.role}
+    return {"user_id": user.sub, "role": user.role, "username": user.sub}

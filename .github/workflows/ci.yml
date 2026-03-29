@@ -67,8 +67,8 @@ jobs:
           cd backend
           python -m pytest tests/ -v
 
-  dashboard:
-    name: Dashboard
+  frontend:
+    name: Frontend
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -83,28 +83,45 @@ jobs:
         with:
           node-version: 20
           cache: pnpm
-          cache-dependency-path: dashboard/pnpm-lock.yaml
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install dependencies
-        run: cd dashboard && pnpm install --frozen-lockfile
+        run: cd frontend && pnpm install --frozen-lockfile
 
       - name: Lint
-        run: cd dashboard && pnpm lint
+        run: cd frontend && pnpm lint
 
       - name: Format check
-        run: cd dashboard && pnpm format:check
+        run: cd frontend && pnpm format:check
 
       - name: Test
-        run: cd dashboard && pnpm test
+        run: cd frontend && pnpm test
 
       - name: Build
-        run: cd dashboard && pnpm build
+        run: cd frontend && pnpm build
 
-  widget:
-    name: Widget
+  security:
+    name: Security Scanning
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install security tools
+        run: pip install bandit pip-audit
+
+      - name: Bandit (Python SAST)
+        run: bandit -r backend/ -ll -ii --exclude backend/tests -f json -o bandit-report.json || true
+
+      - name: Bandit summary
+        run: bandit -r backend/ -ll -ii --exclude backend/tests || true
+
+      - name: pip-audit (dependency CVEs)
+        run: pip-audit -r backend/requirements.txt || true
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -115,28 +132,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
-          cache-dependency-path: widget/pnpm-lock.yaml
 
-      - name: Install dependencies
-        run: cd widget && pnpm install --frozen-lockfile
-
-      - name: Lint
-        run: cd widget && pnpm lint
-
-      - name: Format check
-        run: cd widget && pnpm format:check
-
-      - name: Test
-        run: cd widget && pnpm test
-
-      - name: Build
-        run: cd widget && pnpm build
+      - name: Frontend dependency audit
+        run: cd frontend && pnpm install --frozen-lockfile && pnpm audit || true
 
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
-    needs: [backend-build, dashboard, widget]
+    needs: [backend-build, frontend]
     steps:
       - uses: actions/checkout@v4
 

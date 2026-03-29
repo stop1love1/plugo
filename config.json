@@ -35,7 +35,9 @@
     "widget_cdn_url": "http://localhost:8000/static/widget.js"
   },
   "auth": {
-    "enabled": true
+    "enabled": true,
+    "username": "plugo",
+    "password": "pluginme"
   },
   "crawl": {
     "verify_ssl": false

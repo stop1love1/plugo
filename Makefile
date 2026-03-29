@@ -2,10 +2,11 @@
 # Plugo — Development Commands
 # ============================================
 #
-# Each app manages its own dependencies:
+# Project structure:
 #   - backend/  → Python (.venv/)
-#   - dashboard/ → pnpm (node_modules/)
-#   - widget/   → pnpm (node_modules/)
+#   - frontend/ → React dashboard + Preact widget
+#     - frontend/src/         → Dashboard (React)
+#     - frontend/src/widget/  → Widget (Preact IIFE)
 #
 # Quick start:
 #   make setup    # One-time setup
@@ -42,48 +43,46 @@ help: ## Show this help message
 
 setup: ## Full project setup (venv + all deps + env file)
 	@echo "==> Creating Python virtual environment..."
-	python -m venv .venv
+	python -m venv .venv || echo "venv already exists or python not found, skipping..."
 	@echo "==> Installing backend dependencies..."
 	$(PIP) install -r backend/requirements-dev.txt
-	@echo "==> Installing dashboard dependencies..."
-	cd dashboard && pnpm install
-	@echo "==> Installing widget dependencies..."
-	cd widget && pnpm install
+	@echo "==> Installing frontend dependencies..."
+	cd frontend && pnpm install
 	@echo "==> Creating .env file..."
-	@test -f .env || cp .env.example .env
+	cp -n .env.example .env 2>/dev/null || echo ".env already exists"
 	@echo ""
 	@echo "  Setup complete! Edit .env with your API keys, then run: make dev"
 	@echo ""
 
 install: ## Install all dependencies (assumes venv exists)
 	$(PIP) install -r backend/requirements.txt
-	cd dashboard && pnpm install
-	cd widget && pnpm install
+	cd frontend && pnpm install
 
 install-dev: ## Install all dependencies including dev tools
 	$(PIP) install -r backend/requirements-dev.txt
-	cd dashboard && pnpm install
-	cd widget && pnpm install
+	cd frontend && pnpm install
 	$(VENV_BIN)/pre-commit install
 
 # ============================================================
 # Development
 # ============================================================
 
-dev: ## Start all services (backend + dashboard + widget)
-	npx --yes concurrently -n backend,dashboard,widget -c blue,green,yellow \
+dev: ## Start all services (backend + frontend on 2 ports)
+ifeq ($(OS),Windows_NT)
+	npx --yes concurrently -n backend,frontend -c blue,green \
+		".venv\\Scripts\\python.exe -m uvicorn main:app --reload --host 0.0.0.0 --port 8000 --app-dir backend" \
+		"cd frontend && pnpm dev"
+else
+	npx --yes concurrently -n backend,frontend -c blue,green \
 		"$(PYTHON) -m uvicorn main:app --reload --host 0.0.0.0 --port 8000 --app-dir backend" \
-		"cd dashboard && pnpm dev" \
-		"cd widget && pnpm dev"
+		"cd frontend && pnpm dev"
+endif
 
 dev-backend: ## Start backend only
 	$(PYTHON) -m uvicorn main:app --reload --host 0.0.0.0 --port 8000 --app-dir backend
 
-dev-dashboard: ## Start dashboard only
-	cd dashboard && pnpm dev
-
-dev-widget: ## Start widget dev server
-	cd widget && pnpm dev
+dev-frontend: ## Start frontend (builds widget, then runs dashboard)
+	cd frontend && pnpm dev
 
 # ============================================================
 # Docker
@@ -113,11 +112,10 @@ clean: ## Stop services and remove volumes (WARNING: deletes data)
 # ============================================================
 
 build: ## Build all production assets
-	cd widget && pnpm build
-	cd dashboard && pnpm build
+	cd frontend && pnpm build
 
 build-widget: ## Build widget only
-	cd widget && pnpm build
+	cd frontend && pnpm build:widget
 
 # ============================================================
 # Code Quality
@@ -125,27 +123,22 @@ build-widget: ## Build widget only
 
 lint: ## Run all linters
 	cd backend && ../$(VENV_BIN)/ruff check --config pyproject.toml .
-	cd dashboard && pnpm lint
-	cd widget && pnpm lint
+	cd frontend && pnpm lint
 
 lint-fix: ## Run all linters with auto-fix
 	cd backend && ../$(VENV_BIN)/ruff check --config pyproject.toml --fix .
-	cd dashboard && pnpm lint:fix
-	cd widget && pnpm lint:fix
+	cd frontend && pnpm lint:fix
 
 format: ## Format all code
 	cd backend && ../$(VENV_BIN)/ruff format --config pyproject.toml .
-	cd dashboard && pnpm format
-	cd widget && pnpm format
+	cd frontend && pnpm format
 
 format-check: ## Check formatting without changes
 	cd backend && ../$(VENV_BIN)/ruff format --config pyproject.toml --check .
-	cd dashboard && pnpm format:check
-	cd widget && pnpm format:check
+	cd frontend && pnpm format:check
 
 typecheck: ## Run type checking
-	cd dashboard && pnpm typecheck
-	cd widget && pnpm typecheck
+	cd frontend && pnpm typecheck
 
 check: ## Run all checks (lint + format + typecheck)
 	@echo "==> Linting..."
@@ -162,8 +155,7 @@ check: ## Run all checks (lint + format + typecheck)
 
 test: ## Run all tests
 	cd backend && ../$(PYTHON) -m pytest tests/ -v
-	cd dashboard && pnpm test
-	cd widget && pnpm test
+	cd frontend && pnpm test
 
 test-backend: ## Run backend tests only
 	cd backend && ../$(PYTHON) -m pytest tests/ -v
@@ -171,11 +163,8 @@ test-backend: ## Run backend tests only
 test-backend-cov: ## Run backend tests with coverage report
 	cd backend && ../$(PYTHON) -m pytest tests/ --cov=. --cov-report=term-missing
 
-test-dashboard: ## Run dashboard tests only
-	cd dashboard && pnpm test
-
-test-widget: ## Run widget tests only
-	cd widget && pnpm test
+test-frontend: ## Run all frontend tests
+	cd frontend && pnpm test
 
 # ============================================================
 # Utilities

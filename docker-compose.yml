@@ -21,9 +21,17 @@ services:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_USER:-plugo}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:-plugo_dev_password}
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "-u", "${MONGO_USER:-plugo}", "-p", "${MONGO_PASSWORD:-plugo_dev_password}", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -32,11 +40,11 @@ services:
   # Builds widget.js and copies it to a shared volume for the backend to serve
   widget:
     build:
-      context: ./widget
-      dockerfile: Dockerfile
+      context: ./frontend
+      dockerfile: Dockerfile.widget
     container_name: plugo-widget
     volumes:
-      - widget_dist:/app/dist
+      - widget_dist:/app/widget-dist
 
   # --- Backend (FastAPI) ---
   backend:
@@ -47,14 +55,13 @@ services:
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
-      - ./backend:/app
       - backend_data:/app/data
       - widget_dist:/app/static_widget    # Widget JS from builder
     env_file:
       - .env
     environment:
       - DATABASE_PROVIDER=${DATABASE_PROVIDER:-mongodb}
-      - MONGODB_URL=mongodb://mongodb:27017
+      - MONGODB_URL=mongodb://${MONGO_USER:-plugo}:${MONGO_PASSWORD:-plugo_dev_password}@mongodb:27017
       - MONGODB_DATABASE=plugo
     depends_on:
       mongodb:
@@ -62,6 +69,11 @@ services:
       widget:
         condition: service_completed_successfully
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 15s
@@ -71,7 +83,7 @@ services:
   # --- Dashboard (React + Vite) ---
   dashboard:
     build:
-      context: ./dashboard
+      context: ./frontend
       dockerfile: Dockerfile
     container_name: plugo-dashboard
     ports:
@@ -83,6 +95,11 @@ services:
       backend:
         condition: service_healthy
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
 
 volumes:
   mongo_data:

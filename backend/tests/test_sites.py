@@ -232,19 +232,11 @@ async def test_approve_site_not_found(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_approve_site_viewer_forbidden(client, db_repos):
+async def test_approve_site_viewer_forbidden(client):
     """PUT /api/sites/{id}/approval as viewer should return 403."""
-    from auth import hash_password, create_access_token
-    import uuid
+    from auth import create_access_token
 
-    user = await db_repos.users.create({
-        "id": str(uuid.uuid4()),
-        "username": f"viewer_{uuid.uuid4().hex[:8]}",
-        "password_hash": hash_password("viewerpass123"),
-        "role": "viewer",
-    })
-
-    token = create_access_token(subject=user["id"], role="viewer")
+    token = create_access_token(subject="viewer_user", role="viewer")
     headers = {"Authorization": f"Bearer {token}"}
 
     response = await client.put(
@@ -253,8 +245,6 @@ async def test_approve_site_viewer_forbidden(client, db_repos):
         headers=headers,
     )
     assert response.status_code == 403
-
-    await db_repos.users.delete(user["id"])
 
 
 @pytest.mark.asyncio

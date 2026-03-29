@@ -17,10 +17,10 @@ from config import settings, validate_settings
 from logging_config import logger
 from routers import chat, sites, crawl, knowledge, tools, sessions, memory, analytics
 from routers import auth as auth_router
-from routers import users as users_router
 from routers import audit as audit_router
 from routers import llm_keys as llm_keys_router
 from routers import demo_api
+import models  # noqa: F401 — ensure all models registered for Base.metadata.create_all
 
 
 # --- Rate limiter ---
@@ -86,11 +86,15 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
-# --- Request logging middleware ---
+# --- Security headers middleware ---
 @app.middleware("http")
-async def log_requests(request: Request, call_next):
+async def add_security_headers(request: Request, call_next):
     logger.debug("Request", method=request.method, path=request.url.path)
     response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     return response
 
 # --- Global exception handler ---
@@ -105,7 +109,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # --- Static files for widget ---
 widget_paths = [
     "/app/static_widget",                                          # Docker: shared volume
-    os.path.join(os.path.dirname(__file__), "..", "widget", "dist"),  # Local dev
+    os.path.join(os.path.dirname(__file__), "..", "frontend", "widget-dist"),  # Local dev
 ]
 for widget_dir in widget_paths:
     if os.path.exists(widget_dir):
@@ -122,7 +126,6 @@ app.include_router(tools.router)
 app.include_router(sessions.router)
 app.include_router(memory.router)
 app.include_router(analytics.router)
-app.include_router(users_router.router)
 app.include_router(audit_router.router)
 app.include_router(llm_keys_router.router)
 app.include_router(demo_api.router)

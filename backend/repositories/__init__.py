@@ -17,7 +17,7 @@ Usage in background tasks / scripts (caller must close):
 
 from repositories.base import (
     BaseSiteRepo, BaseKnowledgeRepo, BaseToolRepo,
-    BaseChatSessionRepo, BaseCrawlJobRepo, BaseUserRepo,
+    BaseChatSessionRepo, BaseCrawlJobRepo,
     BaseVisitorMemoryRepo, BaseConversationSummaryRepo,
     BaseAuditLogRepo, BaseLLMKeyRepo,
 )
@@ -32,7 +32,6 @@ class Repositories:
         tools: BaseToolRepo,
         chat_sessions: BaseChatSessionRepo,
         crawl_jobs: BaseCrawlJobRepo,
-        users: BaseUserRepo,
         visitor_memories: BaseVisitorMemoryRepo,
         conversation_summaries: BaseConversationSummaryRepo,
         audit_logs: BaseAuditLogRepo,
@@ -43,7 +42,6 @@ class Repositories:
         self.tools = tools
         self.chat_sessions = chat_sessions
         self.crawl_jobs = crawl_jobs
-        self.users = users
         self.visitor_memories = visitor_memories
         self.conversation_summaries = conversation_summaries
         self.audit_logs = audit_logs
@@ -94,7 +92,7 @@ async def create_repos() -> Repositories:
     if settings.database_provider == "mongodb":
         from repositories.mongo_repo import (
             MongoSiteRepo, MongoKnowledgeRepo, MongoToolRepo,
-            MongoChatSessionRepo, MongoCrawlJobRepo, MongoUserRepo,
+            MongoChatSessionRepo, MongoCrawlJobRepo,
             MongoVisitorMemoryRepo, MongoConversationSummaryRepo,
             MongoAuditLogRepo, MongoLLMKeyRepo,
         )
@@ -105,7 +103,6 @@ async def create_repos() -> Repositories:
             tools=MongoToolRepo(db),
             chat_sessions=MongoChatSessionRepo(db),
             crawl_jobs=MongoCrawlJobRepo(db),
-            users=MongoUserRepo(db),
             visitor_memories=MongoVisitorMemoryRepo(db),
             conversation_summaries=MongoConversationSummaryRepo(db),
             audit_logs=MongoAuditLogRepo(db),
@@ -115,7 +112,7 @@ async def create_repos() -> Repositories:
         # Default: SQLite
         from repositories.sqlite_repo import (
             SQLiteSiteRepo, SQLiteKnowledgeRepo, SQLiteToolRepo,
-            SQLiteChatSessionRepo, SQLiteCrawlJobRepo, SQLiteUserRepo,
+            SQLiteChatSessionRepo, SQLiteCrawlJobRepo,
             SQLiteVisitorMemoryRepo, SQLiteConversationSummaryRepo,
             SQLiteAuditLogRepo, SQLiteLLMKeyRepo,
         )
@@ -127,7 +124,6 @@ async def create_repos() -> Repositories:
             tools=SQLiteToolRepo(db),
             chat_sessions=SQLiteChatSessionRepo(db),
             crawl_jobs=SQLiteCrawlJobRepo(db),
-            users=SQLiteUserRepo(db),
             visitor_memories=SQLiteVisitorMemoryRepo(db),
             conversation_summaries=SQLiteConversationSummaryRepo(db),
             audit_logs=SQLiteAuditLogRepo(db),

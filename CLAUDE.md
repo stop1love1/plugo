@@ -2,23 +2,22 @@
 
 ## Project Overview
 
-Plugo is an embeddable AI chat widget platform. It has three components:
+Plugo is an embeddable AI chat widget platform with two components:
 - **backend/** — Python FastAPI (port 8000)
-- **dashboard/** — React + Vite + Tailwind management UI (port 3000/5173)
-- **widget/** — Preact embeddable chat widget (~50KB)
+- **frontend/** — React dashboard + Preact widget (port 3000)
+  - `frontend/src/` — Dashboard (React + Vite + Tailwind)
+  - `frontend/src/widget/` — Embeddable chat widget (Preact, ~50KB IIFE bundle)
 
 ## Quick Commands
 
 ```bash
 make setup          # One-time: create venv, install all deps
-make dev            # Start all 3 services concurrently
+make dev            # Start all services (backend + frontend)
 make dev-backend    # Start backend only
-make dev-dashboard  # Start dashboard only
-make dev-widget     # Start widget dev server
+make dev-frontend   # Start frontend only
 make test           # Run all tests
 make test-backend   # Run backend tests only
-make test-dashboard # Run dashboard tests only
-make test-widget    # Run widget tests only
+make test-frontend  # Run frontend tests only
 make lint           # Run all linters
 make lint-fix       # Run linters with auto-fix
 make format         # Format all code
@@ -28,14 +27,11 @@ make up             # Start with Docker Compose
 make down           # Stop Docker services
 ```
 
-## User Management (CLI)
+## Admin Login
 
-```bash
-cd backend
-python manage.py create-admin -u admin -p yourpassword
-python manage.py reset-password -u admin -p newpassword
-python manage.py list-users
-```
+Admin credentials are configured in `config.json` → `auth.username` / `auth.password`.
+Override via `.env` with `USERNAME` / `PASSWORD`.
+Default: `plugo` / `pluginme`. Single admin only.
 
 ## Code Style
 
@@ -47,7 +43,7 @@ python manage.py list-users
 - FastAPI dependency injection via `Depends()`
 - Run: `make lint-fix` and `make format` before committing
 
-### TypeScript (dashboard/ + widget/)
+### TypeScript (frontend/)
 - **Linter**: ESLint (flat config in each `eslint.config.js`)
 - **Formatter**: Prettier (config in root `.prettierrc`)
 - **Testing**: Vitest + Testing Library
@@ -65,8 +61,8 @@ python manage.py list-users
 ## Testing
 
 - Backend tests: `backend/tests/` (pytest + pytest-asyncio)
-- Dashboard tests: `dashboard/src/tests/` (Vitest + Testing Library)
-- Widget tests: `widget/src/**/*.test.ts` (Vitest)
+- Frontend tests: `frontend/src/tests/` (Vitest + Testing Library)
+- Widget tests: `frontend/src/widget/**/*.test.ts` (Vitest)
 - Always run `make test` before creating a PR
 
 ## Configuration
@@ -92,7 +88,9 @@ config.json          ← project config (safe to commit)
 ├── ANTHROPIC_API_KEY
 ├── OPENAI_API_KEY
 ├── GEMINI_API_KEY
-└── SECRET_KEY
+├── SECRET_KEY
+├── USERNAME
+└── PASSWORD
 ```
 
 Environment variables override both (for Docker/CI).
@@ -100,6 +98,6 @@ Environment variables override both (for Docker/CI).
 ## Environment
 
 - Python deps in `.venv/` (project-local)
-- Node deps in `node_modules/` (per package, managed with pnpm)
+- Node deps in `node_modules/` (per package in `frontend/`, managed with pnpm workspaces)
 - Database: SQLite (dev) or MongoDB (prod) — set in `config.json → database.provider`
 - Vector store: ChromaDB at `config.json → vector_store.chroma_path`

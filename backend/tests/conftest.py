@@ -2,7 +2,6 @@
 
 import os
 import sys
-import uuid
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -15,6 +14,8 @@ os.environ["DATABASE_PROVIDER"] = "sqlite"
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./data/test.db"
 os.environ["SECRET_KEY"] = "test-secret-key-for-testing-only"
 os.environ["CHROMA_PATH"] = "./data/test_chroma"
+# Admin credentials loaded from config.json (auth.username/auth.password)
+# No env override needed in tests — config.json defaults apply
 
 # Ensure data dir exists
 os.makedirs(os.path.join(os.path.dirname(__file__), "..", "data"), exist_ok=True)
@@ -62,32 +63,11 @@ async def db_repos():
 
 
 @pytest.fixture
-async def test_user(db_repos):
-    """Create a test user and return its data."""
-    from auth import hash_password
-
-    user_id = str(uuid.uuid4())
-    username = f"testuser_{uuid.uuid4().hex[:8]}"
-    user = await db_repos.users.create({
-        "id": user_id,
-        "username": username,
-        "password_hash": hash_password("testpassword123"),
-        "role": "admin",
-    })
-    yield user
-    # Cleanup
-    try:
-        await db_repos.users.delete(user_id)
-    except Exception:
-        pass
-
-
-@pytest.fixture
-async def auth_headers(test_user):
+async def auth_headers():
     """Return Authorization headers with a valid JWT token."""
     from auth import create_access_token
 
-    token = create_access_token(subject=test_user["id"], role=test_user["role"])
+    token = create_access_token(subject="plugo", role="admin")
     return {"Authorization": f"Bearer {token}"}
 
 

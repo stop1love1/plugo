@@ -285,10 +285,22 @@ class MongoChatSessionRepo(BaseChatSessionRepo):
         await self.col.insert_one(doc)
         return _clean_doc(doc)
 
+    @staticmethod
+    def _enrich_session(doc: dict) -> dict:
+        messages = doc.get("messages", [])
+        doc["message_count"] = len(messages)
+        first_msg = ""
+        for msg in messages:
+            if isinstance(msg, dict) and msg.get("role") == "user":
+                first_msg = (msg.get("content") or "")[:200]
+                break
+        doc["first_message"] = first_msg
+        return doc
+
     async def get_by_id(self, session_id: str) -> Optional[dict]:
         doc = await self.col.find_one({"_id": session_id})
         if doc:
-            doc["message_count"] = len(doc.get("messages", []))
+            self._enrich_session(doc)
             return _clean_doc(doc)
         return None
 
@@ -297,7 +309,7 @@ class MongoChatSessionRepo(BaseChatSessionRepo):
         cursor = self.col.find({"site_id": site_id}).sort("started_at", -1).skip(skip).limit(per_page)
         results = []
         async for doc in cursor:
-            doc["message_count"] = len(doc.get("messages", []))
+            self._enrich_session(doc)
             results.append(_clean_doc(doc))
         return results
 
@@ -308,7 +320,7 @@ class MongoChatSessionRepo(BaseChatSessionRepo):
         }).sort("started_at", -1)
         results = []
         async for doc in cursor:
-            doc["message_count"] = len(doc.get("messages", []))
+            self._enrich_session(doc)
             results.append(_clean_doc(doc))
         return results
 

@@ -8,6 +8,7 @@ venv/
 # Build
 dist/
 build/
+widget-dist/
 *.egg-info/
 
 # Data
