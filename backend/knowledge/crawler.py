@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import uuid
 import asyncio
@@ -6,7 +7,8 @@ import hashlib
 import fnmatch
 from collections import deque
 from datetime import datetime, timezone
-from urllib.parse import urljoin, urlparse
+from pathlib import Path
+from urllib.parse import ParseResult, urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 import httpx
 from bs4 import BeautifulSoup
@@ -15,6 +17,28 @@ from providers.factory import get_llm_provider
 from knowledge.chunker import SemanticChunker
 from config import settings
 from logging_config import logger
+
+
+def _normalize_host(netloc: str) -> str:
+    """Lowercase host and strip a leading www. so apex and www are treated as one site."""
+    if not netloc:
+        return ""
+    h = netloc.lower().strip()
+    if h.startswith("www."):
+        h = h[4:]
+    return h
+
+
+def _canonical_internal_url(start_url: str, parsed: ParseResult) -> str | None:
+    """If parsed URL is on the same site as start_url (www-agnostic), return a stable URL using the seed host."""
+    seed = urlparse(start_url)
+    if _normalize_host(parsed.netloc) != _normalize_host(seed.netloc):
+        return None
+    scheme = parsed.scheme if parsed.scheme in ("http", "https") else seed.scheme
+    if scheme not in ("http", "https"):
+        scheme = seed.scheme if seed.scheme in ("http", "https") else "https"
+    path = parsed.path if parsed.path else "/"
+    return f"{scheme}://{seed.netloc.lower()}{path}"
 
 
 class WebCrawler:
@@ -48,7 +72,7 @@ class WebCrawler:
         self._already_crawled_urls: set[str] = set()
         self._page_hashes: dict[str, str] = {}
         self._queue_size = 0
-        self.max_depth = max_depth  # 0 = unlimited
+        self.max_depth = 0 if max_depth is None else int(max_depth)  # 0 = unlimited
         self.exclude_patterns = exclude_patterns or []
         self.max_retries = settings.crawl_max_retries
 
@@ -112,28 +136,42 @@ class WebCrawler:
             self._log(robots_url, "skipped", error=str(e), action="robots.txt fetch failed, allowing all")
         return rp
 
-    async def _parse_sitemap(self, client: httpx.AsyncClient, start_url: str, base_domain: str) -> list[str]:
+    async def _parse_sitemap(self, client: httpx.AsyncClient, start_url: str) -> list[str]:
         """Try to discover URLs from sitemap.xml."""
         parsed = urlparse(start_url)
+        seed_host_norm = _normalize_host(parsed.netloc)
         sitemap_url = f"{parsed.scheme}://{parsed.netloc}/sitemap.xml"
         urls = []
         try:
             response = await client.get(sitemap_url)
-            if response.status_code == 200 and "xml" in response.headers.get("content-type", ""):
-                soup = BeautifulSoup(response.text, "html.parser")
-                for loc in soup.find_all("loc"):
-                    url = loc.get_text(strip=True)
-                    url_parsed = urlparse(url)
-                    if url_parsed.netloc == base_domain:
-                        clean_url = f"{url_parsed.scheme}://{url_parsed.netloc}{url_parsed.path}"
-                        if not self._is_excluded(clean_url):
-                            urls.append(clean_url)
-                if urls:
-                    self._log(sitemap_url, "success", action=f"sitemap.xml: discovered {len(urls)} URLs")
-                else:
-                    self._log(sitemap_url, "skipped", action="sitemap.xml parsed but no usable URLs found")
-            else:
+            if response.status_code != 200:
                 self._log(sitemap_url, "skipped", action="sitemap.xml not found or not XML")
+            else:
+                raw = response.text.strip()
+                ct = (response.headers.get("content-type") or "").lower()
+                head = raw[:8000].lower()
+                looks_like_sitemap = (
+                    "xml" in ct
+                    or raw.startswith("<?xml")
+                    or "<urlset" in head
+                    or "<sitemapindex" in head
+                )
+                if not looks_like_sitemap:
+                    self._log(sitemap_url, "skipped", action="sitemap.xml response not recognized as XML")
+                else:
+                    soup = BeautifulSoup(response.text, "html.parser")
+                    for loc in soup.find_all("loc"):
+                        url = loc.get_text(strip=True)
+                        url_parsed = urlparse(url)
+                        if _normalize_host(url_parsed.netloc) != seed_host_norm:
+                            continue
+                        clean_url = _canonical_internal_url(start_url, url_parsed)
+                        if clean_url and not self._is_excluded(clean_url):
+                            urls.append(clean_url)
+                    if urls:
+                        self._log(sitemap_url, "success", action=f"sitemap.xml: discovered {len(urls)} URLs")
+                    else:
+                        self._log(sitemap_url, "skipped", action="sitemap.xml parsed but no usable URLs found")
         except Exception as e:
             self._log(sitemap_url, "skipped", error=str(e), action="sitemap.xml fetch failed")
         return urls
@@ -189,6 +227,117 @@ class WebCrawler:
             return (None, None, None)
         return (-1, None, last_error)
 
+    def _get_temp_dir(self, site_id: str) -> Path:
+        """Get or create the temp directory for raw crawl data."""
+        temp_dir = Path("data/temp") / site_id
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        return temp_dir
+
+    def _cleanup_temp(self, site_id: str):
+        """Delete temp files after knowledge has been stored."""
+        import shutil
+        temp_dir = Path("data/temp") / site_id
+        if temp_dir.exists():
+            try:
+                shutil.rmtree(temp_dir)
+                self._log("", "success", action=f"cleaned up temp directory: {temp_dir}")
+            except Exception as e:
+                logger.warning("Failed to clean up temp directory", path=str(temp_dir), error=str(e))
+
+    def _save_raw_page(self, site_id: str, url: str, html: str, title: str, soup: BeautifulSoup) -> Path:
+        """Save full page content as markdown with media links to temp directory."""
+        temp_dir = self._get_temp_dir(site_id)
+        url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
+        safe_name = re.sub(r"[^\w\-]", "_", urlparse(url).path.strip("/"))[:60] or "index"
+        filename = f"{safe_name}_{url_hash}.md"
+        filepath = temp_dir / filename
+
+        # --- Extract main text content as markdown ---
+        # Work on a copy so we don't mutate the original soup
+        page_soup = BeautifulSoup(str(soup), "html.parser")
+        for tag in page_soup.find_all(["script", "style"]):
+            tag.decompose()
+        main = page_soup.find("main") or page_soup.find("article") or page_soup.find("body")
+        body_parts: list[str] = []
+        if main:
+            for el in main.descendants:
+                if not hasattr(el, "name"):
+                    continue
+                if el.name in ("h1", "h2", "h3", "h4", "h5", "h6"):
+                    level = int(el.name[1])
+                    text = el.get_text(strip=True)
+                    if text:
+                        body_parts.append(f"\n{'#' * level} {text}\n")
+                elif el.name == "p":
+                    text = el.get_text(strip=True)
+                    if text and len(text) > 5:
+                        body_parts.append(text)
+                elif el.name == "li":
+                    text = el.get_text(strip=True)
+                    if text:
+                        body_parts.append(f"- {text}")
+                elif el.name == "blockquote":
+                    text = el.get_text(strip=True)
+                    if text:
+                        body_parts.append(f"> {text}")
+
+        # --- Extract media links ---
+        images = []
+        videos = []
+        file_links = []
+        for img in soup.find_all("img"):
+            # Prefer lazy-load attributes over src (which is often a placeholder data: URI)
+            src = img.get("data-src") or img.get("data-lazy-src") or img.get("data-original") or img.get("src") or ""
+            if not src or src.startswith("data:"):
+                continue
+            src = urljoin(url, src)
+            alt = img.get("alt", "").strip()
+            if src.startswith(("http://", "https://")):
+                images.append({"src": src, "alt": alt})
+        for vid in soup.find_all(["video", "iframe"]):
+            src = vid.get("src") or ""
+            if not src:
+                source_tag = vid.find("source", src=True)
+                if source_tag:
+                    src = source_tag["src"]
+            if src:
+                src = urljoin(url, src)
+                if src.startswith(("http://", "https://")):
+                    videos.append(src)
+        for a in soup.find_all("a", href=True):
+            href = urljoin(url, a["href"])
+            text = a.get_text(strip=True)
+            ext = os.path.splitext(urlparse(href).path)[1].lower()
+            if ext in (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".zip", ".rar"):
+                file_links.append({"href": href, "text": text, "type": ext})
+
+        # --- Build markdown file ---
+        md_parts = [f"# {title}\n", f"**URL:** {url}\n"]
+
+        # Page content
+        if body_parts:
+            md_parts.append("\n## Content\n")
+            md_parts.append("\n\n".join(body_parts))
+
+        if images:
+            md_parts.append("\n\n## Images\n")
+            for img in images:
+                alt = img["alt"] or "image"
+                md_parts.append(f"![{alt}]({img['src']})")
+
+        if videos:
+            md_parts.append("\n\n## Videos\n")
+            for v in videos:
+                md_parts.append(f"- [Video]({v})")
+
+        if file_links:
+            md_parts.append("\n\n## Downloadable Files\n")
+            for lnk in file_links:
+                md_parts.append(f"- [{lnk['text'] or lnk['type']}]({lnk['href']})")
+
+        filepath.write_text("\n".join(md_parts), encoding="utf-8")
+        return filepath
+
     async def crawl_site(
         self,
         site_id: str,
@@ -197,6 +346,8 @@ class WebCrawler:
         repos,
     ):
         """Crawl a website starting from the given URL."""
+        p0 = urlparse(start_url)
+        start_url = f"{p0.scheme}://{p0.netloc.lower()}{p0.path or '/'}"
         base_domain = urlparse(start_url).netloc
         # Queue stores (url, depth) tuples
         queue: deque[tuple[str, int]] = deque([(start_url, 0)])
@@ -204,18 +355,27 @@ class WebCrawler:
         self._queue_size = len(queue)
         pending_chunks: list[dict] = []
         embed_batch_size = settings.crawl_embed_batch_size
+        # Background embedding tasks run in parallel with crawling
+        embed_tasks: list[asyncio.Task] = []
+        # Track content hashes seen in this crawl to avoid duplicate chunks
+        seen_hashes: set[str] = set()
 
         await repos.crawl_jobs.update(job_id, {
             "status": "running",
             "current_url": start_url,
         })
 
-        # Load already-crawled URLs for change detection
+        # Load already-crawled URLs and hashes for change detection and dedup
         if not self.force_recrawl:
             existing_urls = await repos.knowledge.list_crawled_urls(site_id)
             self._already_crawled_urls = {u["source_url"] for u in existing_urls if u.get("source_url")}
             if self._already_crawled_urls:
                 self._log("", "success", action=f"found {len(self._already_crawled_urls)} previously crawled URLs")
+            # Pre-load existing content hashes to skip duplicates
+            existing_hashes = await repos.knowledge.list_content_hashes(site_id)
+            seen_hashes.update(existing_hashes)
+            if existing_hashes:
+                self._log("", "success", action=f"loaded {len(existing_hashes)} existing content hashes for dedup")
 
         features = []
         if self.max_depth > 0:
@@ -237,7 +397,7 @@ class WebCrawler:
                 robot_parser = await self._check_robots_txt(client, start_url)
 
                 # Seed queue from sitemap.xml
-                sitemap_urls = await self._parse_sitemap(client, start_url, base_domain)
+                sitemap_urls = await self._parse_sitemap(client, start_url)
                 for surl in sitemap_urls:
                     if surl not in queued_urls:
                         queue.append((surl, 1))
@@ -318,14 +478,64 @@ class WebCrawler:
                         soup = BeautifulSoup(html, "html.parser")
                         title = (soup.title.string or "").strip() if soup.title else ""
 
+                        # Save raw page data (with media links) to temp BEFORE soup mutation
+                        try:
+                            self._save_raw_page(site_id, url, html, title, soup)
+                        except Exception as e:
+                            logger.warning("Failed to save raw page to temp", url=url, error=str(e))
+
+                        # Discover links BEFORE chunking/text extraction mutates the soup
+                        child_depth = depth + 1
+                        if self.max_depth == 0 or child_depth <= self.max_depth:
+                            for link in soup.find_all("a", href=True):
+                                href = urljoin(url, link["href"])
+                                parsed = urlparse(href)
+                                clean_url = _canonical_internal_url(start_url, parsed)
+                                if (
+                                    clean_url
+                                    and clean_url not in self.visited
+                                    and clean_url not in queued_urls
+                                    and not self._is_excluded(clean_url)
+                                ):
+                                    queue.append((clean_url, child_depth))
+                                    queued_urls.add(clean_url)
+
+                        # Extract media links in markdown format before soup mutation
+                        media_md = self._extract_media_markdown(soup, url)
+
                         chunks = self.chunker.chunk_page(soup, title, url, site_id)
                         if not chunks:
                             text = self._extract_text(soup)
                             if text.strip():
                                 chunks = self._chunk_text(text, title, url, site_id)
 
-                        pending_chunks.extend(chunks)
-                        self.chunks_created += len(chunks)
+                        # Append media markdown to the last chunk (or create one)
+                        if media_md:
+                            if chunks:
+                                chunks[-1]["content"] += "\n\n" + media_md
+                                chunks[-1]["content_hash"] = hashlib.sha256(chunks[-1]["content"].encode()).hexdigest()
+                            else:
+                                chunks = [{
+                                    "id": str(uuid.uuid4()),
+                                    "site_id": site_id,
+                                    "source_url": url,
+                                    "title": title,
+                                    "content": media_md,
+                                    "chunk_index": 0,
+                                    "content_hash": hashlib.sha256(media_md.encode()).hexdigest(),
+                                }]
+
+                        # Deduplicate: skip chunks with hashes already seen in this crawl
+                        unique_chunks = []
+                        for c in chunks:
+                            h = c.get("content_hash", "")
+                            if h and h in seen_hashes:
+                                continue
+                            if h:
+                                seen_hashes.add(h)
+                            unique_chunks.append(c)
+                        pending_chunks.extend(unique_chunks)
+                        self.chunks_created += len(unique_chunks)
 
                         recrawl_tag = " (re-crawl)" if is_recrawl else ""
                         depth_tag = f" [depth={depth}]" if self.max_depth > 0 else ""
@@ -336,30 +546,18 @@ class WebCrawler:
                             action=f"extracted {len(chunks)} chunks ({len(html)} bytes){recrawl_tag}{depth_tag}",
                         )
 
-                        # Discover new links (same domain, respecting depth limit)
-                        child_depth = depth + 1
-                        if self.max_depth == 0 or child_depth <= self.max_depth:
-                            for link in soup.find_all("a", href=True):
-                                href = urljoin(url, link["href"])
-                                parsed = urlparse(href)
-                                clean_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
-                                if (
-                                    parsed.netloc == base_domain
-                                    and clean_url not in self.visited
-                                    and clean_url not in queued_urls
-                                    and not self._is_excluded(clean_url)
-                                ):
-                                    queue.append((clean_url, child_depth))
-                                    queued_urls.add(clean_url)
-
                         self._queue_size = len(queue)
 
-                        # Flush chunks periodically
-                        if len(pending_chunks) >= embed_batch_size:
-                            await self._flush_chunks(site_id, pending_chunks, repos)
-                            pending_chunks.clear()
-
+                        # Save progress BEFORE embedding so the UI stays updated
                         await self._save_progress(job_id, repos)
+
+                        # Flush chunks in background so crawling continues in parallel
+                        if len(pending_chunks) >= embed_batch_size:
+                            batch = list(pending_chunks)
+                            pending_chunks.clear()
+                            task = asyncio.create_task(self._flush_chunks(site_id, batch, repos))
+                            embed_tasks.append(task)
+
                         await asyncio.sleep(self.delay)
 
                     except Exception as e:
@@ -371,10 +569,19 @@ class WebCrawler:
                         await self._save_progress(job_id, repos)
                         continue
 
+            # Wait for any background embedding tasks
+            if embed_tasks:
+                self._log("", "success", action=f"waiting for {len(embed_tasks)} background embedding tasks...")
+                await asyncio.gather(*embed_tasks, return_exceptions=True)
+                embed_tasks.clear()
+
             # Flush remaining chunks
             if pending_chunks:
                 await self._flush_chunks(site_id, pending_chunks, repos)
                 pending_chunks.clear()
+
+            # Clean up temp files after all knowledge is stored
+            self._cleanup_temp(site_id)
 
             final_status = "paused" if self._paused else ("stopped" if self._stopped else "completed")
             retried_str = f", {self.pages_retried} retried" if self.pages_retried > 0 else ""
@@ -397,6 +604,9 @@ class WebCrawler:
             })
 
         except Exception as e:
+            # Wait for any in-flight background embedding tasks
+            if embed_tasks:
+                await asyncio.gather(*embed_tasks, return_exceptions=True)
             if pending_chunks:
                 try:
                     await self._flush_chunks(site_id, pending_chunks, repos)
@@ -412,11 +622,65 @@ class WebCrawler:
                 "finished_at": datetime.now(timezone.utc),
             })
 
+    # Structural tags that must never be decomposed by the class-name filter
+    _PROTECTED_TAGS = frozenset({"html", "body", "main", "article", "section"})
+
+    def _extract_media_markdown(self, soup: BeautifulSoup, base_url: str) -> str:
+        """Extract images, videos, and downloadable file links as markdown."""
+        parts = []
+        main = soup.find("main") or soup.find("article") or soup.find("body")
+        if not main:
+            return ""
+
+        # Images (including lazy-loaded — check data-src first since src is often a placeholder)
+        images_seen = set()
+        for img in main.find_all("img"):
+            src = img.get("data-src") or img.get("data-lazy-src") or img.get("data-original") or img.get("src") or ""
+            if not src or src.startswith("data:"):
+                continue
+            src = urljoin(base_url, src)
+            if not src.startswith(("http://", "https://")) or src in images_seen:
+                continue
+            # Skip tiny icons/trackers
+            try:
+                w = img.get("width", "")
+                h = img.get("height", "")
+                if (w and int(w) < 20) or (h and int(h) < 20):
+                    continue
+            except (ValueError, TypeError):
+                pass
+            images_seen.add(src)
+            alt = img.get("alt", "").strip() or "image"
+            parts.append(f"![{alt}]({src})")
+
+        # Videos (video tags and iframes like YouTube)
+        for vid in main.find_all(["video", "iframe"]):
+            src = vid.get("src") or ""
+            if not src:
+                source_tag = vid.find("source", src=True)
+                if source_tag:
+                    src = source_tag["src"]
+            if src:
+                src = urljoin(base_url, src)
+                if src.startswith(("http://", "https://")):
+                    parts.append(f"[Video]({src})")
+
+        # Downloadable files
+        for a in main.find_all("a", href=True):
+            href = urljoin(base_url, a["href"])
+            ext = os.path.splitext(urlparse(href).path)[1].lower()
+            if ext in (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".zip", ".rar", ".csv"):
+                text = a.get_text(strip=True) or f"File ({ext})"
+                parts.append(f"[{text}]({href})")
+
+        return "\n".join(parts)
+
     def _extract_text(self, soup: BeautifulSoup) -> str:
         for tag in soup.find_all(["nav", "footer", "header", "script", "style", "aside"]):
             tag.decompose()
         for el in soup.find_all(class_=re.compile(r"(nav|footer|sidebar|ad|menu|cookie)", re.I)):
-            el.decompose()
+            if el.name not in self._PROTECTED_TAGS:
+                el.decompose()
 
         main = soup.find("main") or soup.find("article") or soup.find("body")
         if not main:
@@ -446,13 +710,15 @@ class WebCrawler:
 
             if len(current_chunk) + len(para) > max_tokens * 4:
                 if current_chunk:
+                    body = current_chunk.strip()
                     chunks.append({
                         "id": str(uuid.uuid4()),
                         "site_id": site_id,
                         "source_url": source_url,
                         "title": title,
-                        "content": current_chunk.strip(),
+                        "content": body,
                         "chunk_index": chunk_index,
+                        "content_hash": hashlib.sha256(body.encode()).hexdigest(),
                     })
                     chunk_index += 1
                 current_chunk = para
@@ -460,13 +726,15 @@ class WebCrawler:
                 current_chunk += "\n\n" + para if current_chunk else para
 
         if current_chunk.strip():
+            body = current_chunk.strip()
             chunks.append({
                 "id": str(uuid.uuid4()),
                 "site_id": site_id,
                 "source_url": source_url,
                 "title": title,
-                "content": current_chunk.strip(),
+                "content": body,
                 "chunk_index": chunk_index,
+                "content_hash": hashlib.sha256(body.encode()).hexdigest(),
             })
 
         return chunks

@@ -42,6 +42,8 @@ def _site_to_dict(s: Site) -> dict:
         "crawl_enabled": s.crawl_enabled,
         "crawl_auto_interval": s.crawl_auto_interval,
         "crawl_max_pages": s.crawl_max_pages,
+        "crawl_max_depth": s.crawl_max_depth if s.crawl_max_depth is not None else 0,
+        "crawl_exclude_patterns": s.crawl_exclude_patterns or "",
         "crawl_status": s.crawl_status,
         "last_crawled_at": s.last_crawled_at.isoformat() if s.last_crawled_at else None,
         "knowledge_count": s.knowledge_count,
@@ -298,6 +300,14 @@ class SQLiteKnowledgeRepo(BaseKnowledgeRepo):
             }
             for row in result.all()
         ]
+
+    async def list_content_hashes(self, site_id: str) -> set[str]:
+        """Return all content hashes for a site (for deduplication)."""
+        result = await self.db.execute(
+            select(KnowledgeChunk.content_hash)
+            .where(KnowledgeChunk.site_id == site_id, KnowledgeChunk.content_hash.isnot(None))
+        )
+        return {row[0] for row in result.all() if row[0]}
 
     async def list_by_url(self, site_id: str, source_url: str) -> list[dict]:
         result = await self.db.execute(

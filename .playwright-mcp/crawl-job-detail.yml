@@ -1,0 +1,281 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - link "Plugo Plugo" [ref=e6] [cursor=pointer]:
+      - /url: /
+      - img "Plugo" [ref=e185]
+      - text: Plugo
+    - navigation [ref=e7]:
+      - combobox [ref=e187]:
+        - option "Demo Site" [selected]
+      - link "Analytics" [ref=e10] [cursor=pointer]:
+        - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/analytics
+        - img [ref=e11]
+        - generic [ref=e13]: Analytics
+      - generic [ref=e14]:
+        - paragraph [ref=e15]: Content
+        - generic [ref=e16]:
+          - link "Crawl & Setup" [ref=e17] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/setup
+            - img [ref=e18]
+            - generic [ref=e23]: Crawl & Setup
+          - link "Knowledge" [ref=e24] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/knowledge
+            - img [ref=e25]
+            - generic [ref=e29]: Knowledge
+          - link "Crawled Pages" [ref=e30] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/crawled-pages
+            - img [ref=e31]
+            - generic [ref=e34]: Crawled Pages
+          - link "API Tools" [ref=e35] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/tools
+            - img [ref=e36]
+            - generic [ref=e38]: API Tools
+      - generic [ref=e39]:
+        - paragraph [ref=e40]: Deploy
+        - generic [ref=e41]:
+          - link "Embed Code" [ref=e42] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/embed
+            - img [ref=e43]
+            - generic [ref=e46]: Embed Code
+          - link "Playground" [ref=e47] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/playground
+            - img [ref=e48]
+            - generic [ref=e50]: Playground
+      - generic [ref=e51]:
+        - paragraph [ref=e52]: Monitor
+        - generic [ref=e53]:
+          - link "Chat Log" [ref=e54] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/chat-log
+            - img [ref=e55]
+            - generic [ref=e57]: Chat Log
+          - link "Visitors" [ref=e58] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/visitors
+            - img [ref=e59]
+            - generic [ref=e69]: Visitors
+      - link "Settings" [ref=e72] [cursor=pointer]:
+        - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/settings
+        - img [ref=e73]
+        - generic [ref=e76]: Settings
+      - generic [ref=e78]:
+        - link "Models" [ref=e79] [cursor=pointer]:
+          - /url: /models
+          - img [ref=e80]
+          - text: Models
+        - link "Audit Log" [ref=e83] [cursor=pointer]:
+          - /url: /audit
+          - img [ref=e84]
+          - text: Audit Log
+        - button "Notifications 13" [ref=e850] [cursor=pointer]:
+          - img [ref=e89]
+          - generic [ref=e92]: Notifications
+          - generic [ref=e93]: "13"
+        - button "English" [ref=e94] [cursor=pointer]:
+          - img [ref=e95]
+          - generic [ref=e98]: English
+        - button "Logout" [ref=e99] [cursor=pointer]:
+          - img [ref=e100]
+          - generic [ref=e103]: Logout
+    - generic [ref=e105]:
+      - img [ref=e107]
+      - generic [ref=e110]: plugo
+      - generic [ref=e111]: v1.0
+  - main [ref=e112]:
+    - generic [ref=e113]:
+      - heading "Crawl & Knowledge" [level=1] [ref=e114]
+      - paragraph [ref=e115]: Teach your bot by crawling your website content
+      - generic [ref=e116]:
+        - generic [ref=e117]:
+          - img [ref=e118]
+          - heading "Auto Crawl" [level=3] [ref=e121]
+        - generic [ref=e122]:
+          - generic [ref=e123]:
+            - img [ref=e188]
+            - generic [ref=e128]
+          - button [ref=e131] [cursor=pointer]
+        - generic [ref=e190]:
+          - generic [ref=e191]: Auto re-crawl every
+          - generic [ref=e192]:
+            - combobox [ref=e193]
+            - generic [ref=e194]: Automatically re-crawl when interval expires
+        - generic [ref=e133]:
+          - generic [ref=e134]:
+            - generic [ref=e135]: "0"
+            - generic [ref=e136]: Chunks Learned
+          - generic [ref=e137]:
+            - generic [ref=e138]: idle
+            - generic [ref=e139]: Status
+          - generic [ref=e140]:
+            - generic [ref=e141]: —
+            - generic [ref=e142]: Pages Crawled
+          - generic [ref=e143]:
+            - generic [ref=e144]: 3/31/2026
+            - generic [ref=e145]: Last Crawled
+        - generic [ref=e860]:
+          - button "Crawl Log (60 entries)" [ref=e861] [cursor=pointer]:
+            - img [ref=e862]
+            - generic [ref=e864]: Crawl Log (60 entries)
+            - img [ref=e865]
+          - generic [ref=e867]:
+            - generic [ref=e869]
+            - generic [ref=e874]
+            - generic [ref=e879]
+            - generic [ref=e884]
+            - generic [ref=e889]
+            - generic [ref=e895]
+            - generic [ref=e901]
+            - generic [ref=e907]
+            - generic [ref=e913]
+            - generic [ref=e919]
+            - generic [ref=e925]
+            - generic [ref=e930]
+            - generic [ref=e935]
+            - generic [ref=e940]
+            - generic [ref=e945]
+            - generic [ref=e950]
+            - generic [ref=e955]
+            - generic [ref=e960]
+            - generic [ref=e965]
+            - generic [ref=e970]
+            - generic [ref=e975]
+            - generic [ref=e980]
+            - generic [ref=e985]
+            - generic [ref=e990]
+            - generic [ref=e995]
+            - generic [ref=e1000]
+            - generic [ref=e1005]
+            - generic [ref=e1010]
+            - generic [ref=e1015]
+            - generic [ref=e1020]
+            - generic [ref=e1025]
+            - generic [ref=e1030]
+            - generic [ref=e1035]
+            - generic [ref=e1040]
+            - generic [ref=e1045]
+            - generic [ref=e1050]
+            - generic [ref=e1055]
+            - generic [ref=e1060]
+            - generic [ref=e1065]
+            - generic [ref=e1070]
+            - generic [ref=e1075]
+            - generic [ref=e1080]
+            - generic [ref=e1085]
+            - generic [ref=e1090]
+            - generic [ref=e1095]
+            - generic [ref=e1100]
+            - generic [ref=e1105]
+            - generic [ref=e1110]
+            - generic [ref=e1115]
+            - generic [ref=e1120]
+            - generic [ref=e1125]
+            - generic [ref=e1130]
+            - generic [ref=e1135]
+            - generic [ref=e1140]
+            - generic [ref=e1145]
+            - generic [ref=e1150]
+            - generic [ref=e1155]
+            - generic [ref=e1160]
+            - generic [ref=e1165]
+            - generic [ref=e1170]
+      - generic [ref=e146]:
+        - heading "Manual Actions" [level=3] [ref=e147]:
+          - img [ref=e148]
+          - text: Manual Actions
+        - generic [ref=e151]:
+          - img [ref=e152]
+          - generic [ref=e155]:
+            - generic [ref=e156]: Website URL (widget installed)
+            - generic [ref=e157]: https://edusoft.vn
+          - generic [ref=e158]: Auto crawl uses this URL
+        - paragraph [ref=e159]: Manually trigger a crawl or clear learned data
+        - generic [ref=e160]:
+          - generic [ref=e161]:
+            - generic [ref=e162]: URL to scan manually
+            - textbox "https://edusoft.vn" [ref=e195]
+            - paragraph [ref=e164]: Leave empty to use site URL above. Or enter a specific URL to scan additional pages.
+          - generic [ref=e165]:
+            - generic [ref=e166]: Max Pages
+            - generic [ref=e167]
+          - button "Advanced Settings" [ref=e170] [cursor=pointer]:
+            - img [ref=e171]
+            - generic [ref=e174]: Advanced Settings
+            - img [ref=e175]
+          - generic [ref=e177]:
+            - button "Start Crawl" [ref=e851] [cursor=pointer]
+            - button "Clear All Knowledge" [ref=e181] [cursor=pointer]
+      - generic [ref=e196]:
+        - heading "Crawl History" [level=3] [ref=e197]:
+          - img [ref=e198]
+          - text: Crawl History
+        - generic [ref=e202]:
+          - generic [ref=e515]:
+            - button "completed50 pages 3/31/2026, 4:34:49 PM" [active] [ref=e854] [cursor=pointer]
+            - generic [ref=e1177]
+          - button "completed1 pages 3/31/2026, 4:33:18 PM" [ref=e204] [cursor=pointer]:
+            - generic [ref=e205]
+            - generic [ref=e211]
+          - button "completed1 pages 3/31/2026, 4:30:54 PM" [ref=e216] [cursor=pointer]:
+            - generic [ref=e217]
+            - generic [ref=e223]
+          - button "completed1 pages 3/31/2026, 4:28:02 PM" [ref=e228] [cursor=pointer]:
+            - generic [ref=e229]
+            - generic [ref=e235]
+          - button "completed1 pages 3/31/2026, 4:25:02 PM" [ref=e240] [cursor=pointer]:
+            - generic [ref=e241]
+            - generic [ref=e247]
+          - button "completed1 pages 3/31/2026, 4:08:45 PM" [ref=e252] [cursor=pointer]:
+            - generic [ref=e253]
+            - generic [ref=e259]
+          - button "completed1 pages 3/31/2026, 3:55:54 PM" [ref=e264] [cursor=pointer]:
+            - generic [ref=e265]
+            - generic [ref=e271]
+          - button "completed0 pages· 1 failed 3/31/2026, 3:24:07 PM" [ref=e276] [cursor=pointer]:
+            - generic [ref=e277]
+            - generic [ref=e284]
+          - button "completed2 pages · 3 chunks 3/28/2026, 3:19:23 PM" [ref=e289] [cursor=pointer]:
+            - generic [ref=e290]
+            - generic [ref=e296]
+          - button "completed0 pages· 1 failed 3/28/2026, 3:15:47 PM" [ref=e301] [cursor=pointer]:
+            - generic [ref=e302]
+            - generic [ref=e309]
+          - button "completed2 pages · 3 chunks 3/28/2026, 3:08:45 PM" [ref=e314] [cursor=pointer]:
+            - generic [ref=e315]
+            - generic [ref=e321]
+          - button "completed1 pages · 1 chunks 3/28/2026, 3:07:59 PM" [ref=e326] [cursor=pointer]:
+            - generic [ref=e327]
+            - generic [ref=e333]
+          - button "completed0 pages· 1 failed 3/28/2026, 3:03:47 PM" [ref=e338] [cursor=pointer]:
+            - generic [ref=e339]
+            - generic [ref=e346]
+          - button "completed0 pages· 1 failed 3/28/2026, 3:03:39 PM" [ref=e351] [cursor=pointer]:
+            - generic [ref=e352]
+            - generic [ref=e359]
+          - button "completed1 pages 3/28/2026, 3:01:08 PM" [ref=e364] [cursor=pointer]:
+            - generic [ref=e365]
+            - generic [ref=e371]
+          - button "completed1 pages · 1 chunks 3/28/2026, 2:45:56 PM" [ref=e376] [cursor=pointer]:
+            - generic [ref=e377]
+            - generic [ref=e383]
+          - button "failed1 pages · 1 chunks 3/28/2026, 2:42:41 PM" [ref=e388] [cursor=pointer]:
+            - generic [ref=e389]
+            - generic [ref=e396]
+          - button "completed0 pages· 1 failed 3/28/2026, 2:40:43 PM" [ref=e401] [cursor=pointer]:
+            - generic [ref=e402]
+            - generic [ref=e409]
+          - button "failed2 pages · 3 chunks 3/28/2026, 2:35:13 PM" [ref=e414] [cursor=pointer]:
+            - generic [ref=e415]
+            - generic [ref=e422]
+          - button "failed2 pages 3/28/2026, 2:29:18 PM" [ref=e427] [cursor=pointer]:
+            - generic [ref=e428]
+            - generic [ref=e435]
+          - button "failed2 pages 3/28/2026, 2:25:29 PM" [ref=e440] [cursor=pointer]:
+            - generic [ref=e441]
+            - generic [ref=e448]
+          - button "failed0 pages 3/28/2026, 2:03:52 PM" [ref=e453] [cursor=pointer]:
+            - generic [ref=e454]
+            - generic [ref=e461]
+          - button "failed1 pages 3/28/2026, 11:03:39 AM" [ref=e466] [cursor=pointer]:
+            - generic [ref=e467]
+            - generic [ref=e474]
+          - button "failed0 pages 3/28/2026, 10:59:44 AM" [ref=e479] [cursor=pointer]:
+            - generic [ref=e480]
+            - generic [ref=e487]

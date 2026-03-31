@@ -1,0 +1,495 @@
+- generic [ref=e2]:
+  - generic [ref=e5]:
+    - complementary [ref=e6]:
+      - link "Plugo Plugo" [ref=e8] [cursor=pointer]:
+        - /url: /
+        - img "Plugo" [ref=e9]
+        - text: Plugo
+      - navigation [ref=e10]:
+        - combobox [ref=e12]:
+          - option "Demo Site" [selected]
+        - link "Analytics" [ref=e15] [cursor=pointer]:
+          - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/analytics
+          - img [ref=e16]
+          - generic [ref=e18]: Analytics
+        - generic [ref=e19]:
+          - paragraph [ref=e20]: Content
+          - generic [ref=e21]:
+            - link "Crawl & Setup" [ref=e22] [cursor=pointer]:
+              - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/setup
+              - img [ref=e23]
+              - generic [ref=e28]: Crawl & Setup
+            - link "Knowledge" [ref=e29] [cursor=pointer]:
+              - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/knowledge
+              - img [ref=e30]
+              - generic [ref=e34]: Knowledge
+            - link "Crawled Pages" [ref=e35] [cursor=pointer]:
+              - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/crawled-pages
+              - img [ref=e36]
+              - generic [ref=e39]: Crawled Pages
+            - link "API Tools" [ref=e40] [cursor=pointer]:
+              - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/tools
+              - img [ref=e41]
+              - generic [ref=e43]: API Tools
+        - generic [ref=e44]:
+          - paragraph [ref=e45]: Deploy
+          - generic [ref=e46]:
+            - link "Embed Code" [ref=e47] [cursor=pointer]:
+              - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/embed
+              - img [ref=e48]
+              - generic [ref=e51]: Embed Code
+            - link "Playground" [ref=e52] [cursor=pointer]:
+              - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/playground
+              - img [ref=e53]
+              - generic [ref=e55]: Playground
+        - generic [ref=e56]:
+          - paragraph [ref=e57]: Monitor
+          - generic [ref=e58]:
+            - link "Chat Log" [ref=e59] [cursor=pointer]:
+              - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/chat-log
+              - img [ref=e60]
+              - generic [ref=e62]: Chat Log
+            - link "Visitors" [ref=e63] [cursor=pointer]:
+              - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/visitors
+              - img [ref=e64]
+              - generic [ref=e74]: Visitors
+        - link "Settings" [ref=e77] [cursor=pointer]:
+          - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/settings
+          - img [ref=e78]
+          - generic [ref=e81]: Settings
+        - generic [ref=e83]:
+          - link "Models" [ref=e84] [cursor=pointer]:
+            - /url: /models
+            - img [ref=e85]
+            - text: Models
+          - link "Audit Log" [ref=e88] [cursor=pointer]:
+            - /url: /audit
+            - img [ref=e89]
+            - text: Audit Log
+          - link "Notifications 17" [ref=e92] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/notifications
+            - img [ref=e93]
+            - generic [ref=e96]: Notifications
+            - generic [ref=e97]: "17"
+          - button "English" [ref=e98] [cursor=pointer]:
+            - img [ref=e99]
+            - generic [ref=e102]: English
+          - button "Logout" [ref=e103] [cursor=pointer]:
+            - img [ref=e104]
+            - generic [ref=e107]: Logout
+      - generic [ref=e109]:
+        - img [ref=e111]
+        - generic [ref=e114]: plugo
+        - generic [ref=e115]: v1.0
+    - main [ref=e116]:
+      - generic [ref=e117]:
+        - heading "Crawl & Knowledge" [level=1] [ref=e118]
+        - paragraph [ref=e119]: Teach your bot by crawling your website content
+        - generic [ref=e120]:
+          - generic [ref=e121]:
+            - img [ref=e122]
+            - heading "Auto Crawl" [level=3] [ref=e125]
+          - generic [ref=e126]:
+            - generic [ref=e127]:
+              - img [ref=e640]
+              - generic [ref=e130]:
+                - paragraph [ref=e131]: "Crawl: ON"
+                - paragraph [ref=e132]: Bot is actively learning from your website
+            - button [ref=e133] [cursor=pointer]
+          - generic [ref=e642]:
+            - generic [ref=e643]:
+              - generic [ref=e644]: Auto re-crawl every
+              - generic [ref=e645]:
+                - combobox [ref=e646]:
+                  - option "Disabled (manual only)"
+                  - option "6h"
+                  - option "12h"
+                  - option "24h" [selected]
+                  - option "48h"
+                  - option "Weekly"
+                - generic [ref=e647]: Automatically re-crawl when interval expires
+            - generic [ref=e648]:
+              - generic [ref=e649]: Max Pages
+              - generic [ref=e650]:
+                - slider [ref=e651]: "50"
+                - spinbutton [ref=e652]: "50"
+                - generic [ref=e653]: pages
+          - generic [ref=e147]:
+            - generic [ref=e148]:
+              - generic [ref=e149]: "0"
+              - generic [ref=e150]: Chunks Learned
+            - generic [ref=e151]:
+              - img [ref=e654]
+              - generic [ref=e153]: Status
+            - generic [ref=e154]:
+              - generic [ref=e155]:
+                - text: "0"
+                - generic [ref=e659]: /50
+              - generic [ref=e156]: Pages Crawled
+            - generic [ref=e157]:
+              - generic [ref=e158]: 3/31/2026
+              - generic [ref=e159]: Last Crawled
+          - generic [ref=e660]:
+            - generic [ref=e661]:
+              - generic [ref=e662]: Crawling...
+              - generic [ref=e663]: 0 / 50 pages
+            - generic [ref=e665]:
+              - generic [ref=e666]:
+                - img [ref=e667]
+                - text: "Elapsed: 420:01"
+              - generic [ref=e670]: "Speed: 0.0 pages/min"
+        - generic [ref=e160]:
+          - heading "Manual Actions" [level=3] [ref=e161]:
+            - img [ref=e162]
+            - text: Manual Actions
+          - generic [ref=e165]:
+            - img [ref=e166]
+            - generic [ref=e169]:
+              - generic [ref=e170]: Website URL (widget installed)
+              - generic [ref=e171]: https://edusoft.vn
+            - generic [ref=e172]: Auto crawl uses this URL
+          - paragraph [ref=e173]: Manually trigger a crawl or clear learned data
+          - generic [ref=e174]:
+            - generic [ref=e175]:
+              - generic [ref=e176]: URL to scan manually
+              - textbox "https://edusoft.vn" [ref=e177]
+              - paragraph [ref=e178]: Leave empty to use site URL above. Or enter a specific URL to scan additional pages.
+            - generic [ref=e179]:
+              - generic [ref=e180]: Max Pages
+              - generic [ref=e181]:
+                - slider [ref=e182]: "50"
+                - spinbutton [ref=e183]: "50"
+            - button "Advanced Settings" [ref=e184] [cursor=pointer]:
+              - img [ref=e185]
+              - generic [ref=e188]: Advanced Settings
+              - img [ref=e189]
+            - generic [ref=e191]:
+              - button "Pause" [ref=e671] [cursor=pointer]:
+                - img [ref=e672]
+                - text: Pause
+              - button "Stop Crawl" [ref=e675] [cursor=pointer]:
+                - img [ref=e676]
+                - text: Stop Crawl
+              - button "Clear All Knowledge" [disabled] [ref=e620]:
+                - img [ref=e621]
+                - text: Clear All Knowledge
+        - generic [ref=e199]:
+          - heading "Crawl History" [level=3] [ref=e200]:
+            - img [ref=e201]
+            - text: Crawl History
+          - generic [ref=e205]:
+            - button "running0 pages 3/31/2026, 5:20:03 PM" [ref=e679]:
+              - generic [ref=e680]:
+                - img [ref=e681]
+                - generic [ref=e686]:
+                  - text: running
+                  - generic [ref=e687]: 0 pages
+              - generic [ref=e689]: 3/31/2026, 5:20:03 PM
+            - button "completed50 pages 3/31/2026, 5:16:59 PM" [ref=e207] [cursor=pointer]:
+              - generic [ref=e208]:
+                - img [ref=e209]
+                - generic [ref=e212]:
+                  - text: completed
+                  - generic [ref=e213]: 50 pages
+              - generic [ref=e214]:
+                - generic [ref=e215]: 3/31/2026, 5:16:59 PM
+                - img [ref=e216]
+            - button "completed50 pages · 251 chunks 3/31/2026, 5:15:20 PM" [ref=e219] [cursor=pointer]:
+              - generic [ref=e220]:
+                - img [ref=e221]
+                - generic [ref=e224]:
+                  - text: completed
+                  - generic [ref=e225]: 50 pages · 251 chunks
+              - generic [ref=e226]:
+                - generic [ref=e227]: 3/31/2026, 5:15:20 PM
+                - img [ref=e228]
+            - button "failed47 pages · 858 chunks 3/31/2026, 5:13:40 PM" [ref=e231] [cursor=pointer]:
+              - generic [ref=e232]:
+                - img [ref=e233]
+                - generic [ref=e237]:
+                  - text: failed
+                  - generic [ref=e238]: 47 pages · 858 chunks
+              - generic [ref=e239]:
+                - generic [ref=e240]: 3/31/2026, 5:13:40 PM
+                - img [ref=e241]
+            - button "failed29 pages · 459 chunks 3/31/2026, 4:57:06 PM" [ref=e244] [cursor=pointer]:
+              - generic [ref=e245]:
+                - img [ref=e246]
+                - generic [ref=e250]:
+                  - text: failed
+                  - generic [ref=e251]: 29 pages · 459 chunks
+              - generic [ref=e252]:
+                - generic [ref=e253]: 3/31/2026, 4:57:06 PM
+                - img [ref=e254]
+            - button "stopped26 pages · 432 chunks 3/31/2026, 4:48:35 PM" [ref=e257] [cursor=pointer]:
+              - generic [ref=e258]:
+                - img [ref=e259]
+                - generic [ref=e261]:
+                  - text: stopped
+                  - generic [ref=e262]: 26 pages · 432 chunks
+              - generic [ref=e263]:
+                - generic [ref=e264]: 3/31/2026, 4:48:35 PM
+                - img [ref=e265]
+            - button "completed50 pages · 975 chunks 3/31/2026, 4:46:39 PM" [ref=e268] [cursor=pointer]:
+              - generic [ref=e269]:
+                - img [ref=e270]
+                - generic [ref=e273]:
+                  - text: completed
+                  - generic [ref=e274]: 50 pages · 975 chunks
+              - generic [ref=e275]:
+                - generic [ref=e276]: 3/31/2026, 4:46:39 PM
+                - img [ref=e277]
+            - button "failed21 pages · 255 chunks 3/31/2026, 4:45:19 PM" [ref=e280] [cursor=pointer]:
+              - generic [ref=e281]:
+                - img [ref=e282]
+                - generic [ref=e286]:
+                  - text: failed
+                  - generic [ref=e287]: 21 pages · 255 chunks
+              - generic [ref=e288]:
+                - generic [ref=e289]: 3/31/2026, 4:45:19 PM
+                - img [ref=e290]
+            - button "completed50 pages · 975 chunks 3/31/2026, 4:43:22 PM" [ref=e293] [cursor=pointer]:
+              - generic [ref=e294]:
+                - img [ref=e295]
+                - generic [ref=e298]:
+                  - text: completed
+                  - generic [ref=e299]: 50 pages · 975 chunks
+              - generic [ref=e300]:
+                - generic [ref=e301]: 3/31/2026, 4:43:22 PM
+                - img [ref=e302]
+            - button "completed50 pages 3/31/2026, 4:40:34 PM" [ref=e305] [cursor=pointer]:
+              - generic [ref=e306]:
+                - img [ref=e307]
+                - generic [ref=e310]:
+                  - text: completed
+                  - generic [ref=e311]: 50 pages
+              - generic [ref=e312]:
+                - generic [ref=e313]: 3/31/2026, 4:40:34 PM
+                - img [ref=e314]
+            - button "completed50 pages 3/31/2026, 4:34:49 PM" [ref=e317] [cursor=pointer]:
+              - generic [ref=e318]:
+                - img [ref=e319]
+                - generic [ref=e322]:
+                  - text: completed
+                  - generic [ref=e323]: 50 pages
+              - generic [ref=e324]:
+                - generic [ref=e325]: 3/31/2026, 4:34:49 PM
+                - img [ref=e326]
+            - button "completed1 pages 3/31/2026, 4:33:18 PM" [ref=e329] [cursor=pointer]:
+              - generic [ref=e330]:
+                - img [ref=e331]
+                - generic [ref=e334]:
+                  - text: completed
+                  - generic [ref=e335]: 1 pages
+              - generic [ref=e336]:
+                - generic [ref=e337]: 3/31/2026, 4:33:18 PM
+                - img [ref=e338]
+            - button "completed1 pages 3/31/2026, 4:30:54 PM" [ref=e341] [cursor=pointer]:
+              - generic [ref=e342]:
+                - img [ref=e343]
+                - generic [ref=e346]:
+                  - text: completed
+                  - generic [ref=e347]: 1 pages
+              - generic [ref=e348]:
+                - generic [ref=e349]: 3/31/2026, 4:30:54 PM
+                - img [ref=e350]
+            - button "completed1 pages 3/31/2026, 4:28:02 PM" [ref=e353] [cursor=pointer]:
+              - generic [ref=e354]:
+                - img [ref=e355]
+                - generic [ref=e358]:
+                  - text: completed
+                  - generic [ref=e359]: 1 pages
+              - generic [ref=e360]:
+                - generic [ref=e361]: 3/31/2026, 4:28:02 PM
+                - img [ref=e362]
+            - button "completed1 pages 3/31/2026, 4:25:02 PM" [ref=e365] [cursor=pointer]:
+              - generic [ref=e366]:
+                - img [ref=e367]
+                - generic [ref=e370]:
+                  - text: completed
+                  - generic [ref=e371]: 1 pages
+              - generic [ref=e372]:
+                - generic [ref=e373]: 3/31/2026, 4:25:02 PM
+                - img [ref=e374]
+            - button "completed1 pages 3/31/2026, 4:08:45 PM" [ref=e377] [cursor=pointer]:
+              - generic [ref=e378]:
+                - img [ref=e379]
+                - generic [ref=e382]:
+                  - text: completed
+                  - generic [ref=e383]: 1 pages
+              - generic [ref=e384]:
+                - generic [ref=e385]: 3/31/2026, 4:08:45 PM
+                - img [ref=e386]
+            - button "completed1 pages 3/31/2026, 3:55:54 PM" [ref=e389] [cursor=pointer]:
+              - generic [ref=e390]:
+                - img [ref=e391]
+                - generic [ref=e394]:
+                  - text: completed
+                  - generic [ref=e395]: 1 pages
+              - generic [ref=e396]:
+                - generic [ref=e397]: 3/31/2026, 3:55:54 PM
+                - img [ref=e398]
+            - button "completed0 pages· 1 failed 3/31/2026, 3:24:07 PM" [ref=e401] [cursor=pointer]:
+              - generic [ref=e402]:
+                - img [ref=e403]
+                - generic [ref=e406]:
+                  - text: completed
+                  - generic [ref=e407]:
+                    - text: 0 pages
+                    - generic [ref=e408]: · 1 failed
+              - generic [ref=e409]:
+                - generic [ref=e410]: 3/31/2026, 3:24:07 PM
+                - img [ref=e411]
+            - button "completed2 pages · 3 chunks 3/28/2026, 3:19:23 PM" [ref=e414] [cursor=pointer]:
+              - generic [ref=e415]:
+                - img [ref=e416]
+                - generic [ref=e419]:
+                  - text: completed
+                  - generic [ref=e420]: 2 pages · 3 chunks
+              - generic [ref=e421]:
+                - generic [ref=e422]: 3/28/2026, 3:19:23 PM
+                - img [ref=e423]
+            - button "completed0 pages· 1 failed 3/28/2026, 3:15:47 PM" [ref=e426] [cursor=pointer]:
+              - generic [ref=e427]:
+                - img [ref=e428]
+                - generic [ref=e431]:
+                  - text: completed
+                  - generic [ref=e432]:
+                    - text: 0 pages
+                    - generic [ref=e433]: · 1 failed
+              - generic [ref=e434]:
+                - generic [ref=e435]: 3/28/2026, 3:15:47 PM
+                - img [ref=e436]
+            - button "completed2 pages · 3 chunks 3/28/2026, 3:08:45 PM" [ref=e439] [cursor=pointer]:
+              - generic [ref=e440]:
+                - img [ref=e441]
+                - generic [ref=e444]:
+                  - text: completed
+                  - generic [ref=e445]: 2 pages · 3 chunks
+              - generic [ref=e446]:
+                - generic [ref=e447]: 3/28/2026, 3:08:45 PM
+                - img [ref=e448]
+            - button "completed1 pages · 1 chunks 3/28/2026, 3:07:59 PM" [ref=e451] [cursor=pointer]:
+              - generic [ref=e452]:
+                - img [ref=e453]
+                - generic [ref=e456]:
+                  - text: completed
+                  - generic [ref=e457]: 1 pages · 1 chunks
+              - generic [ref=e458]:
+                - generic [ref=e459]: 3/28/2026, 3:07:59 PM
+                - img [ref=e460]
+            - button "completed0 pages· 1 failed 3/28/2026, 3:03:47 PM" [ref=e463] [cursor=pointer]:
+              - generic [ref=e464]:
+                - img [ref=e465]
+                - generic [ref=e468]:
+                  - text: completed
+                  - generic [ref=e469]:
+                    - text: 0 pages
+                    - generic [ref=e470]: · 1 failed
+              - generic [ref=e471]:
+                - generic [ref=e472]: 3/28/2026, 3:03:47 PM
+                - img [ref=e473]
+            - button "completed0 pages· 1 failed 3/28/2026, 3:03:39 PM" [ref=e476] [cursor=pointer]:
+              - generic [ref=e477]:
+                - img [ref=e478]
+                - generic [ref=e481]:
+                  - text: completed
+                  - generic [ref=e482]:
+                    - text: 0 pages
+                    - generic [ref=e483]: · 1 failed
+              - generic [ref=e484]:
+                - generic [ref=e485]: 3/28/2026, 3:03:39 PM
+                - img [ref=e486]
+            - button "completed1 pages 3/28/2026, 3:01:08 PM" [ref=e489] [cursor=pointer]:
+              - generic [ref=e490]:
+                - img [ref=e491]
+                - generic [ref=e494]:
+                  - text: completed
+                  - generic [ref=e495]: 1 pages
+              - generic [ref=e496]:
+                - generic [ref=e497]: 3/28/2026, 3:01:08 PM
+                - img [ref=e498]
+            - button "completed1 pages · 1 chunks 3/28/2026, 2:45:56 PM" [ref=e501] [cursor=pointer]:
+              - generic [ref=e502]:
+                - img [ref=e503]
+                - generic [ref=e506]:
+                  - text: completed
+                  - generic [ref=e507]: 1 pages · 1 chunks
+              - generic [ref=e508]:
+                - generic [ref=e509]: 3/28/2026, 2:45:56 PM
+                - img [ref=e510]
+            - button "failed1 pages · 1 chunks 3/28/2026, 2:42:41 PM" [ref=e513] [cursor=pointer]:
+              - generic [ref=e514]:
+                - img [ref=e515]
+                - generic [ref=e519]:
+                  - text: failed
+                  - generic [ref=e520]: 1 pages · 1 chunks
+              - generic [ref=e521]:
+                - generic [ref=e522]: 3/28/2026, 2:42:41 PM
+                - img [ref=e523]
+            - button "completed0 pages· 1 failed 3/28/2026, 2:40:43 PM" [ref=e526] [cursor=pointer]:
+              - generic [ref=e527]:
+                - img [ref=e528]
+                - generic [ref=e531]:
+                  - text: completed
+                  - generic [ref=e532]:
+                    - text: 0 pages
+                    - generic [ref=e533]: · 1 failed
+              - generic [ref=e534]:
+                - generic [ref=e535]: 3/28/2026, 2:40:43 PM
+                - img [ref=e536]
+            - button "failed2 pages · 3 chunks 3/28/2026, 2:35:13 PM" [ref=e539] [cursor=pointer]:
+              - generic [ref=e540]:
+                - img [ref=e541]
+                - generic [ref=e545]:
+                  - text: failed
+                  - generic [ref=e546]: 2 pages · 3 chunks
+              - generic [ref=e547]:
+                - generic [ref=e548]: 3/28/2026, 2:35:13 PM
+                - img [ref=e549]
+            - button "failed2 pages 3/28/2026, 2:29:18 PM" [ref=e552] [cursor=pointer]:
+              - generic [ref=e553]:
+                - img [ref=e554]
+                - generic [ref=e558]:
+                  - text: failed
+                  - generic [ref=e559]: 2 pages
+              - generic [ref=e560]:
+                - generic [ref=e561]: 3/28/2026, 2:29:18 PM
+                - img [ref=e562]
+            - button "failed2 pages 3/28/2026, 2:25:29 PM" [ref=e565] [cursor=pointer]:
+              - generic [ref=e566]:
+                - img [ref=e567]
+                - generic [ref=e571]:
+                  - text: failed
+                  - generic [ref=e572]: 2 pages
+              - generic [ref=e573]:
+                - generic [ref=e574]: 3/28/2026, 2:25:29 PM
+                - img [ref=e575]
+            - button "failed0 pages 3/28/2026, 2:03:52 PM" [ref=e578] [cursor=pointer]:
+              - generic [ref=e579]:
+                - img [ref=e580]
+                - generic [ref=e584]:
+                  - text: failed
+                  - generic [ref=e585]: 0 pages
+              - generic [ref=e586]:
+                - generic [ref=e587]: 3/28/2026, 2:03:52 PM
+                - img [ref=e588]
+            - button "failed1 pages 3/28/2026, 11:03:39 AM" [ref=e591] [cursor=pointer]:
+              - generic [ref=e592]:
+                - img [ref=e593]
+                - generic [ref=e597]:
+                  - text: failed
+                  - generic [ref=e598]: 1 pages
+              - generic [ref=e599]:
+                - generic [ref=e600]: 3/28/2026, 11:03:39 AM
+                - img [ref=e601]
+            - button "failed0 pages 3/28/2026, 10:59:44 AM" [ref=e604] [cursor=pointer]:
+              - generic [ref=e605]:
+                - img [ref=e606]
+                - generic [ref=e610]:
+                  - text: failed
+                  - generic [ref=e611]: 0 pages
+              - generic [ref=e612]:
+                - generic [ref=e613]: 3/28/2026, 10:59:44 AM
+                - img [ref=e614]
+  - status [ref=e695]: Crawl enabled

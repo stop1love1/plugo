@@ -514,7 +514,6 @@ async def _run_crawl_with_tracking(
                 })
                 await repos.sites.update(site_id, {"crawl_status": "running"})
                 _active_crawlers.pop(site_id, None)
-                await repos.close()
                 current_job_id = next_job["id"]
                 # Don't force recrawl on subsequent rounds
                 force_recrawl = False

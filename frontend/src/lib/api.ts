@@ -30,6 +30,7 @@ export type Site = {
   allowed_domains: string;
   system_prompt: string;
   bot_rules: string;
+  response_language: string; // "auto" | "vi" | "en"
   suggestions: string[];
   is_approved: boolean;
   crawl_enabled: boolean;
@@ -65,6 +66,7 @@ export type Provider = {
   models: ProviderModel[];
   requires_key: boolean;
   has_key: boolean;
+  key_status?: "working" | "invalid" | "missing" | "local";
 };
 
 export type KnowledgeChunk = {
@@ -294,6 +296,8 @@ export const updateCrawlSettings = (siteId: string, data: { max_pages?: number; 
   api.put(`/crawl/settings/${siteId}`, data).then((r) => r.data);
 
 // Knowledge
+export const clearAllKnowledge = (siteId: string) =>
+  api.delete<{ message: string; knowledge_count: number }>(`/crawl/knowledge/${siteId}`).then((r) => r.data);
 export const getKnowledge = (siteId: string, page = 1, search?: string) => {
   let url = `/knowledge?site_id=${siteId}&page=${page}`;
   if (search) url += `&search=${encodeURIComponent(search)}`;

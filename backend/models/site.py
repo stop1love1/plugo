@@ -32,6 +32,7 @@ class Site(Base):
     # AI behavior rules
     system_prompt = Column(Text, default="")         # Custom system prompt for the bot
     bot_rules = Column(Text, default="")             # Rules/constraints for the bot (newline-separated)
+    response_language = Column(String(10), default="auto")  # "auto" | "vi" | "en" — language for bot responses
 
     # Default suggestions for the widget
     suggestions = Column(JSON, default=list)

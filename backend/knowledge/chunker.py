@@ -56,13 +56,17 @@ class SemanticChunker:
 
         return chunks
 
+    # Structural tags that must never be decomposed by the class-name filter
+    _PROTECTED_TAGS = frozenset({"html", "body", "main", "article", "section"})
+
     def _extract_sections(self, soup: BeautifulSoup) -> list[dict]:
         """Walk the DOM and extract text grouped by heading structure."""
         # Remove unwanted elements
         for tag in soup.find_all(["nav", "footer", "header", "script", "style", "aside"]):
             tag.decompose()
         for el in soup.find_all(class_=re.compile(r"(nav|footer|sidebar|ad|menu|cookie)", re.I)):
-            el.decompose()
+            if el.name not in self._PROTECTED_TAGS:
+                el.decompose()
 
         main = soup.find("main") or soup.find("article") or soup.find("body")
         if not main:
@@ -76,7 +80,7 @@ class SemanticChunker:
 
         for element in main.descendants:
             if isinstance(element, Tag):
-                # Check if it's a heading
+                # Check if it's a heading — output as markdown heading
                 if element.name in ("h1", "h2", "h3", "h4", "h5", "h6"):
                     # Save current section
                     text = "\n\n".join(current_text_parts).strip()
@@ -98,13 +102,16 @@ class SemanticChunker:
 
                     current_header = heading_text
                     current_path = " > ".join(h[1] for h in header_stack)
+                    # Add markdown heading to content
+                    md_heading = "#" * level + " " + heading_text
+                    current_text_parts.append(md_heading)
 
             elif isinstance(element, str):
                 pass
             else:
                 continue
 
-            # Extract text from leaf elements
+            # Extract text from leaf elements in markdown format
             if isinstance(element, Tag) and element.name in (
                 "p", "li", "td", "th", "dt", "dd", "blockquote",
                 "pre", "code", "span", "div",
@@ -120,6 +127,13 @@ class SemanticChunker:
                 if not has_block_child:
                     text = element.get_text(strip=True)
                     if text and len(text) > 10:
+                        # Format as markdown based on element type
+                        if element.name == "li":
+                            text = f"- {text}"
+                        elif element.name == "blockquote":
+                            text = f"> {text}"
+                        elif element.name in ("pre", "code"):
+                            text = f"```\n{text}\n```"
                         current_text_parts.append(text)
 
         # Don't forget the last section

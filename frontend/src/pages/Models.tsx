@@ -18,12 +18,21 @@ export default function Models() {
   const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState(false);
   const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
+  const [providerSelection, setProviderSelection] = useState("");
+  const [customProviderName, setCustomProviderName] = useState("");
   const [newModel, setNewModel] = useState<CustomModel>({
     provider: "",
     model_id: "",
     model_name: "",
     description: "",
   });
+
+  const resetAddForm = () => {
+    setShowAddForm(false);
+    setProviderSelection("");
+    setCustomProviderName("");
+    setNewModel({ provider: "", model_id: "", model_name: "", description: "" });
+  };
 
   const { data: providers = [] } = useQuery({
     queryKey: ["models-providers"],
@@ -41,8 +50,7 @@ export default function Models() {
       queryClient.invalidateQueries({ queryKey: ["models-providers"] });
       queryClient.invalidateQueries({ queryKey: ["custom-models"] });
       queryClient.invalidateQueries({ queryKey: ["providers"] });
-      setShowAddForm(false);
-      setNewModel({ provider: "", model_id: "", model_name: "", description: "" });
+      resetAddForm();
       toast.success(t("models.modelAdded"));
     },
     onError: (err: any) => {
@@ -64,8 +72,9 @@ export default function Models() {
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newModel.provider || !newModel.model_id || !newModel.model_name) return;
-    addMutation.mutate(newModel);
+    const provider = providerSelection === "__custom__" ? customProviderName.trim() : providerSelection;
+    if (!provider || !newModel.model_id || !newModel.model_name) return;
+    addMutation.mutate({ ...newModel, provider });
   };
 
   const toggleProvider = (id: string) => {
@@ -75,15 +84,48 @@ export default function Models() {
   const isCustomModel = (provider: string, modelId: string) =>
     customModels.some((cm) => cm.provider === provider && cm.model_id === modelId);
 
+  const getProviderBadge = (provider: Provider) => {
+    if (!provider.requires_key) {
+      return {
+        label: t("models.localProvider"),
+        className: "bg-blue-50 text-blue-700",
+      };
+    }
+
+    switch (provider.key_status) {
+      case "working":
+        return {
+          label: t("models.keyWorking"),
+          className: "bg-green-50 text-green-700",
+        };
+      case "invalid":
+        return {
+          label: t("models.keyInvalid"),
+          className: "bg-red-50 text-red-700",
+        };
+      default:
+        return {
+          label: t("models.keyMissing"),
+          className: "bg-gray-100 text-gray-500",
+        };
+    }
+  };
+
   return (
-    <div className="max-w-4xl">
+    <div className="w-full">
       <div className="flex items-center justify-between mb-2">
         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
           <Cpu className="w-6 h-6 text-primary-600" />
           {t("models.title")}
         </h1>
         <button
-          onClick={() => setShowAddForm(!showAddForm)}
+          onClick={() => {
+            if (showAddForm) {
+              resetAddForm();
+              return;
+            }
+            setShowAddForm(true);
+          }}
           className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 text-sm font-medium"
         >
           {showAddForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
@@ -104,8 +146,13 @@ export default function Models() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t("models.provider")}</label>
                 <select
-                  value={newModel.provider}
-                  onChange={(e) => setNewModel({ ...newModel, provider: e.target.value })}
+                  value={providerSelection}
+                  onChange={(e) => {
+                    setProviderSelection(e.target.value);
+                    if (e.target.value !== "__custom__") {
+                      setCustomProviderName("");
+                    }
+                  }}
                   className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="">{t("models.selectProvider")}</option>
@@ -115,12 +162,12 @@ export default function Models() {
                   <option value="__custom__">{t("models.otherProvider")}</option>
                 </select>
               </div>
-              {newModel.provider === "__custom__" && (
+              {providerSelection === "__custom__" && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("models.providerName")}</label>
                   <input
-                    value=""
-                    onChange={(e) => setNewModel({ ...newModel, provider: e.target.value })}
+                    value={customProviderName}
+                    onChange={(e) => setCustomProviderName(e.target.value)}
                     placeholder="my-provider"
                     className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
                   />
@@ -158,7 +205,12 @@ export default function Models() {
             </div>
             <button
               type="submit"
-              disabled={!newModel.provider || newModel.provider === "__custom__" || !newModel.model_id || !newModel.model_name || addMutation.isPending}
+              disabled={
+                !(providerSelection === "__custom__" ? customProviderName.trim() : providerSelection) ||
+                !newModel.model_id ||
+                !newModel.model_name ||
+                addMutation.isPending
+              }
               className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50 text-sm font-medium"
             >
               {addMutation.isPending ? t("common.loading") : t("models.addModel")}
@@ -180,8 +232,11 @@ export default function Models() {
         </div>
 
         <div className="divide-y divide-gray-100">
-          {providers.map((provider) => (
-            <div key={provider.id}>
+          {providers.map((provider) => {
+            const badge = getProviderBadge(provider);
+
+            return (
+              <div key={provider.id}>
               {/* Provider header */}
               <button
                 onClick={() => toggleProvider(provider.id)}
@@ -197,13 +252,11 @@ export default function Models() {
                   <span className="text-xs text-gray-400">{provider.models.length} models</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  {provider.requires_key && (
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${provider.has_key ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                      {provider.has_key ? "API Key configured" : "No API Key"}
-                    </span>
-                  )}
-                  {!provider.requires_key && (
-                    <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">Local</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${badge.className}`}>
+                    {badge.label}
+                  </span>
+                  {provider.requires_key && provider.has_key && provider.key_status === "invalid" && (
+                    <span className="text-xs text-red-500">{t("models.keySavedButInvalid")}</span>
                   )}
                 </div>
               </button>
@@ -242,8 +295,9 @@ export default function Models() {
                   </div>
                 </div>
               )}
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
 
         {providers.length === 0 && (

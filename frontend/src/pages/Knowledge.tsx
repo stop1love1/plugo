@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { getKnowledge, getChunk, updateChunk, deleteChunk, addManualChunk, uploadFile, bulkDeleteChunks, type KnowledgeChunk } from "../lib/api";
-import { Trash2, Plus, Upload, FileText, Search, Pencil, X, ExternalLink, Download } from "lucide-react";
+import { getKnowledge, getChunk, updateChunk, deleteChunk, addManualChunk, uploadFile, bulkDeleteChunks, getCrawlSiteStatus, getSiteCrawlJobs, clearAllKnowledge, type KnowledgeChunk } from "../lib/api";
+import { Trash2, Plus, Upload, FileText, Search, Pencil, X, ExternalLink, Download, RefreshCw, Link as LinkIcon, AlertTriangle } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { EmptyState } from "../components/EmptyState";
 import { useLocale } from "../lib/useLocale";
@@ -19,9 +19,12 @@ export default function Knowledge() {
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [showClearAll, setShowClearAll] = useState(false);
 
-  // Preview/expand state
+  // Preview/expand state (list API truncates content >200 chars; fetch full on expand)
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedFetchedContent, setExpandedFetchedContent] = useState<string | null>(null);
+  const [loadingExpandId, setLoadingExpandId] = useState<string | null>(null);
 
   // Edit state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -29,10 +32,36 @@ export default function Knowledge() {
   const [editContent, setEditContent] = useState("");
   const [loadingChunk, setLoadingChunk] = useState(false);
 
+  function closeEditModal() {
+    setEditingId(null);
+    setEditTitle("");
+    setEditContent("");
+  }
+
+  // Crawl status for progress bar
+  const { data: crawlStatus } = useQuery({
+    queryKey: ["crawl-status-knowledge", siteId],
+    queryFn: () => getCrawlSiteStatus(siteId!),
+    enabled: !!siteId,
+    refetchInterval: (query) => {
+      const s = query.state.data;
+      return s?.is_running || s?.is_paused ? 2000 : false;
+    },
+  });
+  const { data: crawlJobs } = useQuery({
+    queryKey: ["crawl-jobs-knowledge", siteId],
+    queryFn: () => getSiteCrawlJobs(siteId!),
+    enabled: !!siteId && (crawlStatus?.is_running || crawlStatus?.is_paused || false),
+    refetchInterval: 3000,
+  });
+  const activeJob = crawlJobs?.find((j) => j.status === "running" || j.status === "paused");
+  const isCrawling = crawlStatus?.is_running || false;
+
   const { data, isLoading } = useQuery({
     queryKey: ["knowledge", siteId, page, search],
     queryFn: () => getKnowledge(siteId!, page, search || undefined),
     enabled: !!siteId,
+    refetchInterval: isCrawling ? 5000 : false,
   });
 
   const deleteMutation = useMutation({
@@ -66,12 +95,23 @@ export default function Knowledge() {
     onError: () => toast.error("Failed to add knowledge"),
   });
 
+  const clearAllMutation = useMutation({
+    mutationFn: () => clearAllKnowledge(siteId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["knowledge", siteId] });
+      queryClient.invalidateQueries({ queryKey: ["crawl-status-knowledge", siteId] });
+      setShowClearAll(false);
+      toast.success(t("knowledge.allCleared"));
+    },
+    onError: () => toast.error("Failed to clear knowledge"),
+  });
+
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: { title?: string; content?: string } }) =>
       updateChunk(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["knowledge", siteId] });
-      setEditingId(null);
+      closeEditModal();
       toast.success(t("knowledge.updateSuccess"));
     },
     onError: () => toast.error(t("knowledge.updateFailed")),
@@ -103,8 +143,10 @@ export default function Knowledge() {
 
   const handleAddManual = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !content || !siteId) return;
-    addMutation.mutate({ site_id: siteId, title, content });
+    if (!content || !siteId) return;
+    // Auto-generate title from first line of content if not provided
+    const autoTitle = title.trim() || content.trim().split("\n")[0].slice(0, 100) || "Manual entry";
+    addMutation.mutate({ site_id: siteId, title: autoTitle, content });
   };
 
   const startEdit = async (chunkId: string) => {
@@ -124,6 +166,31 @@ export default function Knowledge() {
     e.preventDefault();
     if (!editingId || !editTitle || !editContent) return;
     updateMutation.mutate({ id: editingId, data: { title: editTitle, content: editContent } });
+  };
+
+  /** List API returns first 200 chars + "..." when content length > 200. */
+  const isApiTruncatedListContent = (content: string) => content.endsWith("...") && content.length >= 203;
+
+  const handleReadMore = async (chunk: KnowledgeChunk) => {
+    if (isApiTruncatedListContent(chunk.content)) {
+      setLoadingExpandId(chunk.id);
+      try {
+        const full = await getChunk(chunk.id);
+        setExpandedId(chunk.id);
+        setExpandedFetchedContent(full.content ?? "");
+      } catch {
+        toast.error(t("knowledge.loadChunkFailed"));
+      }
+      setLoadingExpandId(null);
+    } else {
+      setExpandedId(chunk.id);
+      setExpandedFetchedContent(null);
+    }
+  };
+
+  const handleShowLess = () => {
+    setExpandedId(null);
+    setExpandedFetchedContent(null);
   };
 
   const exportAllJson = () => {
@@ -177,7 +244,46 @@ export default function Knowledge() {
         >
           <Plus className="w-4 h-4" /> {t("knowledge.addManual")}
         </button>
+        <button
+          onClick={() => setShowClearAll(true)}
+          disabled={!data?.total}
+          className="flex items-center gap-2 bg-white border border-red-300 text-red-600 px-4 py-2 rounded-lg hover:bg-red-50 disabled:opacity-50"
+        >
+          <Trash2 className="w-4 h-4" /> {t("knowledge.clearAll")}
+        </button>
       </PageHeader>
+
+      {/* Crawl progress bar */}
+      {isCrawling && activeJob && (
+        <div className="mb-4 p-4 bg-blue-50 rounded-xl border border-blue-100">
+          <div className="flex items-center gap-2 mb-2">
+            <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />
+            <span className="text-sm font-medium text-blue-800">
+              {t("knowledge.crawlInProgress")}
+            </span>
+            <span className="text-xs text-blue-500 ml-auto">
+              {activeJob.pages_done}/{crawlStatus?.crawl_max_pages || 50} {t("setup.pages")}
+              {activeJob.chunks_created > 0 && ` · ${activeJob.chunks_created} chunks`}
+            </span>
+          </div>
+          {/* Progress bar */}
+          <div className="w-full bg-blue-200 rounded-full h-2 mb-2">
+            <div
+              className="bg-blue-500 h-2 rounded-full transition-all duration-500"
+              style={{ width: `${Math.min(100, ((activeJob.pages_done || 0) / (crawlStatus?.crawl_max_pages || 50)) * 100)}%` }}
+            />
+          </div>
+          {/* Current URL */}
+          {crawlStatus?.current_url && (
+            <div className="flex items-center gap-1.5">
+              <LinkIcon className="w-3 h-3 text-blue-400 shrink-0" />
+              <span className="text-xs text-blue-600 truncate" title={crawlStatus.current_url}>
+                {crawlStatus.current_url}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Search bar */}
       <div className="relative mb-4">
@@ -234,64 +340,140 @@ export default function Knowledge() {
         </div>
       )}
 
+      {/* Add Manual Modal */}
       {showAdd && (
-        <form onSubmit={handleAddManual} className="bg-white p-6 rounded-xl border border-gray-200 mb-6">
-          <h3 className="font-semibold mb-4">{t("knowledge.addManual")}</h3>
-          <div className="space-y-4">
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Title"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
-            />
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Content..."
-              rows={5}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
-            />
-            <div className="flex gap-3">
-              <button type="submit" disabled={addMutation.isPending} className="bg-primary-600 text-white px-4 py-2 rounded-lg">
-                {addMutation.isPending ? t("common.loading") : t("common.save")}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <div className="fixed inset-0 bg-black/40" onClick={() => setShowAdd(false)} />
+          <form onSubmit={handleAddManual} className="relative bg-white rounded-xl shadow-xl w-full max-w-lg p-6 z-10">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-lg">{t("knowledge.addManual")}</h3>
+              <button type="button" onClick={() => setShowAdd(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
               </button>
-              <button type="button" onClick={() => setShowAdd(false)} className="text-gray-500 px-4 py-2">{t("common.cancel")}</button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t("knowledge.chunkTitle")} <span className="text-gray-400 font-normal">({t("common.optional")})</span>
+                </label>
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder={t("knowledge.titlePlaceholder")}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <p className="text-xs text-gray-400 mt-1">{t("knowledge.titleAutoHint")}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t("knowledge.content")} <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder={t("knowledge.contentPlaceholder")}
+                  rows={8}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setShowAdd(false)} className="text-gray-500 px-4 py-2 hover:bg-gray-100 rounded-lg">
+                  {t("common.cancel")}
+                </button>
+                <button type="submit" disabled={addMutation.isPending || !content.trim()} className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50">
+                  {addMutation.isPending ? t("common.loading") : t("common.save")}
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Clear All Confirmation Modal */}
+      {showClearAll && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <div className="fixed inset-0 bg-black/40" onClick={() => setShowClearAll(false)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-sm p-6 z-10">
+            <div className="flex items-center gap-3 mb-4">
+              <AlertTriangle className="w-6 h-6 text-red-500" />
+              <h3 className="font-semibold text-lg">{t("knowledge.clearAll")}</h3>
+            </div>
+            <p className="text-sm text-gray-600 mb-6">{t("knowledge.clearAllConfirm")}</p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setShowClearAll(false)} className="text-gray-500 px-4 py-2 hover:bg-gray-100 rounded-lg">
+                {t("common.cancel")}
+              </button>
+              <button
+                onClick={() => clearAllMutation.mutate()}
+                disabled={clearAllMutation.isPending}
+                className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {clearAllMutation.isPending ? t("common.loading") : t("knowledge.confirmClear")}
+              </button>
             </div>
           </div>
-        </form>
+        </div>
       )}
 
       {/* Edit modal */}
       {editingId && (
-        <form onSubmit={handleEditSave} className="bg-white p-6 rounded-xl border-2 border-primary-300 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold">{t("knowledge.editChunk")}</h3>
-            <button type="button" onClick={() => setEditingId(null)} className="text-gray-400 hover:text-gray-600">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="space-y-4">
-            <input
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-              placeholder="Title"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
-            />
-            <textarea
-              value={editContent}
-              onChange={(e) => setEditContent(e.target.value)}
-              placeholder="Content..."
-              rows={8}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
-            />
-            <div className="flex gap-3">
-              <button type="submit" disabled={updateMutation.isPending} className="bg-primary-600 text-white px-4 py-2 rounded-lg">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="knowledge-edit-title">
+          <div
+            className="fixed inset-0 bg-black/40"
+            onClick={() => {
+              if (!updateMutation.isPending) closeEditModal();
+            }}
+          />
+          <form
+            onSubmit={handleEditSave}
+            className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col p-6 z-10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4 shrink-0">
+              <h3 id="knowledge-edit-title" className="font-semibold text-gray-900">
+                {t("knowledge.editChunk")}
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!updateMutation.isPending) closeEditModal();
+                }}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100"
+                aria-label={t("common.cancel")}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4 overflow-y-auto min-h-0 flex-1">
+              <input
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                placeholder="Title"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                placeholder="Content..."
+                rows={10}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500 min-h-[200px]"
+              />
+            </div>
+            <div className="flex gap-3 mt-4 pt-4 border-t border-gray-100 shrink-0">
+              <button type="submit" disabled={updateMutation.isPending} className="bg-primary-600 text-white px-4 py-2 rounded-lg disabled:opacity-50">
                 {updateMutation.isPending ? t("common.loading") : t("common.save")}
               </button>
-              <button type="button" onClick={() => setEditingId(null)} className="text-gray-500 px-4 py-2">{t("common.cancel")}</button>
+              <button
+                type="button"
+                disabled={updateMutation.isPending}
+                onClick={closeEditModal}
+                className="text-gray-600 px-4 py-2 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                {t("common.cancel")}
+              </button>
             </div>
-          </div>
-        </form>
+          </form>
+        </div>
       )}
 
       {isLoading ? (
@@ -301,7 +483,7 @@ export default function Knowledge() {
       ) : (
         <div className="space-y-3">
           {data.chunks.map((chunk: KnowledgeChunk) => (
-            <div key={chunk.id} className={`bg-white p-4 rounded-xl border ${editingId === chunk.id ? "border-primary-300" : "border-gray-200"}`}>
+            <div key={chunk.id} className="bg-white p-4 rounded-xl border border-gray-200">
               <div className="flex items-start gap-3">
                 <input
                   type="checkbox"
@@ -313,34 +495,46 @@ export default function Knowledge() {
                   <h4 className="font-medium text-gray-900 truncate">{chunk.title || "Untitled"}</h4>
                   {expandedId === chunk.id ? (
                     <div className="mt-1">
-                      <p className="text-sm text-gray-500 whitespace-pre-wrap">{chunk.content}</p>
+                      <p className="text-sm text-gray-500 whitespace-pre-wrap break-words">
+                        {expandedFetchedContent ?? chunk.content}
+                      </p>
                       <button
-                        onClick={() => setExpandedId(null)}
+                        type="button"
+                        onClick={handleShowLess}
                         className="text-xs text-primary-600 hover:text-primary-700 mt-1"
                       >
-                        Show less
+                        {t("knowledge.showLess")}
                       </button>
                     </div>
                   ) : (
-                    <div className="mt-1">
-                      <p className="text-sm text-gray-500 line-clamp-2">{chunk.content}</p>
-                      {chunk.content && chunk.content.length > 150 && (
-                        <button
-                          onClick={() => setExpandedId(chunk.id)}
-                          className="text-xs text-primary-600 hover:text-primary-700 mt-1"
-                        >
-                          Read more
-                        </button>
-                      )}
+                    <div className="mt-1 relative z-0">
+                      <p className="text-sm text-gray-500 line-clamp-2 break-words">{chunk.content}</p>
+                      {chunk.content &&
+                        (chunk.content.length > 150 || isApiTruncatedListContent(chunk.content)) && (
+                          <button
+                            type="button"
+                            onClick={() => handleReadMore(chunk)}
+                            disabled={loadingExpandId === chunk.id}
+                            className="text-xs text-primary-600 hover:text-primary-700 mt-1 disabled:opacity-50"
+                          >
+                            {loadingExpandId === chunk.id ? t("common.loading") : t("knowledge.viewFull")}
+                          </button>
+                        )}
                     </div>
                   )}
-                  <div className="flex gap-3 mt-2 text-xs text-gray-400">
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100">{chunk.source_type}</span>
+                  <div className="mt-2 flex flex-wrap items-start gap-x-3 gap-y-1 text-xs text-gray-400">
+                    <span className="inline-flex shrink-0 items-center px-1.5 py-0.5 rounded bg-gray-100">
+                      {chunk.source_type}
+                    </span>
                     {chunk.source_url && (
-                      <a href={chunk.source_url} target="_blank" rel="noopener noreferrer"
-                        className="truncate max-w-xs hover:text-primary-600 inline-flex items-center gap-1">
-                        {chunk.source_url}
-                        <ExternalLink className="w-3 h-3" />
+                      <a
+                        href={chunk.source_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex min-w-0 flex-1 items-start gap-1.5 text-primary-600 hover:text-primary-700 break-all [overflow-wrap:anywhere]"
+                      >
+                        <ExternalLink className="w-3 h-3 shrink-0 mt-0.5 opacity-80" aria-hidden />
+                        <span>{chunk.source_url}</span>
                       </a>
                     )}
                   </div>

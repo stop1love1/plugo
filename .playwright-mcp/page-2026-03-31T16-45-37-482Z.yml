@@ -1,0 +1,758 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - link "Plugo Plugo" [ref=e6] [cursor=pointer]:
+      - /url: /
+      - img "Plugo" [ref=e185]
+      - text: Plugo
+    - navigation [ref=e7]:
+      - combobox [ref=e187]:
+        - option "Demo Site" [selected]
+      - link "Analytics" [ref=e10] [cursor=pointer]:
+        - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/analytics
+        - img [ref=e11]
+        - generic [ref=e13]: Analytics
+      - generic [ref=e14]:
+        - paragraph [ref=e15]: Content
+        - generic [ref=e16]:
+          - link "Crawl & Setup" [ref=e17] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/setup
+            - img [ref=e18]
+            - generic [ref=e23]: Crawl & Setup
+          - link "Knowledge" [ref=e24] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/knowledge
+            - img [ref=e25]
+            - generic [ref=e29]: Knowledge
+          - link "Crawled Pages" [ref=e30] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/crawled-pages
+            - img [ref=e31]
+            - generic [ref=e34]: Crawled Pages
+          - link "API Tools" [ref=e35] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/tools
+            - img [ref=e36]
+            - generic [ref=e38]: API Tools
+      - generic [ref=e39]:
+        - paragraph [ref=e40]: Deploy
+        - generic [ref=e41]:
+          - link "Embed Code" [ref=e42] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/embed
+            - img [ref=e43]
+            - generic [ref=e46]: Embed Code
+          - link "Playground" [ref=e47] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/playground
+            - img [ref=e48]
+            - generic [ref=e50]: Playground
+      - generic [ref=e51]:
+        - paragraph [ref=e52]: Monitor
+        - generic [ref=e53]:
+          - link "Chat Log" [ref=e54] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/chat-log
+            - img [ref=e55]
+            - generic [ref=e57]: Chat Log
+          - link "Visitors" [ref=e58] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/visitors
+            - img [ref=e59]
+            - generic [ref=e69]: Visitors
+      - link "Settings" [ref=e72] [cursor=pointer]:
+        - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/settings
+        - img [ref=e73]
+        - generic [ref=e76]: Settings
+      - generic [ref=e78]:
+        - link "Models" [ref=e79] [cursor=pointer]:
+          - /url: /models
+          - img [ref=e80]
+          - text: Models
+        - link "Audit Log" [ref=e83] [cursor=pointer]:
+          - /url: /audit
+          - img [ref=e84]
+          - text: Audit Log
+        - button "Notifications 14" [ref=e88] [cursor=pointer]:
+          - img [ref=e89]
+          - generic [ref=e92]: Notifications
+          - generic [ref=e93]: "14"
+        - button "English" [ref=e94] [cursor=pointer]:
+          - img [ref=e95]
+          - generic [ref=e98]: English
+        - button "Logout" [ref=e99] [cursor=pointer]:
+          - img [ref=e100]
+          - generic [ref=e103]: Logout
+    - generic [ref=e105]:
+      - img [ref=e107]
+      - generic [ref=e110]: plugo
+      - generic [ref=e111]: v1.0
+  - main [ref=e112]:
+    - generic [ref=e113]:
+      - heading "Crawl & Knowledge" [level=1] [ref=e114]
+      - paragraph [ref=e115]: Teach your bot by crawling your website content
+      - generic [ref=e116]:
+        - generic [ref=e117]:
+          - img [ref=e118]
+          - heading "Auto Crawl" [level=3] [ref=e121]
+        - generic [ref=e122]:
+          - generic [ref=e123]:
+            - img [ref=e188]
+            - generic [ref=e128]:
+              - paragraph [ref=e129]: "Crawl: ON"
+              - paragraph [ref=e130]: Bot is actively learning from your website
+          - button [ref=e131] [cursor=pointer]
+        - generic [ref=e190]:
+          - generic [ref=e191]: Auto re-crawl every
+          - generic [ref=e192]:
+            - combobox [ref=e193]:
+              - option "Disabled (manual only)"
+              - option "6h"
+              - option "12h"
+              - option "24h" [selected]
+              - option "48h"
+              - option "Weekly"
+            - generic [ref=e194]: Automatically re-crawl when interval expires
+        - generic [ref=e133]:
+          - generic [ref=e134]:
+            - generic [ref=e135]: "974"
+            - generic [ref=e136]: Chunks Learned
+          - generic [ref=e137]:
+            - img [ref=e195]
+            - generic [ref=e139]: Status
+          - generic [ref=e140]:
+            - generic [ref=e141]:
+              - text: "0"
+              - generic [ref=e200]: /50
+            - generic [ref=e142]: Pages Crawled
+          - generic [ref=e143]:
+            - generic [ref=e144]: 3/31/2026
+            - generic [ref=e145]: Last Crawled
+        - generic [ref=e201]:
+          - generic [ref=e557]:
+            - img [ref=e558]
+            - generic "https://edusoft.vn/product/tms/" [ref=e729]: "Crawling: https://edusoft.vn/product/tms/"
+          - generic [ref=e202]:
+            - generic [ref=e203]: Crawling...
+            - generic [ref=e204]: 0 / 50 pages
+          - generic [ref=e206]:
+            - generic [ref=e207]:
+              - img [ref=e208]
+              - text: "Elapsed: 422:15"
+            - generic [ref=e211]: "Speed: 0.0 pages/min"
+        - generic [ref=e562]:
+          - button "Crawl Log (70 entries)" [ref=e730] [cursor=pointer]:
+            - img [ref=e564]
+            - generic [ref=e566]: Crawl Log (70 entries)
+            - img [ref=e567]
+          - generic [ref=e569]:
+            - generic [ref=e571]:
+              - generic [ref=e572]: 11:43:22 PM
+              - generic [ref=e573]: OK
+              - generic "https://edusoft.vn/" [ref=e574]
+            - generic [ref=e576]:
+              - generic [ref=e577]: 11:43:22 PM
+              - generic [ref=e578]: OK
+              - generic "https://edusoft.vn/robots.txt" [ref=e579]
+            - generic [ref=e581]:
+              - generic [ref=e582]: 11:43:23 PM
+              - generic [ref=e583]: OK
+              - generic "https://edusoft.vn/sitemap.xml" [ref=e584]
+            - generic [ref=e586]:
+              - generic [ref=e587]: 11:43:24 PM
+              - generic [ref=e588]: OK
+              - generic "https://edusoft.vn/ Trang chủ" [ref=e589]: Trang chủ — https://edusoft.vn/
+              - generic [ref=e590]: 10 chunks
+            - generic [ref=e592]:
+              - generic [ref=e593]: 11:43:25 PM
+              - generic [ref=e594]: SKP
+              - generic "https://edusoft.vn/post-sitemap.xml" [ref=e595]
+              - generic [ref=e596]: "non-HTML content: text/xml"
+            - generic [ref=e598]:
+              - generic [ref=e599]: 11:43:26 PM
+              - generic [ref=e600]: SKP
+              - generic "https://edusoft.vn/page-sitemap.xml" [ref=e601]
+              - generic [ref=e602]: "non-HTML content: text/xml"
+            - generic [ref=e604]:
+              - generic [ref=e605]: 11:43:26 PM
+              - generic [ref=e606]: SKP
+              - generic "https://edusoft.vn/blocks-sitemap.xml" [ref=e607]
+              - generic [ref=e608]: "non-HTML content: text/xml"
+            - generic [ref=e610]:
+              - generic [ref=e611]: 11:43:27 PM
+              - generic [ref=e612]: SKP
+              - generic "https://edusoft.vn/docs-sitemap.xml" [ref=e613]
+              - generic [ref=e614]: "non-HTML content: text/xml"
+            - generic [ref=e616]:
+              - generic [ref=e617]: 11:43:27 PM
+              - generic [ref=e618]: SKP
+              - generic "https://edusoft.vn/featured_item-sitemap.xml" [ref=e619]
+              - generic [ref=e620]: "non-HTML content: text/xml"
+            - generic [ref=e622]:
+              - generic [ref=e623]: 11:43:27 PM
+              - generic [ref=e624]: SKP
+              - generic "https://edusoft.vn/category-sitemap.xml" [ref=e625]
+              - generic [ref=e626]: "non-HTML content: text/xml"
+            - generic [ref=e628]:
+              - generic [ref=e629]: 11:43:28 PM
+              - generic [ref=e630]: OK
+              - generic "https://edusoft.vn/support/uncategorized/ Lưu trữ Uncategorized -" [ref=e631]: Lưu trữ Uncategorized - — https://edusoft.vn/support/uncategorized/
+              - generic [ref=e632]: 1 chunks
+            - generic [ref=e634]:
+              - generic [ref=e635]: 11:43:30 PM
+              - generic [ref=e636]: OK
+              - generic "https://edusoft.vn/product/hms/ Quản Lý Nhân Sự - Edu Digital" [ref=e637]: Quản Lý Nhân Sự - Edu Digital — https://edusoft.vn/product/hms/
+              - generic [ref=e638]: 10 chunks
+            - generic [ref=e640]:
+              - generic [ref=e641]: 11:43:32 PM
+              - generic [ref=e642]: OK
+              - generic "https://edusoft.vn/product/admission/ Quản Lý Tuyển Sinh - Edu Digital" [ref=e643]: Quản Lý Tuyển Sinh - Edu Digital — https://edusoft.vn/product/admission/
+              - generic [ref=e644]: 10 chunks
+            - generic [ref=e646]:
+              - generic [ref=e647]: 11:43:34 PM
+              - generic [ref=e648]: OK
+              - generic "https://edusoft.vn/product/wms/ Quản Lý Công Việc - Edu Digital" [ref=e649]: Quản Lý Công Việc - Edu Digital — https://edusoft.vn/product/wms/
+              - generic [ref=e650]: 10 chunks
+            - generic [ref=e652]:
+              - generic [ref=e653]: 11:43:36 PM
+              - generic [ref=e654]: OK
+              - generic "https://edusoft.vn/product/learner/ Quản Lý Người Học - Edu Digital" [ref=e655]: Quản Lý Người Học - Edu Digital — https://edusoft.vn/product/learner/
+              - generic [ref=e656]: 9 chunks
+            - generic [ref=e658]:
+              - generic [ref=e659]: 11:43:37 PM
+              - generic [ref=e660]: OK
+              - generic "https://edusoft.vn/product/tms/ Quản Lý Đào Tạo - Edu Digital" [ref=e661]: Quản Lý Đào Tạo - Edu Digital — https://edusoft.vn/product/tms/
+              - generic [ref=e662]: 8 chunks
+            - generic [ref=e664]:
+              - generic [ref=e665]: 11:43:39 PM
+              - generic [ref=e666]: OK
+              - generic "https://edusoft.vn/product/fee/ Quản Lý Học Phí - Edu Digital" [ref=e667]: Quản Lý Học Phí - Edu Digital — https://edusoft.vn/product/fee/
+              - generic [ref=e668]: 10 chunks
+            - generic [ref=e670]:
+              - generic [ref=e671]: 11:43:41 PM
+              - generic [ref=e672]: OK
+              - generic "https://edusoft.vn/product/lms/ Quản Lý Học Tập - Edu Digital" [ref=e673]: Quản Lý Học Tập - Edu Digital — https://edusoft.vn/product/lms/
+              - generic [ref=e674]: 27 chunks
+            - generic [ref=e676]:
+              - generic [ref=e677]: 11:43:43 PM
+              - generic [ref=e678]: OK
+              - generic "https://edusoft.vn/product/asset/ Quản Lý Cơ Sở Vật Chất - Edu Digital" [ref=e679]: Quản Lý Cơ Sở Vật Chất - Edu Digital — https://edusoft.vn/product/asset/
+              - generic [ref=e680]: 9 chunks
+            - generic [ref=e682]:
+              - generic [ref=e683]: 11:43:45 PM
+              - generic [ref=e684]: OK
+              - generic "https://edusoft.vn/support/giai-phap/ Lưu trữ Giải pháp -" [ref=e685]: Lưu trữ Giải pháp - — https://edusoft.vn/support/giai-phap/
+              - generic [ref=e686]: 1 chunks
+            - generic [ref=e688]:
+              - generic [ref=e689]: 11:43:47 PM
+              - generic [ref=e690]: OK
+              - generic "https://edusoft.vn/giai-phap-giao-duc-dai-hoc/ Giải pháp Giáo dục Đại học -" [ref=e691]: Giải pháp Giáo dục Đại học - — https://edusoft.vn/giai-phap-giao-duc-dai-hoc/
+              - generic [ref=e692]: 19 chunks
+            - generic [ref=e694]:
+              - generic [ref=e695]: 11:43:49 PM
+              - generic [ref=e696]: OK
+              - generic "https://edusoft.vn/giai-phap-trung-tam-dao-tao-va-boi-duong-ngan-han/ Giải pháp Trung tâm đào tạo và bồi dưỡng ngắn hạn -" [ref=e697]: Giải pháp Trung tâm đào tạo và bồi dưỡng ngắn hạn - — https://edusoft.vn/giai-phap-trung-tam-dao-tao-va-boi-duong-ngan-han/
+              - generic [ref=e698]: 19 chunks
+            - generic [ref=e700]:
+              - generic [ref=e701]: 11:43:51 PM
+              - generic [ref=e702]: OK
+              - generic "https://edusoft.vn/giai-phap-giao-duc-nghe-nghiep/ Giải pháp Giáo dục Nghề nghiệp -" [ref=e703]: Giải pháp Giáo dục Nghề nghiệp - — https://edusoft.vn/giai-phap-giao-duc-nghe-nghiep/
+              - generic [ref=e704]: 19 chunks
+            - generic [ref=e706]:
+              - generic [ref=e707]: 11:43:53 PM
+              - generic [ref=e708]: OK
+              - generic "https://edusoft.vn/giai-phap-giao-duc-k12/ Giải pháp Giáo dục K12 -" [ref=e709]: Giải pháp Giáo dục K12 - — https://edusoft.vn/giai-phap-giao-duc-k12/
+              - generic [ref=e710]: 19 chunks
+            - generic [ref=e714]:
+              - generic [ref=e715]: 11:43:55 PM
+              - generic [ref=e716]: OK
+              - generic "https://edusoft.vn/giai-phap-trung-tam-ngoai-ngu-va-ky-nang/ Giải pháp Trung tâm ngoại ngữ và kỹ năng -" [ref=e717]: Giải pháp Trung tâm ngoại ngữ và kỹ năng - — https://edusoft.vn/giai-phap-trung-tam-ngoai-ngu-va-ky-nang/
+              - generic [ref=e718]: 19 chunks
+            - generic [ref=e720]:
+              - generic [ref=e721]: 11:43:55 PM
+              - generic [ref=e722]: SYS
+              - generic [ref=e723]: embedding batch of 200 chunks...
+            - generic [ref=e725]:
+              - generic [ref=e726]: 11:43:58 PM
+              - generic [ref=e727]: SYS
+              - generic [ref=e728]: stored batch of 200 chunks
+            - generic [ref=e732]:
+              - generic [ref=e733]: 11:44:00 PM
+              - generic [ref=e734]: OK
+              - generic "https://edusoft.vn/bai-viet/ Bài viết -" [ref=e735]: Bài viết - — https://edusoft.vn/bai-viet/
+              - generic [ref=e736]: 11 chunks
+            - generic [ref=e738]:
+              - generic [ref=e739]: 11:44:02 PM
+              - generic [ref=e740]: OK
+              - generic "https://edusoft.vn/chinh-sach/dieu-khoan-bao-mat-su-dung-terms-conditions/ Điều khoản Bảo mật & Sử dụng (Terms & Conditions) -" [ref=e741]: Điều khoản Bảo mật & Sử dụng (Terms & Conditions) - — https://edusoft.vn/chinh-sach/dieu-khoan-bao-mat-su-dung-terms-conditions/
+              - generic [ref=e742]: 5 chunks
+            - generic [ref=e744]:
+              - generic [ref=e745]: 11:44:04 PM
+              - generic [ref=e746]: OK
+              - generic "https://edusoft.vn/chinh-sach/chinh-sach-quyen-rieng-tu/ Chính sách quyền riêng tư -" [ref=e747]: Chính sách quyền riêng tư - — https://edusoft.vn/chinh-sach/chinh-sach-quyen-rieng-tu/
+              - generic [ref=e748]: 5 chunks
+            - generic [ref=e750]:
+              - generic [ref=e751]: 11:44:06 PM
+              - generic [ref=e752]: OK
+              - generic "https://edusoft.vn/k12/tong-quan-ve-quan-ly-hoc-tap-trong-giao-duc/ Tổng quan về quản lý học tập trong giáo dục -" [ref=e753]: Tổng quan về quản lý học tập trong giáo dục - — https://edusoft.vn/k12/tong-quan-ve-quan-ly-hoc-tap-trong-giao-duc/
+              - generic [ref=e754]: 19 chunks
+            - generic [ref=e756]:
+              - generic [ref=e757]: 11:44:08 PM
+              - generic [ref=e758]: OK
+              - generic "https://edusoft.vn/k12/chien-luoc-dao-tao-giao-vien-qua-quan-ly-hoc-tap-so/ Chiến lược đào tạo giáo viên qua quản lý học tập số -" [ref=e759]: Chiến lược đào tạo giáo viên qua quản lý học tập số - — https://edusoft.vn/k12/chien-luoc-dao-tao-giao-vien-qua-quan-ly-hoc-tap-so/
+              - generic [ref=e760]: 15 chunks
+            - generic [ref=e762]:
+              - generic [ref=e763]: 11:44:10 PM
+              - generic [ref=e764]: OK
+              - generic "https://edusoft.vn/giao-duc-bac-cao/chuyen-doi-so-giao-duc-cao-dang-huong-di-cho-tuong-lai/ Chuyển đổi số giáo dục cao đẳng - Hướng đi cho tương lai -" [ref=e765]: Chuyển đổi số giáo dục cao đẳng - Hướng đi cho tương lai - — https://edusoft.vn/giao-duc-bac-cao/chuyen-doi-so-giao-duc-cao-dang-huong-di-cho-tuong-lai/
+              - generic [ref=e766]: 34 chunks
+            - generic [ref=e768]:
+              - generic [ref=e769]: 11:44:12 PM
+              - generic [ref=e770]: OK
+              - 'generic "https://edusoft.vn/giao-duc-bac-cao/chuyen-doi-so-trong-giao-duc-ung-dung-phan-mem-quan-ly-giao-duc-de-nang-cao-hieu-qua-dao-tao/ Chuyển đổi số trong giáo dục: Ứng dụng phần mềm quản lý giáo dục để nâng cao hiệu quả đào tạo -" [ref=e771]': "Chuyển đổi số trong giáo dục: Ứng dụng phần mềm quản lý giáo dục để nâng cao hiệu quả đào tạo - — https://edusoft.vn/giao-duc-bac-cao/chuyen-doi-so-trong-giao-duc-ung-dung-phan-mem-quan-ly-giao-duc-de-nang-cao-hieu-qua-dao-tao/"
+              - generic [ref=e772]: 33 chunks
+            - generic [ref=e774]:
+              - generic [ref=e775]: 11:44:14 PM
+              - generic [ref=e776]: OK
+              - 'generic "https://edusoft.vn/giao-duc-bac-cao/chuyen-doi-so-trong-giao-duc-trung-cap-xu-huong-tat-yeu-de-but-pha/ Chuyển đổi số trong giáo dục trung cấp: Xu hướng tất yếu để bứt phá -" [ref=e777]': "Chuyển đổi số trong giáo dục trung cấp: Xu hướng tất yếu để bứt phá - — https://edusoft.vn/giao-duc-bac-cao/chuyen-doi-so-trong-giao-duc-trung-cap-xu-huong-tat-yeu-de-but-pha/"
+              - generic [ref=e778]: 40 chunks
+            - generic [ref=e780]:
+              - generic [ref=e781]: 11:44:16 PM
+              - generic [ref=e782]: OK
+              - 'generic "https://edusoft.vn/giao-duc-bac-cao/chuyen-doi-so-dai-hoc-khai-niem-va-tam-quan-trong/ Chuyển đổi số đại học: Khái niệm và Tầm quan trọng -" [ref=e783]': "Chuyển đổi số đại học: Khái niệm và Tầm quan trọng - — https://edusoft.vn/giao-duc-bac-cao/chuyen-doi-so-dai-hoc-khai-niem-va-tam-quan-trong/"
+              - generic [ref=e784]: 34 chunks
+            - generic [ref=e786]:
+              - generic [ref=e787]: 11:44:17 PM
+              - generic [ref=e788]: OK
+              - generic "https://edusoft.vn/giao-duc-bac-cao/gioi-thieu-chuong-trinh-quan-ly-dao-tao-dai-hoc/ Giới thiệu chương trình quản lý đào tạo đại học -" [ref=e789]: Giới thiệu chương trình quản lý đào tạo đại học - — https://edusoft.vn/giao-duc-bac-cao/gioi-thieu-chuong-trinh-quan-ly-dao-tao-dai-hoc/
+              - generic [ref=e790]: 36 chunks
+            - generic [ref=e792]:
+              - generic [ref=e793]: 11:44:17 PM
+              - generic [ref=e794]: SYS
+              - generic [ref=e795]: embedding batch of 232 chunks...
+            - generic [ref=e797]:
+              - generic [ref=e798]: 11:44:21 PM
+              - generic [ref=e799]: SYS
+              - generic [ref=e800]: stored batch of 232 chunks
+            - generic [ref=e802]:
+              - generic [ref=e803]: 11:44:23 PM
+              - generic [ref=e804]: OK
+              - generic "https://edusoft.vn/giao-duc-bac-cao/dinh-hinh-con-duong-hoc-tap-va-nghe-nghiep/ Định hình con đường học tập và nghề nghiệp -" [ref=e805]: Định hình con đường học tập và nghề nghiệp - — https://edusoft.vn/giao-duc-bac-cao/dinh-hinh-con-duong-hoc-tap-va-nghe-nghiep/
+              - generic [ref=e806]: 26 chunks
+            - generic [ref=e808]:
+              - generic [ref=e809]: 11:44:25 PM
+              - generic [ref=e810]: OK
+              - generic "https://edusoft.vn/giao-duc-bac-cao/gioi-thieu-chuong-trinh-dao-tao-toan-dien/ Giới thiệu chương trình đào tạo toàn diện -" [ref=e811]: Giới thiệu chương trình đào tạo toàn diện - — https://edusoft.vn/giao-duc-bac-cao/gioi-thieu-chuong-trinh-dao-tao-toan-dien/
+              - generic [ref=e812]: 25 chunks
+            - generic [ref=e814]:
+              - generic [ref=e815]: 11:44:27 PM
+              - generic [ref=e816]: OK
+              - generic "https://edusoft.vn/giao-duc-bac-cao/kham-pha-nganh-dao-tao-chuyen-nghiep/ Khám phá ngành đào tạo chuyên nghiệp -" [ref=e817]: Khám phá ngành đào tạo chuyên nghiệp - — https://edusoft.vn/giao-duc-bac-cao/kham-pha-nganh-dao-tao-chuyen-nghiep/
+              - generic [ref=e818]: 27 chunks
+            - generic [ref=e820]:
+              - generic [ref=e821]: 11:44:29 PM
+              - generic [ref=e822]: OK
+              - generic "https://edusoft.vn/giao-duc-bac-cao/khoi-kien-thuc-toi-thieu-trong-giao-duc-dai-hoc/ Khối kiến thức tối thiểu trong giáo dục đại học -" [ref=e823]: Khối kiến thức tối thiểu trong giáo dục đại học - — https://edusoft.vn/giao-duc-bac-cao/khoi-kien-thuc-toi-thieu-trong-giao-duc-dai-hoc/
+              - generic [ref=e824]: 24 chunks
+            - generic [ref=e826]:
+              - generic [ref=e827]: 11:44:31 PM
+              - generic [ref=e828]: OK
+              - generic "https://edusoft.vn/giao-duc-bac-cao/ung-dung-phan-mem-giao-duc-trong-lap-ke-hoach-dao-tao/ Ứng dụng phần mềm giáo dục trong lập kế hoạch đào tạo -" [ref=e829]: Ứng dụng phần mềm giáo dục trong lập kế hoạch đào tạo - — https://edusoft.vn/giao-duc-bac-cao/ung-dung-phan-mem-giao-duc-trong-lap-ke-hoach-dao-tao/
+              - generic [ref=e830]: 26 chunks
+            - generic [ref=e832]:
+              - generic [ref=e833]: 11:44:33 PM
+              - generic [ref=e834]: OK
+              - generic "https://edusoft.vn/giao-duc-bac-cao/khai-niem-lop-nien-che-trong-giao-duc/ Khái niệm lớp niên chế trong giáo dục -" [ref=e835]: Khái niệm lớp niên chế trong giáo dục - — https://edusoft.vn/giao-duc-bac-cao/khai-niem-lop-nien-che-trong-giao-duc/
+              - generic [ref=e836]: 26 chunks
+            - generic [ref=e838]:
+              - generic [ref=e839]: 11:44:35 PM
+              - generic [ref=e840]: OK
+              - generic "https://edusoft.vn/giao-duc-bac-cao/dam-bao-chat-luong-va-su-phat-trien-toan-dien/ Đảm bảo chất lượng và sự phát triển toàn diện -" [ref=e841]: Đảm bảo chất lượng và sự phát triển toàn diện - — https://edusoft.vn/giao-duc-bac-cao/dam-bao-chat-luong-va-su-phat-trien-toan-dien/
+              - generic [ref=e842]: 31 chunks
+            - generic [ref=e844]:
+              - generic [ref=e845]: 11:44:37 PM
+              - generic [ref=e846]: OK
+              - 'generic "https://edusoft.vn/trung-tam-dao-tao/chuong-trinh-dao-tao-trung-tam-dao-tao-nang-cao-ky-nang-chuyen-mon-hieu-qua/ Chương trình đào tạo trung tâm đào tạo: Nâng cao kỹ năng chuyên môn hiệu quả -" [ref=e847]': "Chương trình đào tạo trung tâm đào tạo: Nâng cao kỹ năng chuyên môn hiệu quả - — https://edusoft.vn/trung-tam-dao-tao/chuong-trinh-dao-tao-trung-tam-dao-tao-nang-cao-ky-nang-chuyen-mon-hieu-qua/"
+              - generic [ref=e848]: 27 chunks
+            - generic [ref=e850]:
+              - generic [ref=e851]: 11:44:37 PM
+              - generic [ref=e852]: SYS
+              - generic [ref=e853]: embedding batch of 212 chunks...
+            - generic [ref=e855]:
+              - generic [ref=e856]: 11:44:41 PM
+              - generic [ref=e857]: SYS
+              - generic [ref=e858]: stored batch of 212 chunks
+            - generic [ref=e860]:
+              - generic [ref=e861]: 11:44:43 PM
+              - generic [ref=e862]: OK
+              - 'generic "https://edusoft.vn/trung-tam-dao-tao/xay-dung-lo-trinh-dao-tao-phu-hop-cho-trung-tam-nang-cao-chat-luong-giao-duc-hieu-qua/ Xây dựng lộ trình đào tạo phù hợp cho trung tâm: Nâng cao chất lượng giáo dục hiệu quả -" [ref=e863]': "Xây dựng lộ trình đào tạo phù hợp cho trung tâm: Nâng cao chất lượng giáo dục hiệu quả - — https://edusoft.vn/trung-tam-dao-tao/xay-dung-lo-trinh-dao-tao-phu-hop-cho-trung-tam-nang-cao-chat-luong-giao-duc-hieu-qua/"
+              - generic [ref=e864]: 19 chunks
+            - generic [ref=e866]:
+              - generic [ref=e867]: 11:44:45 PM
+              - generic [ref=e868]: OK
+              - generic "https://edusoft.vn/trung-tam-dao-tao/quan-ly-dao-tao-la-gi-tong-quan-ve-he-thong-quan-ly-giao-duc-hieu-qua/ Quản lý đào tạo là gì? Tổng quan về hệ thống quản lý giáo dục hiệu quả -" [ref=e869]: Quản lý đào tạo là gì? Tổng quan về hệ thống quản lý giáo dục hiệu quả - — https://edusoft.vn/trung-tam-dao-tao/quan-ly-dao-tao-la-gi-tong-quan-ve-he-thong-quan-ly-giao-duc-hieu-qua/
+              - generic [ref=e870]: 21 chunks
+            - generic [ref=e872]:
+              - generic [ref=e873]: 11:44:46 PM
+              - generic [ref=e874]: OK
+              - generic "https://edusoft.vn/trung-tam-dao-tao/chien-luoc-quan-ly-dao-tao-truc-tuyen-hieu-qua-ma-trung-tam-nen-biet/ Chiến lược quản lý đào tạo trực tuyến hiệu quả mà trung tâm nên biết -" [ref=e875]: Chiến lược quản lý đào tạo trực tuyến hiệu quả mà trung tâm nên biết - — https://edusoft.vn/trung-tam-dao-tao/chien-luoc-quan-ly-dao-tao-truc-tuyen-hieu-qua-ma-trung-tam-nen-biet/
+              - generic [ref=e876]: 19 chunks
+            - generic [ref=e878]:
+              - generic [ref=e879]: 11:44:48 PM
+              - generic [ref=e880]: OK
+              - generic "https://edusoft.vn/trung-tam-dao-tao/tai-sao-nen-xay-dung-phan-mem-quan-ly-dao-tao-cho-trung-tam/ Tại sao nên xây dựng phần mềm quản lý đào tạo cho trung tâm? -" [ref=e881]: Tại sao nên xây dựng phần mềm quản lý đào tạo cho trung tâm? - — https://edusoft.vn/trung-tam-dao-tao/tai-sao-nen-xay-dung-phan-mem-quan-ly-dao-tao-cho-trung-tam/
+              - generic [ref=e882]: 23 chunks
+            - generic [ref=e884]:
+              - generic [ref=e885]: 11:44:50 PM
+              - generic [ref=e886]: OK
+              - generic "https://edusoft.vn/trung-tam-dao-tao/quan-ly-trung-tam-dao-tao-bang-lms/ Quản lý trung tâm đào tạo bằng LMS -" [ref=e887]: Quản lý trung tâm đào tạo bằng LMS - — https://edusoft.vn/trung-tam-dao-tao/quan-ly-trung-tam-dao-tao-bang-lms/
+              - generic [ref=e888]: 19 chunks
+            - generic [ref=e890]:
+              - generic [ref=e891]: 11:44:52 PM
+              - generic [ref=e892]: OK
+              - generic "https://edusoft.vn/trung-tam-dao-tao/cau-truc-he-thong-quan-ly-dao-tao-cua-trung-tam-dao-tao/ Cấu trúc hệ thống quản lý đào tạo của trung tâm đào tạo -" [ref=e893]: Cấu trúc hệ thống quản lý đào tạo của trung tâm đào tạo - — https://edusoft.vn/trung-tam-dao-tao/cau-truc-he-thong-quan-ly-dao-tao-cua-trung-tam-dao-tao/
+              - generic [ref=e894]: 19 chunks
+            - generic [ref=e896]:
+              - generic [ref=e897]: 11:44:54 PM
+              - generic [ref=e898]: OK
+              - generic "https://edusoft.vn/trung-tam-dao-tao/he-thong-quan-ly-dao-tao-so-hoa/ Hệ thống quản lý đào tạo số hóa -" [ref=e899]: Hệ thống quản lý đào tạo số hóa - — https://edusoft.vn/trung-tam-dao-tao/he-thong-quan-ly-dao-tao-so-hoa/
+              - generic [ref=e900]: 23 chunks
+            - generic [ref=e902]:
+              - generic [ref=e903]: 11:44:56 PM
+              - generic [ref=e904]: OK
+              - generic "https://edusoft.vn/trung-tam-dao-tao/nhung-yeu-to-anh-huong-den-hieu-qua-quan-ly-dao-tao-trung-tam/ Những yếu tố ảnh hưởng đến hiệu quả quản lý đào tạo trung tâm -" [ref=e905]: Những yếu tố ảnh hưởng đến hiệu quả quản lý đào tạo trung tâm - — https://edusoft.vn/trung-tam-dao-tao/nhung-yeu-to-anh-huong-den-hieu-qua-quan-ly-dao-tao-trung-tam/
+              - generic [ref=e906]: 23 chunks
+            - generic [ref=e908]:
+              - generic [ref=e909]: 11:44:58 PM
+              - generic [ref=e910]: OK
+              - generic "https://edusoft.vn/trung-tam-dao-tao/chuyen-doi-so-trong-quan-ly-trung-tam-dao-tao/ Chuyển đổi số trong quản lý trung tâm đào tạo -" [ref=e911]: Chuyển đổi số trong quản lý trung tâm đào tạo - — https://edusoft.vn/trung-tam-dao-tao/chuyen-doi-so-trong-quan-ly-trung-tam-dao-tao/
+              - generic [ref=e912]: 15 chunks
+            - generic [ref=e914]:
+              - generic [ref=e915]: 11:45:00 PM
+              - generic [ref=e916]: OK
+              - generic "https://edusoft.vn/trung-tam-dao-tao/cac-yeu-to-cot-loi-trong-quan-ly-dao-tao/ Các yếu tố cốt lõi trong quản lý đào tạo -" [ref=e917]: Các yếu tố cốt lõi trong quản lý đào tạo - — https://edusoft.vn/trung-tam-dao-tao/cac-yeu-to-cot-loi-trong-quan-ly-dao-tao/
+              - generic [ref=e918]: 20 chunks
+            - generic [ref=e920]:
+              - generic [ref=e921]: 11:45:00 PM
+              - generic [ref=e922]: SYS
+              - generic [ref=e923]: embedding batch of 201 chunks...
+            - generic [ref=e925]:
+              - generic [ref=e926]: 11:45:04 PM
+              - generic [ref=e927]: SYS
+              - generic [ref=e928]: stored batch of 201 chunks
+            - generic [ref=e930]:
+              - generic [ref=e931]: 11:45:06 PM
+              - generic [ref=e932]: OK
+              - generic "https://edusoft.vn/trung-tam-dao-tao/mo-hinh-quan-ly-dao-tao-trung-tam-hieu-qua/ Mô hình quản lý đào tạo trung tâm hiệu quả -" [ref=e933]: Mô hình quản lý đào tạo trung tâm hiệu quả - — https://edusoft.vn/trung-tam-dao-tao/mo-hinh-quan-ly-dao-tao-trung-tam-hieu-qua/
+              - generic [ref=e934]: 19 chunks
+            - generic [ref=e936]:
+              - generic [ref=e937]: 11:45:08 PM
+              - generic [ref=e938]: OK
+              - 'generic "https://edusoft.vn/k12/quan-ly-hoc-sinh-giai-phap-hieu-qua-cho-giao-duc-hien-dai/ Quản lý học sinh: Giải pháp hiệu quả cho giáo dục hiện đại -" [ref=e939]': "Quản lý học sinh: Giải pháp hiệu quả cho giáo dục hiện đại - — https://edusoft.vn/k12/quan-ly-hoc-sinh-giai-phap-hieu-qua-cho-giao-duc-hien-dai/"
+              - generic [ref=e940]: 19 chunks
+            - generic [ref=e942]:
+              - generic [ref=e943]: 11:45:10 PM
+              - generic [ref=e944]: OK
+              - 'generic "https://edusoft.vn/k12/quan-ly-hoc-tap-trong-truong-hoc-cach-toi-uu-hoa-hieu-qua-giang-day-va-hoc-tap/ Quản lý học tập trong trường học: Cách tối ưu hóa hiệu quả giảng dạy và học tập -" [ref=e945]': "Quản lý học tập trong trường học: Cách tối ưu hóa hiệu quả giảng dạy và học tập - — https://edusoft.vn/k12/quan-ly-hoc-tap-trong-truong-hoc-cach-toi-uu-hoa-hieu-qua-giang-day-va-hoc-tap/"
+              - generic [ref=e946]: 28 chunks
+            - generic [ref=e948]:
+              - generic [ref=e949]: 11:45:12 PM
+              - generic [ref=e950]: OK
+              - generic "https://edusoft.vn/k12/quan-ly-hoc-tap-cho-giao-duc-tu-lop-1-den-lop-12/ Quản lý học tập cho giáo dục từ lớp 1 đến lớp 12 -" [ref=e951]: Quản lý học tập cho giáo dục từ lớp 1 đến lớp 12 - — https://edusoft.vn/k12/quan-ly-hoc-tap-cho-giao-duc-tu-lop-1-den-lop-12/
+              - generic [ref=e952]: 23 chunks
+            - generic [ref=e954]:
+              - generic [ref=e955]: 11:45:14 PM
+              - generic [ref=e956]: OK
+              - generic "https://edusoft.vn/k12/quan-ly-hoc-tap-trong-thoi-dai-so/ Quản lý học tập trong thời đại số -" [ref=e957]: Quản lý học tập trong thời đại số - — https://edusoft.vn/k12/quan-ly-hoc-tap-trong-thoi-dai-so/
+              - generic [ref=e958]: 22 chunks
+            - generic [ref=e960]:
+              - generic [ref=e961]: 11:45:16 PM
+              - generic [ref=e962]: OK
+              - generic "https://edusoft.vn/k12/su-khac-biet-giua-quan-ly-hoc-tap-o-tieu-hoc-thcs-va-thpt/ Sự khác biệt giữa quản lý học tập ở tiểu học, THCS và THPT -" [ref=e963]: Sự khác biệt giữa quản lý học tập ở tiểu học, THCS và THPT - — https://edusoft.vn/k12/su-khac-biet-giua-quan-ly-hoc-tap-o-tieu-hoc-thcs-va-thpt/
+              - generic [ref=e964]: 19 chunks
+            - generic [ref=e966]:
+              - generic [ref=e967]: 11:45:17 PM
+              - generic [ref=e968]: SYS
+              - generic [ref=e969]: embedding batch of 130 chunks...
+            - generic [ref=e971]:
+              - generic [ref=e972]: 11:45:19 PM
+              - generic [ref=e973]: SYS
+              - generic [ref=e974]: stored batch of 130 chunks
+            - generic [ref=e976]:
+              - generic [ref=e977]: 11:45:19 PM
+              - generic [ref=e978]: SYS
+              - generic [ref=e979]: "Crawl completed: 50 pages crawled, 6 skipped, 0 failed, 975 chunks created"
+      - generic [ref=e146]:
+        - heading "Manual Actions" [level=3] [ref=e147]:
+          - img [ref=e148]
+          - text: Manual Actions
+        - generic [ref=e151]:
+          - img [ref=e152]
+          - generic [ref=e155]:
+            - generic [ref=e156]: Website URL (widget installed)
+            - generic [ref=e157]: https://edusoft.vn
+          - generic [ref=e158]: Auto crawl uses this URL
+        - paragraph [ref=e159]: Manually trigger a crawl or clear learned data
+        - generic [ref=e160]:
+          - generic [ref=e161]:
+            - generic [ref=e162]: URL to scan manually
+            - textbox "https://edusoft.vn" [ref=e212]
+            - paragraph [ref=e164]: Leave empty to use site URL above. Or enter a specific URL to scan additional pages.
+          - generic [ref=e165]:
+            - generic [ref=e166]: Max Pages
+            - generic [ref=e167]:
+              - slider [ref=e168]: "50"
+              - spinbutton [ref=e169]: "50"
+          - button "Advanced Settings" [ref=e170] [cursor=pointer]:
+            - img [ref=e171]
+            - generic [ref=e174]: Advanced Settings
+            - img [ref=e175]
+          - generic [ref=e177]:
+            - button "Pause" [ref=e213] [cursor=pointer]:
+              - img [ref=e214]
+              - text: Pause
+            - button "Stop Crawl" [ref=e217] [cursor=pointer]:
+              - img [ref=e218]
+              - text: Stop Crawl
+            - button "Clear All Knowledge" [disabled] [ref=e181]:
+              - img [ref=e182]
+              - text: Clear All Knowledge
+      - generic [ref=e220]:
+        - heading "Crawl History" [level=3] [ref=e221]:
+          - img [ref=e222]
+          - text: Crawl History
+        - generic [ref=e226]:
+          - button "running0 pages 3/31/2026, 4:43:22 PM" [ref=e228]:
+            - generic [ref=e229]:
+              - img [ref=e230]
+              - generic [ref=e235]:
+                - text: running
+                - generic [ref=e236]: 0 pages
+            - generic [ref=e238]: 3/31/2026, 4:43:22 PM
+          - button "completed50 pages 3/31/2026, 4:40:34 PM" [ref=e240] [cursor=pointer]:
+            - generic [ref=e241]:
+              - img [ref=e242]
+              - generic [ref=e245]:
+                - text: completed
+                - generic [ref=e246]: 50 pages
+            - generic [ref=e247]:
+              - generic [ref=e248]: 3/31/2026, 4:40:34 PM
+              - img [ref=e249]
+          - button "completed50 pages 3/31/2026, 4:34:49 PM" [ref=e252] [cursor=pointer]:
+            - generic [ref=e253]:
+              - img [ref=e254]
+              - generic [ref=e257]:
+                - text: completed
+                - generic [ref=e258]: 50 pages
+            - generic [ref=e259]:
+              - generic [ref=e260]: 3/31/2026, 4:34:49 PM
+              - img [ref=e261]
+          - button "completed1 pages 3/31/2026, 4:33:18 PM" [ref=e264] [cursor=pointer]:
+            - generic [ref=e265]:
+              - img [ref=e266]
+              - generic [ref=e269]:
+                - text: completed
+                - generic [ref=e270]: 1 pages
+            - generic [ref=e271]:
+              - generic [ref=e272]: 3/31/2026, 4:33:18 PM
+              - img [ref=e273]
+          - button "completed1 pages 3/31/2026, 4:30:54 PM" [ref=e276] [cursor=pointer]:
+            - generic [ref=e277]:
+              - img [ref=e278]
+              - generic [ref=e281]:
+                - text: completed
+                - generic [ref=e282]: 1 pages
+            - generic [ref=e283]:
+              - generic [ref=e284]: 3/31/2026, 4:30:54 PM
+              - img [ref=e285]
+          - button "completed1 pages 3/31/2026, 4:28:02 PM" [ref=e288] [cursor=pointer]:
+            - generic [ref=e289]:
+              - img [ref=e290]
+              - generic [ref=e293]:
+                - text: completed
+                - generic [ref=e294]: 1 pages
+            - generic [ref=e295]:
+              - generic [ref=e296]: 3/31/2026, 4:28:02 PM
+              - img [ref=e297]
+          - button "completed1 pages 3/31/2026, 4:25:02 PM" [ref=e300] [cursor=pointer]:
+            - generic [ref=e301]:
+              - img [ref=e302]
+              - generic [ref=e305]:
+                - text: completed
+                - generic [ref=e306]: 1 pages
+            - generic [ref=e307]:
+              - generic [ref=e308]: 3/31/2026, 4:25:02 PM
+              - img [ref=e309]
+          - button "completed1 pages 3/31/2026, 4:08:45 PM" [ref=e312] [cursor=pointer]:
+            - generic [ref=e313]:
+              - img [ref=e314]
+              - generic [ref=e317]:
+                - text: completed
+                - generic [ref=e318]: 1 pages
+            - generic [ref=e319]:
+              - generic [ref=e320]: 3/31/2026, 4:08:45 PM
+              - img [ref=e321]
+          - button "completed1 pages 3/31/2026, 3:55:54 PM" [ref=e324] [cursor=pointer]:
+            - generic [ref=e325]:
+              - img [ref=e326]
+              - generic [ref=e329]:
+                - text: completed
+                - generic [ref=e330]: 1 pages
+            - generic [ref=e331]:
+              - generic [ref=e332]: 3/31/2026, 3:55:54 PM
+              - img [ref=e333]
+          - button "completed0 pages· 1 failed 3/31/2026, 3:24:07 PM" [ref=e336] [cursor=pointer]:
+            - generic [ref=e337]:
+              - img [ref=e338]
+              - generic [ref=e341]:
+                - text: completed
+                - generic [ref=e342]:
+                  - text: 0 pages
+                  - generic [ref=e343]: · 1 failed
+            - generic [ref=e344]:
+              - generic [ref=e345]: 3/31/2026, 3:24:07 PM
+              - img [ref=e346]
+          - button "completed2 pages · 3 chunks 3/28/2026, 3:19:23 PM" [ref=e349] [cursor=pointer]:
+            - generic [ref=e350]:
+              - img [ref=e351]
+              - generic [ref=e354]:
+                - text: completed
+                - generic [ref=e355]: 2 pages · 3 chunks
+            - generic [ref=e356]:
+              - generic [ref=e357]: 3/28/2026, 3:19:23 PM
+              - img [ref=e358]
+          - button "completed0 pages· 1 failed 3/28/2026, 3:15:47 PM" [ref=e361] [cursor=pointer]:
+            - generic [ref=e362]:
+              - img [ref=e363]
+              - generic [ref=e366]:
+                - text: completed
+                - generic [ref=e367]:
+                  - text: 0 pages
+                  - generic [ref=e368]: · 1 failed
+            - generic [ref=e369]:
+              - generic [ref=e370]: 3/28/2026, 3:15:47 PM
+              - img [ref=e371]
+          - button "completed2 pages · 3 chunks 3/28/2026, 3:08:45 PM" [ref=e374] [cursor=pointer]:
+            - generic [ref=e375]:
+              - img [ref=e376]
+              - generic [ref=e379]:
+                - text: completed
+                - generic [ref=e380]: 2 pages · 3 chunks
+            - generic [ref=e381]:
+              - generic [ref=e382]: 3/28/2026, 3:08:45 PM
+              - img [ref=e383]
+          - button "completed1 pages · 1 chunks 3/28/2026, 3:07:59 PM" [ref=e386] [cursor=pointer]:
+            - generic [ref=e387]:
+              - img [ref=e388]
+              - generic [ref=e391]:
+                - text: completed
+                - generic [ref=e392]: 1 pages · 1 chunks
+            - generic [ref=e393]:
+              - generic [ref=e394]: 3/28/2026, 3:07:59 PM
+              - img [ref=e395]
+          - button "completed0 pages· 1 failed 3/28/2026, 3:03:47 PM" [ref=e398] [cursor=pointer]:
+            - generic [ref=e399]:
+              - img [ref=e400]
+              - generic [ref=e403]:
+                - text: completed
+                - generic [ref=e404]:
+                  - text: 0 pages
+                  - generic [ref=e405]: · 1 failed
+            - generic [ref=e406]:
+              - generic [ref=e407]: 3/28/2026, 3:03:47 PM
+              - img [ref=e408]
+          - button "completed0 pages· 1 failed 3/28/2026, 3:03:39 PM" [ref=e411] [cursor=pointer]:
+            - generic [ref=e412]:
+              - img [ref=e413]
+              - generic [ref=e416]:
+                - text: completed
+                - generic [ref=e417]:
+                  - text: 0 pages
+                  - generic [ref=e418]: · 1 failed
+            - generic [ref=e419]:
+              - generic [ref=e420]: 3/28/2026, 3:03:39 PM
+              - img [ref=e421]
+          - button "completed1 pages 3/28/2026, 3:01:08 PM" [ref=e424] [cursor=pointer]:
+            - generic [ref=e425]:
+              - img [ref=e426]
+              - generic [ref=e429]:
+                - text: completed
+                - generic [ref=e430]: 1 pages
+            - generic [ref=e431]:
+              - generic [ref=e432]: 3/28/2026, 3:01:08 PM
+              - img [ref=e433]
+          - button "completed1 pages · 1 chunks 3/28/2026, 2:45:56 PM" [ref=e436] [cursor=pointer]:
+            - generic [ref=e437]:
+              - img [ref=e438]
+              - generic [ref=e441]:
+                - text: completed
+                - generic [ref=e442]: 1 pages · 1 chunks
+            - generic [ref=e443]:
+              - generic [ref=e444]: 3/28/2026, 2:45:56 PM
+              - img [ref=e445]
+          - button "failed1 pages · 1 chunks 3/28/2026, 2:42:41 PM" [ref=e448] [cursor=pointer]:
+            - generic [ref=e449]:
+              - img [ref=e450]
+              - generic [ref=e454]:
+                - text: failed
+                - generic [ref=e455]: 1 pages · 1 chunks
+            - generic [ref=e456]:
+              - generic [ref=e457]: 3/28/2026, 2:42:41 PM
+              - img [ref=e458]
+          - button "completed0 pages· 1 failed 3/28/2026, 2:40:43 PM" [ref=e461] [cursor=pointer]:
+            - generic [ref=e462]:
+              - img [ref=e463]
+              - generic [ref=e466]:
+                - text: completed
+                - generic [ref=e467]:
+                  - text: 0 pages
+                  - generic [ref=e468]: · 1 failed
+            - generic [ref=e469]:
+              - generic [ref=e470]: 3/28/2026, 2:40:43 PM
+              - img [ref=e471]
+          - button "failed2 pages · 3 chunks 3/28/2026, 2:35:13 PM" [ref=e474] [cursor=pointer]:
+            - generic [ref=e475]:
+              - img [ref=e476]
+              - generic [ref=e480]:
+                - text: failed
+                - generic [ref=e481]: 2 pages · 3 chunks
+            - generic [ref=e482]:
+              - generic [ref=e483]: 3/28/2026, 2:35:13 PM
+              - img [ref=e484]
+          - button "failed2 pages 3/28/2026, 2:29:18 PM" [ref=e487] [cursor=pointer]:
+            - generic [ref=e488]:
+              - img [ref=e489]
+              - generic [ref=e493]:
+                - text: failed
+                - generic [ref=e494]: 2 pages
+            - generic [ref=e495]:
+              - generic [ref=e496]: 3/28/2026, 2:29:18 PM
+              - img [ref=e497]
+          - button "failed2 pages 3/28/2026, 2:25:29 PM" [ref=e500] [cursor=pointer]:
+            - generic [ref=e501]:
+              - img [ref=e502]
+              - generic [ref=e506]:
+                - text: failed
+                - generic [ref=e507]: 2 pages
+            - generic [ref=e508]:
+              - generic [ref=e509]: 3/28/2026, 2:25:29 PM
+              - img [ref=e510]
+          - button "failed0 pages 3/28/2026, 2:03:52 PM" [ref=e513] [cursor=pointer]:
+            - generic [ref=e514]:
+              - img [ref=e515]
+              - generic [ref=e519]:
+                - text: failed
+                - generic [ref=e520]: 0 pages
+            - generic [ref=e521]:
+              - generic [ref=e522]: 3/28/2026, 2:03:52 PM
+              - img [ref=e523]
+          - button "failed1 pages 3/28/2026, 11:03:39 AM" [ref=e526] [cursor=pointer]:
+            - generic [ref=e527]:
+              - img [ref=e528]
+              - generic [ref=e532]:
+                - text: failed
+                - generic [ref=e533]: 1 pages
+            - generic [ref=e534]:
+              - generic [ref=e535]: 3/28/2026, 11:03:39 AM
+              - img [ref=e536]
+          - button "failed0 pages 3/28/2026, 10:59:44 AM" [ref=e539] [cursor=pointer]:
+            - generic [ref=e540]:
+              - img [ref=e541]
+              - generic [ref=e545]:
+                - text: failed
+                - generic [ref=e546]: 0 pages
+            - generic [ref=e547]:
+              - generic [ref=e548]: 3/28/2026, 10:59:44 AM
+              - img [ref=e549]

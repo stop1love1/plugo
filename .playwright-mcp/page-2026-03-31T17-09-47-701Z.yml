@@ -1,0 +1,195 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - link "Plugo Plugo" [ref=e6] [cursor=pointer]:
+      - /url: /
+      - img "Plugo"
+      - text: Plugo
+    - navigation [ref=e7]:
+      - link "Analytics" [ref=e10] [cursor=pointer]:
+        - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/analytics
+        - img [ref=e11]
+        - generic [ref=e13]: Analytics
+      - generic [ref=e14]:
+        - paragraph [ref=e15]: Content
+        - generic [ref=e16]:
+          - link "Crawl & Setup" [ref=e17] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/setup
+            - img [ref=e18]
+            - generic [ref=e23]: Crawl & Setup
+          - link "Knowledge" [ref=e24] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/knowledge
+            - img [ref=e25]
+            - generic [ref=e29]: Knowledge
+          - link "Crawled Pages" [ref=e30] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/crawled-pages
+            - img [ref=e31]
+            - generic [ref=e34]: Crawled Pages
+          - link "API Tools" [ref=e35] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/tools
+            - img [ref=e36]
+            - generic [ref=e38]: API Tools
+      - generic [ref=e39]:
+        - paragraph [ref=e40]: Deploy
+        - generic [ref=e41]:
+          - link "Embed Code" [ref=e42] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/embed
+            - img [ref=e43]
+            - generic [ref=e46]: Embed Code
+          - link "Playground" [ref=e47] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/playground
+            - img [ref=e48]
+            - generic [ref=e50]: Playground
+      - generic [ref=e51]:
+        - paragraph [ref=e52]: Monitor
+        - generic [ref=e53]:
+          - link "Chat Log" [ref=e54] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/chat-log
+            - img [ref=e55]
+            - generic [ref=e57]: Chat Log
+          - link "Visitors" [ref=e58] [cursor=pointer]:
+            - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/visitors
+            - img [ref=e59]
+            - generic [ref=e69]: Visitors
+      - link "Settings" [ref=e72] [cursor=pointer]:
+        - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/settings
+        - img [ref=e73]
+        - generic [ref=e76]: Settings
+      - generic [ref=e78]:
+        - link "Models" [ref=e79] [cursor=pointer]:
+          - /url: /models
+          - img [ref=e80]
+          - text: Models
+        - link "Audit Log" [ref=e83] [cursor=pointer]:
+          - /url: /audit
+          - img [ref=e84]
+          - text: Audit Log
+        - link "Notifications 16" [ref=e87] [cursor=pointer]:
+          - /url: /site/0be7ad49-9420-4d68-bc7a-d2dbd67a75c0/notifications
+          - img [ref=e88]
+          - generic [ref=e91]: Notifications
+          - generic [ref=e92]: "16"
+        - button "English" [ref=e93] [cursor=pointer]:
+          - img [ref=e94]
+          - generic [ref=e97]: English
+        - button "Logout" [ref=e98] [cursor=pointer]:
+          - img [ref=e99]
+          - generic [ref=e102]: Logout
+    - generic [ref=e104]:
+      - img [ref=e106]
+      - generic [ref=e109]: plugo
+      - generic [ref=e110]: v1.0
+  - main [ref=e111]:
+    - generic [ref=e112]:
+      - heading "Settings" [level=1] [ref=e113]
+      - paragraph [ref=e114]: Widget
+      - generic [ref=e115]:
+        - generic [ref=e116]:
+          - heading "General" [level=3] [ref=e117]
+          - generic [ref=e118]:
+            - generic [ref=e119]:
+              - generic [ref=e120]: Website Name
+              - textbox [ref=e121]
+            - generic [ref=e122]:
+              - generic [ref=e123]: Website URL
+              - textbox "https://example.com" [ref=e124]
+              - paragraph [ref=e125]: Main URL of your website. Used for Playground and Auto Crawl.
+            - generic [ref=e126]:
+              - generic [ref=e127]: Domain Whitelist (comma-separated)
+              - textbox "example.com, app.example.com" [ref=e128]
+        - generic [ref=e129]:
+          - generic [ref=e130]:
+            - heading "Model" [level=3] [ref=e131]
+            - link "Manage models →" [ref=e132] [cursor=pointer]:
+              - /url: /models
+          - generic [ref=e133]:
+            - generic [ref=e134]:
+              - generic [ref=e135]: Provider
+              - combobox [ref=e136]
+            - generic [ref=e137]:
+              - generic [ref=e138]: Model
+              - combobox [ref=e139]
+        - generic [ref=e140]:
+          - heading "AI Rules" [level=3] [ref=e141]
+          - generic [ref=e142]:
+            - generic [ref=e143]:
+              - generic [ref=e144]: System Prompt
+              - textbox "You are a friendly sales assistant. Always be polite and helpful..." [ref=e145]
+              - paragraph [ref=e146]: Custom instructions for the bot. Added to the default system prompt.
+            - generic [ref=e147]:
+              - generic [ref=e148]: Bot Rules (one per line)
+              - textbox "Do not answer questions about competitors Do not reveal pricing unless asked Always suggest calling hotline for complex issues Do not use slang or unprofessional language" [ref=e149]:
+                - /placeholder: "Do not answer questions about competitors\nDo not reveal pricing unless asked\nAlways suggest calling hotline for complex issues\nDo not use slang or unprofessional language"
+              - paragraph [ref=e150]: Rules the bot must follow. Each line is a separate rule.
+            - generic [ref=e151]:
+              - generic [ref=e152]: Response Language
+              - combobox [ref=e153]:
+                - option "Auto detect" [selected]
+                - option "Tiếng Việt"
+                - option "English"
+              - paragraph [ref=e154]: Choose the language the bot will use to respond. 'Auto detect' will match the user's language.
+        - generic [ref=e155]:
+          - heading "Widget — Appearance" [level=3] [ref=e156]
+          - generic [ref=e157]:
+            - generic [ref=e158]:
+              - generic [ref=e159]:
+                - generic [ref=e160]: Primary Color
+                - generic [ref=e161]:
+                  - textbox [ref=e162] [cursor=pointer]: "#6366f1"
+                  - textbox [ref=e163]: "#6366f1"
+              - generic [ref=e164]:
+                - generic [ref=e165]: Position
+                - combobox [ref=e166]:
+                  - option "Bottom Right" [selected]
+                  - option "Bottom Left"
+              - generic [ref=e167]:
+                - generic [ref=e168]: Dark Mode
+                - combobox [ref=e169]:
+                  - option "Auto (follow system)" [selected]
+                  - option "Always Light"
+                  - option "Always Dark"
+            - generic [ref=e170]:
+              - generic [ref=e171]:
+                - generic [ref=e172]: Bot Avatar
+                - textbox "🤖" [ref=e173]
+                - paragraph [ref=e174]: Emoji hiển thị trong header và tin nhắn bot
+              - generic [ref=e175]:
+                - generic [ref=e176]: Bubble Size
+                - combobox [ref=e177]:
+                  - option "Small (48px)"
+                  - option "Medium (56px)" [selected]
+                  - option "Large (64px)"
+        - generic [ref=e178]:
+          - heading "Widget — Content" [level=3] [ref=e179]
+          - generic [ref=e180]:
+            - generic [ref=e181]:
+              - generic [ref=e182]:
+                - generic [ref=e183]: Widget Title
+                - textbox "Chat with us" [ref=e184]
+              - generic [ref=e185]:
+                - generic [ref=e186]: Header Subtitle
+                - textbox "Online" [ref=e187]
+            - generic [ref=e188]:
+              - generic [ref=e189]: Greeting Message
+              - textbox [ref=e190]
+            - generic [ref=e191]:
+              - generic [ref=e192]:
+                - generic [ref=e193]: Input Placeholder
+                - textbox "Type a message..." [ref=e194]
+              - generic [ref=e195]:
+                - generic [ref=e196]: Auto Open (seconds)
+                - spinbutton [ref=e197]: "0"
+                - paragraph [ref=e198]: 0 = tắt. Tự mở widget sau N giây khi user vào trang
+            - generic [ref=e199]:
+              - generic [ref=e200]: Default Suggestions (comma-separated)
+              - textbox "What can you do?, Tell me about your products, How to get started?" [ref=e201]
+              - paragraph [ref=e202]: Quick reply buttons shown to visitors in the chat widget
+        - button "Save Changes Ctrl+S" [ref=e203] [cursor=pointer]:
+          - img [ref=e204]
+          - text: Save Changes
+          - generic [ref=e208]: Ctrl+S
+      - generic [ref=e209]:
+        - heading "Danger Zone" [level=3] [ref=e210]
+        - paragraph [ref=e211]: Permanently delete this site and all its data. This action cannot be undone.
+        - button "Delete Site" [ref=e212] [cursor=pointer]:
+          - img [ref=e213]
+          - text: Delete Site

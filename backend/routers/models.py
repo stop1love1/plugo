@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from fastapi import APIRouter, Depends, HTTPException
@@ -5,7 +6,10 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from auth import get_current_user, TokenData
 from providers.factory import get_all_providers, get_embedding_providers
+from providers.factory import get_llm_provider, load_provider_key
+from routers.llm_keys import get_key_for_provider
 from logging_config import logger
+from config import settings
 
 router = APIRouter(prefix="/api/models", tags=["models"])
 
@@ -38,6 +42,43 @@ class CustomModelCreate(BaseModel):
 class CustomModelDelete(BaseModel):
     provider: str
     model_id: str
+
+
+def _provider_env_key(provider_id: str) -> str | None:
+    return {
+        "claude": settings.anthropic_api_key,
+        "openai": settings.openai_api_key,
+        "gemini": settings.gemini_api_key,
+    }.get(provider_id)
+
+
+async def get_provider_key_status(provider_id: str, requires_key: bool, has_key: bool) -> str:
+    """Return runtime key status for UI badges."""
+    if not requires_key:
+        return "local"
+
+    db_key = await get_key_for_provider(provider_id)
+    effective_key = db_key or _provider_env_key(provider_id)
+    if not effective_key or not has_key:
+        return "missing"
+
+    try:
+        if db_key:
+            await load_provider_key(provider_id)
+        provider = get_llm_provider(provider_id)
+        result = await asyncio.wait_for(
+            provider.chat(
+                [{"role": "user", "content": "Reply with OK only."}],
+                temperature=0,
+            ),
+            timeout=15,
+        )
+        if isinstance(result, dict) and result.get("content"):
+            return "working"
+    except Exception:
+        return "invalid"
+
+    return "invalid"
 
 
 @router.get("/providers")
@@ -73,6 +114,12 @@ async def list_all_providers(_user: TokenData = Depends(get_current_user)):
                 "has_key": False,
                 "custom": True,
             })
+
+    statuses = await asyncio.gather(
+        *(get_provider_key_status(p["id"], p["requires_key"], p["has_key"]) for p in providers)
+    )
+    for provider, key_status in zip(providers, statuses):
+        provider["key_status"] = key_status
 
     return providers
 

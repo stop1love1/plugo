@@ -91,6 +91,9 @@ async def delete_key(
     if not deleted:
         raise HTTPException(status_code=404, detail="Key not found")
 
+    from providers.factory import clear_provider_key
+    clear_provider_key(provider)
+
     return {"message": f"API key for {provider} deleted"}
 
 

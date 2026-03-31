@@ -19,6 +19,16 @@ async def _load_db_key(provider: str) -> str | None:
         return _key_cache.get(provider)
 
 
+async def load_provider_key(provider: str) -> str | None:
+    """Public helper to refresh a single provider key from DB into cache."""
+    return await _load_db_key(provider)
+
+
+def clear_provider_key(provider: str) -> None:
+    """Remove a cached provider key after deletion."""
+    _key_cache.pop(provider, None)
+
+
 def _get_key(provider: str, env_key: str | None) -> str | None:
     """Get key: DB cache first, then .env fallback."""
     return _key_cache.get(provider) or env_key

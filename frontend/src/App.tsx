@@ -15,6 +15,7 @@ import AuditLog from "./pages/AuditLog";
 import Models from "./pages/Models";
 import Playground from "./pages/Playground";
 import CrawledPages from "./pages/CrawledPages";
+import Notifications from "./pages/Notifications";
 
 export default function App() {
   return (
@@ -29,6 +30,7 @@ export default function App() {
         }
       >
         <Route index element={<Sites />} />
+        <Route path="notifications" element={<Notifications />} />
         <Route path="models" element={<Models />} />
         <Route path="audit" element={<AuditLog />} />
         <Route path="site/:siteId">
@@ -42,6 +44,7 @@ export default function App() {
           <Route path="chat-log" element={<ChatLog />} />
           <Route path="visitors" element={<Visitors />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="notifications" element={<Notifications />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

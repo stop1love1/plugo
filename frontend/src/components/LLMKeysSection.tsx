@@ -5,6 +5,37 @@ import { getLLMKeys, saveLLMKey, deleteLLMKey, type Provider } from "../lib/api"
 import { Key, Eye, EyeOff, Check } from "lucide-react";
 import { useLocale } from "../lib/useLocale";
 
+function getKeyBadge(provider: Provider, t: (key: string) => string) {
+  if (!provider.has_key) {
+    return {
+      label: t("settings.keyNotSet"),
+      className: "bg-gray-100 text-gray-500",
+      showIcon: false,
+    };
+  }
+
+  switch (provider.key_status) {
+    case "working":
+      return {
+        label: t("settings.keyWorking"),
+        className: "bg-green-50 text-green-700",
+        showIcon: true,
+      };
+    case "invalid":
+      return {
+        label: t("settings.keyInvalid"),
+        className: "bg-red-50 text-red-700",
+        showIcon: false,
+      };
+    default:
+      return {
+        label: t("settings.keyConfigured"),
+        className: "bg-amber-50 text-amber-700",
+        showIcon: false,
+      };
+  }
+}
+
 export function LLMKeysSection({ providers }: { providers: Provider[] }) {
   const { t } = useLocale();
   const queryClient = useQueryClient();
@@ -56,21 +87,17 @@ export function LLMKeysSection({ providers }: { providers: Provider[] }) {
         {keyProviders.map((provider) => {
           const keyInfo = getKeyInfo(provider.id);
           const isEditing = editingProvider === provider.id;
+          const badge = getKeyBadge(provider, t);
 
           return (
             <div key={provider.id} className="border border-gray-100 rounded-lg p-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-sm">{provider.name}</span>
-                  {keyInfo ? (
-                    <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <Check className="w-3 h-3" /> {t("settings.keyConfigured")}
-                    </span>
-                  ) : (
-                    <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
-                      {t("settings.keyNotSet")}
-                    </span>
-                  )}
+                  <span className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${badge.className}`}>
+                    {badge.showIcon && <Check className="w-3 h-3" />}
+                    {badge.label}
+                  </span>
                 </div>
                 <div className="flex items-center gap-1">
                   {keyInfo && !isEditing && (

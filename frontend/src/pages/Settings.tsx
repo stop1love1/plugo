@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { getSite, updateSite, deleteSite, getModelsProviders, type UpdateSiteData } from "../lib/api";
+import { getErrorMessage, getSite, updateSite, deleteSite, getModelsProviders, type UpdateSiteData } from "../lib/api";
 import { Save, Trash2, AlertTriangle } from "lucide-react";
 import { useLocale } from "../lib/useLocale";
 
@@ -41,6 +41,7 @@ export default function Settings() {
     suggestions: "",
     system_prompt: "",
     bot_rules: "",
+    response_language: "auto",
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -67,6 +68,7 @@ export default function Settings() {
         suggestions: (site.suggestions || []).join(", "),
         system_prompt: site.system_prompt || "",
         bot_rules: site.bot_rules || "",
+        response_language: site.response_language || "auto",
       });
     }
   }, [site]);
@@ -92,7 +94,8 @@ export default function Settings() {
       form.allowed_domains !== site.allowed_domains ||
       form.suggestions !== (site.suggestions || []).join(", ") ||
       form.system_prompt !== (site.system_prompt || "") ||
-      form.bot_rules !== (site.bot_rules || "")
+      form.bot_rules !== (site.bot_rules || "") ||
+      form.response_language !== (site.response_language || "auto")
     );
   }, [form, site]);
 
@@ -124,7 +127,7 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ["site", siteId] });
       toast.success("Settings saved");
     },
-    onError: () => toast.error("Failed to save settings"),
+    onError: (error) => toast.error(getErrorMessage(error)),
   });
 
   // Ctrl+S / Cmd+S keyboard shortcut to save
@@ -292,6 +295,19 @@ export default function Settings() {
                 className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500 text-sm font-mono"
               />
               <p className="text-xs text-gray-400 mt-1">{t("settings.botRulesHint")}</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.responseLanguage")}</label>
+              <select
+                value={form.response_language}
+                onChange={(e) => setForm({ ...form, response_language: e.target.value })}
+                className="border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+              >
+                <option value="auto">{t("settings.langAuto")}</option>
+                <option value="vi">{t("settings.langVi")}</option>
+                <option value="en">{t("settings.langEn")}</option>
+              </select>
+              <p className="text-xs text-gray-400 mt-1">{t("settings.responseLanguageHint")}</p>
             </div>
           </div>
         </div>

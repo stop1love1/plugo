@@ -6,7 +6,9 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from bs4 import BeautifulSoup
-from knowledge.crawler import WebCrawler
+from urllib.parse import urlparse
+
+from knowledge.crawler import WebCrawler, _canonical_internal_url, _normalize_host
 
 
 def test_extract_text_removes_nav_footer():
@@ -58,6 +60,7 @@ def test_chunk_text_splits_correctly():
         assert chunk["title"] == "Test Page"
         assert chunk["content"].strip() != ""
         assert "id" in chunk
+        assert chunk.get("content_hash") and len(chunk["content_hash"]) == 64
 
 
 def test_chunk_text_single_short():
@@ -67,6 +70,23 @@ def test_chunk_text_single_short():
 
     assert len(chunks) == 1
     assert chunks[0]["content"] == "Short text."
+    assert chunks[0].get("content_hash") and len(chunks[0]["content_hash"]) == 64
+
+
+def test_normalize_host_strips_www():
+    assert _normalize_host("WWW.Example.COM") == "example.com"
+    assert _normalize_host("example.com") == "example.com"
+    assert _normalize_host("blog.example.com") == "blog.example.com"
+
+
+def test_canonical_internal_url_merges_www_with_apex():
+    seed = "https://example.com/"
+    assert _canonical_internal_url(seed, urlparse("https://www.example.com/about")) == "https://example.com/about"
+    assert _canonical_internal_url(seed, urlparse("https://EXAMPLE.COM/pricing")) == "https://example.com/pricing"
+
+
+def test_canonical_internal_url_rejects_other_domains():
+    assert _canonical_internal_url("https://example.com/", urlparse("https://other.org/x")) is None
 
 
 def test_crawler_stop_signal():

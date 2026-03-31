@@ -40,9 +40,18 @@ function init() {
     return;
   }
 
-  // Create shadow DOM container
+  // Create shadow DOM container — full-viewport host so fixed UI stacks above iframes (e.g. Playground)
+  // and hit-testing targets bubble/window, not the site iframe underneath.
   const host = document.createElement("div");
   host.id = "plugo-widget";
+  Object.assign(host.style, {
+    position: "fixed",
+    inset: "0",
+    width: "100%",
+    height: "100%",
+    pointerEvents: "none",
+    zIndex: "2147483647",
+  });
   document.body.appendChild(host);
 
   const shadow = host.attachShadow({ mode: "open" });
@@ -105,6 +114,11 @@ function getWidgetStyles(primaryColor: string): string {
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     :host {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 2147483647;
+      pointer-events: none;
       --plugo-primary: ${primaryColor};
       --plugo-text-on-primary: ${textOnPrimary};
       --plugo-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -128,6 +142,7 @@ function getWidgetStyles(primaryColor: string): string {
       justify-content: center;
       box-shadow: 0 4px 16px ${primaryColor}35, 0 2px 6px rgba(0,0,0,0.12);
       z-index: 999999;
+      pointer-events: auto;
       transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s;
       font-family: var(--plugo-font);
     }
@@ -162,7 +177,8 @@ function getWidgetStyles(primaryColor: string): string {
       background: white;
       border-radius: var(--plugo-radius);
       box-shadow: 0 8px 40px rgba(0,0,0,0.15);
-      z-index: 999998;
+      z-index: 1000000;
+      pointer-events: auto;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -254,6 +270,11 @@ function getWidgetStyles(primaryColor: string): string {
       background: #f2f3f7;
       color: #1a1a1a;
       border-bottom-left-radius: 4px;
+    }
+    /* HTML markdown: inherited pre-wrap turns newlines between tags into visible blank lines */
+    .plugo-msg.plugo-markdown {
+      white-space: normal;
+      line-height: 1.42;
     }
 
     .plugo-typing {
@@ -411,9 +432,9 @@ function getWidgetStyles(primaryColor: string): string {
       .plugo-char-counter { padding-right: 12px; }
     }
 
-    /* Markdown styles */
-    .plugo-markdown p { margin: 0 0 4px 0; }
-    .plugo-markdown p:last-child { margin-bottom: 0; }
+    /* Markdown styles — compact vertical rhythm (lists, Sources:, etc.) */
+    .plugo-markdown p { margin: 0 0 2px 0; }
+    .plugo-markdown > *:last-child { margin-bottom: 0; }
     .plugo-markdown > *:first-child { margin-top: 0; }
     .plugo-markdown strong { font-weight: 600; }
     .plugo-markdown em { font-style: italic; }
@@ -462,11 +483,21 @@ function getWidgetStyles(primaryColor: string): string {
     .plugo-dark .plugo-slide-prev, .plugo-dark .plugo-slide-next { background: #3d3d5c; color: #ccc; }
     .plugo-dark .plugo-slide-prev:hover, .plugo-dark .plugo-slide-next:hover { background: #4d4d6c; }
     .plugo-dark .plugo-slide-count { color: #666; }
-    .plugo-markdown ul, .plugo-markdown ol { margin: 2px 0 4px 0; padding-left: 18px; }
-    .plugo-markdown li { margin: 1px 0; }
-    .plugo-markdown li p { margin: 0; }
+    .plugo-markdown ul, .plugo-markdown ol {
+      margin: 0 0 2px 0;
+      padding-left: 1.1em;
+      list-style-position: outside;
+    }
+    .plugo-markdown li {
+      margin: 0;
+      padding: 0;
+      line-height: 1.38;
+    }
+    .plugo-markdown li + li { margin-top: 2px; }
+    .plugo-markdown li > p { margin: 0 !important; }
+    .plugo-markdown li > p:not(:last-child) { margin-bottom: 2px !important; }
     .plugo-markdown h1, .plugo-markdown h2, .plugo-markdown h3, .plugo-markdown h4 {
-      font-weight: 600; margin: 4px 0 2px 0;
+      font-weight: 600; margin: 2px 0 1px 0; line-height: 1.3;
     }
     .plugo-markdown h1 { font-size: 1.15em; }
     .plugo-markdown h2 { font-size: 1.1em; }
@@ -479,6 +510,8 @@ function getWidgetStyles(primaryColor: string): string {
       background: #1e1e2e; color: #cdd6f4; padding: 10px; border-radius: 8px;
       overflow-x: auto; margin: 4px 0; font-size: 0.82em; line-height: 1.45;
       position: relative;
+      white-space: pre;
+      word-wrap: normal;
     }
     .plugo-markdown pre.plugo-code code {
       background: none; padding: 0; color: inherit; font-size: inherit;

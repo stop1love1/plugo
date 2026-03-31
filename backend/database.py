@@ -33,6 +33,14 @@ async def _migrate_add_columns(conn):
     migrations = [
         ("sites", "system_prompt", "TEXT DEFAULT ''"),
         ("sites", "bot_rules", "TEXT DEFAULT ''"),
+        ("sites", "bot_avatar", "VARCHAR(10) DEFAULT ''"),
+        ("sites", "header_subtitle", "VARCHAR(100) DEFAULT ''"),
+        ("sites", "input_placeholder", "VARCHAR(200) DEFAULT ''"),
+        ("sites", "auto_open_delay", "INTEGER DEFAULT 0"),
+        ("sites", "bubble_size", "VARCHAR(10) DEFAULT 'medium'"),
+        ("sites", "crawl_max_depth", "INTEGER DEFAULT 0"),
+        ("sites", "crawl_exclude_patterns", "TEXT DEFAULT ''"),
+        ("sites", "response_language", "VARCHAR(10) DEFAULT 'auto'"),
     ]
     for table, column, col_type in migrations:
         try:

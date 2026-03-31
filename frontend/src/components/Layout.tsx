@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getSite, getSites } from "../lib/api";
 import { useStore } from "../lib/store";
 import { useLocale } from "../lib/useLocale";
-import { NotificationBell } from "./NotificationBell";
+import { useNotifications } from "../lib/useNotifications";
 import { useEffect, useState } from "react";
 
 const sidebarGroups = [
@@ -57,6 +57,12 @@ export default function Layout() {
   const { user, logout } = useStore();
   const { locale, setLocale, t } = useLocale();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { unreadCount } = useNotifications();
+
+  const notificationsPath = siteId ? `/site/${siteId}/notifications` : "/notifications";
+  const isNotificationsActive =
+    location.pathname === "/notifications" ||
+    (siteId != null && location.pathname === `/site/${siteId}/notifications`);
 
   // Update document title based on current route
   useEffect(() => {
@@ -69,6 +75,8 @@ export default function Layout() {
       document.title = "Models | Plugo";
     } else if (path === "/audit") {
       document.title = "Audit Log | Plugo";
+    } else if (path === "/notifications" || path.endsWith("/notifications")) {
+      document.title = `${t("notifications.title")} | Plugo`;
     } else if (path === "/login") {
       document.title = "Login | Plugo";
     } else {
@@ -212,13 +220,29 @@ export default function Layout() {
                     </Link>
                   );
                 })}
-                <NotificationBell variant="sidebar" />
+                <Link
+                  to={notificationsPath}
+                  onClick={handleNavClick}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full ${
+                    isNotificationsActive
+                      ? "bg-primary-50 text-primary-700 font-medium border-l-2 border-primary-600 pl-[10px]"
+                      : "text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  <Bell className="w-5 h-5 shrink-0" />
+                  <span className="flex-1 text-left">{t("notifications.title")}</span>
+                  {unreadCount > 0 && (
+                    <span className="bg-red-500 text-white rounded-full text-[10px] px-1.5 py-0.5 min-w-[18px] text-center shrink-0">
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </span>
+                  )}
+                </Link>
                 <button
                   onClick={() => setLocale(locale === "vi" ? "en" : "vi")}
                   className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors w-full"
                 >
                   <Globe className="w-5 h-5" />
-                  <span className="flex-1 text-left">{locale === "vi" ? "English" : "Tiếng Việt"}</span>
+                  <span className="flex-1 text-left">{locale === "vi" ? "Tiếng Việt" : "English"}</span>
                 </button>
                 <button
                   onClick={handleLogout}
@@ -272,13 +296,29 @@ export default function Layout() {
                     {navT(label)}
                   </Link>
                 ))}
-                <NotificationBell variant="sidebar" />
+                <Link
+                  to={notificationsPath}
+                  onClick={handleNavClick}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full ${
+                    isNotificationsActive
+                      ? "bg-primary-50 text-primary-700 font-medium border-l-2 border-primary-600 pl-[10px]"
+                      : "text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  <Bell className="w-5 h-5 shrink-0" />
+                  <span className="flex-1 text-left">{t("notifications.title")}</span>
+                  {unreadCount > 0 && (
+                    <span className="bg-red-500 text-white rounded-full text-[10px] px-1.5 py-0.5 min-w-[18px] text-center shrink-0">
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </span>
+                  )}
+                </Link>
                 <button
                   onClick={() => setLocale(locale === "vi" ? "en" : "vi")}
                   className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors w-full"
                 >
                   <Globe className="w-5 h-5" />
-                  <span className="flex-1 text-left">{locale === "vi" ? "English" : "Tiếng Việt"}</span>
+                  <span className="flex-1 text-left">{locale === "vi" ? "Tiếng Việt" : "English"}</span>
                 </button>
                 <button
                   onClick={handleLogout}

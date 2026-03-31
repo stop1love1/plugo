@@ -1,9 +1,10 @@
+import asyncio
 import json
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional
 from repositories import get_repos, Repositories
-from providers.factory import get_all_providers
+from providers.factory import get_all_providers, get_llm_provider
 from auth import get_current_user, TokenData
 from routers.chat import invalidate_site_cache
 from logging_config import logger
@@ -26,7 +27,9 @@ class SiteCreate(BaseModel):
 
 
 class SiteUpdate(BaseModel):
+    """Editable site settings from the dashboard."""
     name: Optional[str] = None
+    url: Optional[str] = None
     llm_provider: Optional[str] = None
     llm_model: Optional[str] = None
     primary_color: Optional[str] = None
@@ -39,10 +42,41 @@ class SiteUpdate(BaseModel):
     suggestions: Optional[list[str]] = None
     system_prompt: Optional[str] = None
     bot_rules: Optional[str] = None
+    response_language: Optional[str] = None  # "auto" | "vi" | "en"
 
 
 class ApprovalUpdate(BaseModel):
     is_approved: bool
+
+
+async def verify_site_model_config(provider: str, model: str) -> None:
+    """Fail fast when a configured site model cannot answer a minimal prompt."""
+    supported_providers = {item["id"] for item in get_all_providers()}
+    if provider not in supported_providers:
+        raise HTTPException(status_code=400, detail=f"Provider '{provider}' is not supported.")
+
+    try:
+        llm_provider = get_llm_provider(provider, model)
+        result = await asyncio.wait_for(
+            llm_provider.chat(
+                [{"role": "user", "content": "Reply with OK only."}],
+                temperature=0,
+            ),
+            timeout=20,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Model '{model}' for provider '{provider}' failed verification: {exc}",
+        ) from exc
+
+    if not isinstance(result, dict) or not result.get("content"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Model '{model}' for provider '{provider}' returned an empty response during verification.",
+        )
 
 
 @router.post("")
@@ -113,9 +147,17 @@ async def update_site(
     repos: Repositories = Depends(get_repos),
     user: TokenData = Depends(get_current_user),
 ):
-    site = await repos.sites.update(site_id, data.model_dump(exclude_none=True))
-    if not site:
+    existing_site = await repos.sites.get_by_id(site_id)
+    if not existing_site:
         raise HTTPException(status_code=404, detail="Site not found")
+
+    update_payload = data.model_dump(exclude_none=True)
+    if "llm_provider" in update_payload or "llm_model" in update_payload:
+        provider = update_payload.get("llm_provider", existing_site["llm_provider"])
+        model = update_payload.get("llm_model", existing_site["llm_model"])
+        await verify_site_model_config(provider, model)
+
+    site = await repos.sites.update(site_id, update_payload)
     invalidate_site_cache()  # Clear all since we don't know token from site_id easily
     try:
         await repos.audit_logs.create({

@@ -107,6 +107,20 @@ async def test_update_site(client, auth_headers, test_site):
 
 
 @pytest.mark.asyncio
+async def test_update_site_url(client, auth_headers, test_site):
+    """PUT /api/sites/{site_id} should update the website URL."""
+    response = await client.put(
+        f"/api/sites/{test_site['id']}",
+        json={"url": "https://updated.example.com"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["url"] == "https://updated.example.com"
+
+
+@pytest.mark.asyncio
 async def test_update_site_without_auth(client, test_site):
     """PUT /api/sites/{site_id} without auth should return 401."""
     response = await client.put(f"/api/sites/{test_site['id']}", json={
@@ -122,6 +136,28 @@ async def test_update_site_not_found(client, auth_headers):
         "name": "Ghost Site",
     }, headers=auth_headers)
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_site_rejects_non_working_model(client, auth_headers, test_site, monkeypatch):
+    """PUT /api/sites/{site_id} should reject model configs that fail verification."""
+    async def fake_get_llm_provider(provider: str | None = None, model: str | None = None):
+        raise AssertionError("This helper should not be awaited")
+
+    class BrokenProvider:
+        async def chat(self, messages, system_prompt="", tools=None, temperature=0.7):
+            raise RuntimeError("Model check failed")
+
+    monkeypatch.setattr("providers.factory.get_llm_provider", lambda provider=None, model=None: BrokenProvider())
+
+    response = await client.put(
+        f"/api/sites/{test_site['id']}",
+        json={"llm_provider": "openai", "llm_model": "bad-model"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 400
+    assert "bad-model" in response.json()["detail"]
 
 
 @pytest.mark.asyncio

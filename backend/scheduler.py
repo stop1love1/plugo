@@ -18,10 +18,16 @@ async def _scheduler_loop():
     check_interval = settings.crawl_scheduler_interval
     max_concurrent = settings.crawl_max_concurrent_auto
 
+    first_run = True
     while True:
         try:
-            jitter = random.uniform(0, JITTER_SECONDS)
-            await asyncio.sleep(check_interval + jitter)
+            if first_run:
+                # Run immediately on startup (short delay for DB init)
+                await asyncio.sleep(5)
+                first_run = False
+            else:
+                jitter = random.uniform(0, JITTER_SECONDS)
+                await asyncio.sleep(check_interval + jitter)
 
             repos = await create_repos()
             try:
@@ -43,15 +49,19 @@ async def _scheduler_loop():
                     enabled = site.get("crawl_enabled", False)
                     interval_hours = site.get("crawl_auto_interval", 0)
 
-                    if not enabled or interval_hours <= 0:
+                    if not enabled:
                         continue
 
                     if site_id in _active_crawlers:
                         continue
 
+                    # If crawl_status is "running" but no active crawler, it's orphaned — reset
+                    if site.get("crawl_status") == "running":
+                        continue
+
                     # Check when last crawled
                     last_crawled = site.get("last_crawled_at")
-                    if last_crawled:
+                    if interval_hours > 0 and last_crawled:
                         if isinstance(last_crawled, str):
                             last_crawled = datetime.fromisoformat(last_crawled)
                         if not last_crawled.tzinfo:
@@ -59,6 +69,9 @@ async def _scheduler_loop():
                         next_crawl_at = last_crawled + timedelta(hours=interval_hours)
                         if now < next_crawl_at:
                             continue
+                    elif interval_hours <= 0 and last_crawled:
+                        # No auto interval set and already crawled at least once — skip
+                        continue
 
                     max_pages = site.get("crawl_max_pages", 50)
                     crawl_url = site["url"]

@@ -54,6 +54,8 @@ class MongoSiteRepo(BaseSiteRepo):
             "crawl_enabled": data.get("crawl_enabled", False),
             "crawl_auto_interval": data.get("crawl_auto_interval", 0),
             "crawl_max_pages": data.get("crawl_max_pages", 50),
+            "crawl_max_depth": data.get("crawl_max_depth", 0),
+            "crawl_exclude_patterns": data.get("crawl_exclude_patterns", ""),
             "crawl_status": data.get("crawl_status", "idle"),
             "last_crawled_at": None,
             "knowledge_count": 0,
@@ -213,6 +215,14 @@ class MongoKnowledgeRepo(BaseKnowledgeRepo):
             }},
         ]
         return [doc async for doc in self.col.aggregate(pipeline)]
+
+    async def list_content_hashes(self, site_id: str) -> set[str]:
+        """Return all content hashes for a site (for deduplication)."""
+        cursor = self.col.find(
+            {"site_id": site_id, "content_hash": {"$ne": None}},
+            {"content_hash": 1, "_id": 0},
+        )
+        return {doc["content_hash"] async for doc in cursor if doc.get("content_hash")}
 
     async def list_by_url(self, site_id: str, source_url: str) -> list[dict]:
         cursor = self.col.find(

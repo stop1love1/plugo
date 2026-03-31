@@ -91,16 +91,52 @@ class ChatAgent:
         llm_model: str = "claude-sonnet-4-20250514",
         system_prompt: str = "",
         bot_rules: str = "",
+        response_language: str = "auto",
     ):
         self.site_id = site_id
         self.site_name = site_name
         self.site_url = site_url
         self.custom_system_prompt = system_prompt
         self.bot_rules = bot_rules
+        self.response_language = response_language  # "auto" | "vi" | "en"
         self.llm_provider_name = llm_provider
         self.provider: BaseLLMProvider = get_llm_provider(llm_provider, llm_model)
         self.messages: list[dict] = []
         self.supports_tools = llm_provider not in self._NO_TOOL_PROVIDERS
+
+    @staticmethod
+    def _is_likely_vietnamese(text: str) -> bool:
+        lowered = text.lower()
+        vietnamese_markers = (
+            "không",
+            "có",
+            "gì",
+            "như",
+            "giải pháp",
+            "cung cấp",
+            "cung cap",
+            "bao nhiêu",
+            "ở đâu",
+            "là gì",
+            "la gi",
+            "o dau",
+            "khong",
+        )
+        return any(marker in lowered for marker in vietnamese_markers) or any(ord(ch) > 127 for ch in text)
+
+    def _no_knowledge_response(self) -> str:
+        if self._is_likely_vietnamese(self.messages[-1]["content"] if self.messages else ""):
+            return (
+                "Mình chưa có thông tin này trong Knowledge hiện tại của website, "
+                "nên không thể trả lời chính xác. Bạn hãy crawl thêm nội dung liên quan "
+                "hoặc kiểm tra trực tiếp trên trang web."
+            )
+
+        return (
+            "I couldn't find this information in the current website knowledge base, "
+            "so I can't answer it accurately. Please crawl more relevant content or "
+            "check the website directly."
+        )
 
     async def _build_system_prompt(
         self,
@@ -109,8 +145,8 @@ class ChatAgent:
         repos=None,
         visitor_id: Optional[str] = None,
         conversation_summary: Optional[str] = None,
-    ) -> tuple[str, list[dict]]:
-        """Build system prompt and return (prompt, tools)."""
+    ) -> tuple[str, list[dict], bool]:
+        """Build system prompt and return (prompt, tools, has_knowledge_match)."""
 
         # --- Visitor memory ---
         memory_section = ""
@@ -145,6 +181,7 @@ class ChatAgent:
 
         # --- Knowledge (from crawl) ---
         knowledge_section = ""
+        has_knowledge_match = False
         try:
             # Check embedding cache first
             query_embedding = embed_cache.get(query)
@@ -168,8 +205,19 @@ class ChatAgent:
 
             if query_embedding is not None:
                 chunks = await rag_engine.search(self.site_id, query_embedding, top_k=10)
+                if chunks and repos:
+                    try:
+                        valid_chunk_ids = {
+                            chunk["id"] for chunk in await repos.knowledge.get_many([chunk["id"] for chunk in chunks])
+                        }
+                        chunks = [chunk for chunk in chunks if chunk["id"] in valid_chunk_ids]
+                    except AttributeError:
+                        pass
+                    except Exception as e:
+                        logger.warning("Failed to validate knowledge chunks against DB", error=str(e))
 
                 if chunks:
+                    has_knowledge_match = True
                     knowledge_parts = []
                     for i, chunk in enumerate(chunks):
                         source = chunk["metadata"].get("source_url", "")
@@ -180,7 +228,10 @@ class ChatAgent:
                         )
                     knowledge_section = (
                         "## Knowledge Base (crawled content)\n"
-                        "When answering from the knowledge base, cite sources using [1], [2] etc.\n\n"
+                        "IMPORTANT: When answering from the knowledge base, you MUST cite your sources.\n"
+                        "At the end of your answer, add a '**Sources:**' section listing the URLs you used, e.g.:\n"
+                        "**Sources:**\n"
+                        "- [Page Title](https://example.com/page)\n\n"
                         + "\n\n---\n\n".join(knowledge_parts)
                     )
                 elif not knowledge_section:
@@ -229,7 +280,15 @@ class ChatAgent:
             if rules_list:
                 prompt += "\n\n## Site-specific Rules\n" + "\n".join(f"- {r}" for r in rules_list)
 
-        return prompt, tools
+        # Inject response language instruction
+        if self.response_language == "vi":
+            prompt += "\n\n## Language\nYou MUST respond in Vietnamese (Tiếng Việt) at all times, regardless of the language the user writes in."
+        elif self.response_language == "en":
+            prompt += "\n\n## Language\nYou MUST respond in English at all times, regardless of the language the user writes in."
+        else:
+            prompt += "\n\n## Language\nDetect the language of the user's message and respond in the same language. If unclear, respond in Vietnamese."
+
+        return prompt, tools, has_knowledge_match
 
     async def stream_response(
         self,
@@ -242,9 +301,16 @@ class ChatAgent:
         """Process user message → stream response with tool calling support."""
         self.messages.append({"role": "user", "content": message})
 
-        system_prompt, tools = await self._build_system_prompt(
+        system_prompt, tools, has_knowledge_match = await self._build_system_prompt(
             message, page_context, repos, visitor_id, conversation_summary,
         )
+
+        if not has_knowledge_match:
+            fallback = self._no_knowledge_response()
+            self.messages.append({"role": "assistant", "content": fallback})
+            for token in fallback:
+                yield token
+            return
 
         # First, use non-streaming call to detect tool calls
         max_tool_rounds = 3
@@ -312,9 +378,14 @@ class ChatAgent:
     ) -> str:
         """Process user message → full response with tool calling."""
         self.messages.append({"role": "user", "content": message})
-        system_prompt, tools = await self._build_system_prompt(
+        system_prompt, tools, has_knowledge_match = await self._build_system_prompt(
             message, page_context, repos, visitor_id, conversation_summary,
         )
+
+        if not has_knowledge_match:
+            fallback = self._no_knowledge_response()
+            self.messages.append({"role": "assistant", "content": fallback})
+            return fallback
 
         effective_tools = tools if (tools and self.supports_tools) else None
         result = await self.provider.chat(

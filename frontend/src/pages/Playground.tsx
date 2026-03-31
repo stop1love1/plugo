@@ -22,8 +22,9 @@ function buildPlaygroundHtml(site: Site, siteUrl: string): string {
 <title>${site.name || "Playground"}</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body, html { width: 100%; height: 100%; overflow: hidden; }
-  iframe { width: 100%; height: 100%; border: 0; }
+  body, html { width: 100%; height: 100%; overflow: hidden; position: relative; }
+  /* Keep preview iframe under #plugo-widget so chat UI stays clickable */
+  iframe { width: 100%; height: 100%; border: 0; position: relative; z-index: 0; }
 </style>
 </head><body>
 <iframe src="${siteUrl}" sandbox="allow-scripts allow-same-origin allow-popups allow-forms"></iframe>

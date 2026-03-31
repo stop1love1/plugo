@@ -12,7 +12,7 @@ import {
 import api from "../lib/api";
 import { useLocale } from "../lib/useLocale";
 import { OnboardingChecklist } from "../components/OnboardingChecklist";
-import { pushNotification } from "../components/NotificationBell";
+import { pushNotification } from "../lib/notifications";
 
 // API calls
 const toggleCrawl = (siteId: string, data: { enabled: boolean; max_pages?: number; auto_interval?: number; max_depth?: number; exclude_patterns?: string }) =>
@@ -180,7 +180,7 @@ export default function Setup() {
         site_id: siteId!,
         url: customUrl || undefined,
         max_pages: maxPages,
-        max_depth: maxDepth || undefined,
+        max_depth: maxDepth,
         force_recrawl: forceRecrawl || undefined,
         exclude_patterns: excludePatterns || undefined,
       }),
@@ -311,53 +311,59 @@ export default function Setup() {
           <h3 className="font-semibold text-lg">{t("setup.autoCrawl")}</h3>
         </div>
 
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            {isEnabled ? (
-              <Power className="w-6 h-6 text-green-500" />
-            ) : (
-              <PowerOff className="w-6 h-6 text-gray-400" />
-            )}
-            <div>
-              <p className="font-medium">
-                {t("setup.crawlToggle")}: {isEnabled ? "ON" : "OFF"}
-              </p>
-              <p className="text-sm text-gray-500">
-                {isEnabled ? t("setup.autoCrawlDesc") : t("setup.autoCrawlOff")}
-              </p>
+        {/* Settings always visible — before toggle */}
+        <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-100 space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {t("setup.maxPages")}
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={1}
+                max={500}
+                value={maxPages}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  setMaxPages(val);
+                  updateCrawlSettings(siteId!, { max_pages: val }).then(() => {
+                    refetchStatus();
+                  });
+                }}
+                className="flex-1 accent-primary-500"
+              />
+              <input
+                type="number"
+                value={maxPages}
+                onChange={(e) => {
+                  const val = Math.max(1, Math.min(500, parseInt(e.target.value) || 50));
+                  setMaxPages(val);
+                  updateCrawlSettings(siteId!, { max_pages: val }).then(() => {
+                    refetchStatus();
+                  });
+                }}
+                min={1}
+                max={500}
+                className="w-16 border border-gray-300 rounded-lg px-2 py-1 text-sm text-center outline-none"
+              />
+              <span className="text-xs text-gray-500">{t("setup.pages")}</span>
             </div>
           </div>
-
-          <button
-            onClick={() => toggleMutation.mutate(!isEnabled)}
-            disabled={toggleMutation.isPending}
-            className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
-              isEnabled ? "bg-green-500" : "bg-gray-300"
-            }`}
-          >
-            <span
-              className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform shadow ${
-                isEnabled ? "translate-x-7" : "translate-x-1"
-              }`}
-            />
-          </button>
-        </div>
-
-        {/* Auto-crawl interval setting */}
-        {isEnabled && (
-          <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
-            <label className="block text-sm font-medium text-blue-800 mb-1">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
               {t("setup.autoInterval")}
             </label>
             <div className="flex items-center gap-3">
               <select
                 value={autoInterval}
                 onChange={(e) => {
-                  const val = parseInt(e.target.value);
+                  const val = parseInt(e.target.value, 10);
                   setAutoInterval(val);
-                  toggleCrawl(siteId!, { enabled: true, auto_interval: val });
+                  updateCrawlSettings(siteId!, { auto_interval: val }).then(() => {
+                    refetchStatus();
+                  });
                 }}
-                className="border border-blue-200 rounded-lg px-3 py-1.5 text-sm outline-none bg-white"
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none bg-white"
               >
                 <option value={0}>{t("setup.intervalDisabled")}</option>
                 <option value={6}>6h</option>
@@ -367,13 +373,67 @@ export default function Setup() {
                 <option value={168}>{t("setup.intervalWeekly")}</option>
               </select>
               {autoInterval > 0 && (
-                <span className="text-xs text-blue-600">
+                <span className="text-xs text-gray-500">
                   {t("setup.autoIntervalDesc")}
                 </span>
               )}
             </div>
           </div>
-        )}
+        </div>
+
+        {/* Toggle ON/OFF */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            {isEnabled ? (
+              isActive ? (
+                <RefreshCw className="w-6 h-6 text-blue-500 animate-spin" />
+              ) : (
+                <Power className="w-6 h-6 text-green-500" />
+              )
+            ) : (
+              <PowerOff className="w-6 h-6 text-gray-400" />
+            )}
+            <div>
+              <p className="font-medium">
+                {t("setup.crawlToggle")}: {isEnabled ? "ON" : "OFF"}
+              </p>
+              <p className="text-sm text-gray-500">
+                {isEnabled
+                  ? isActive
+                    ? t("setup.crawlingNow")
+                    : t("setup.autoCrawlDesc")
+                  : t("setup.autoCrawlOff")}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Quick "Run Now" when enabled but idle */}
+            {isEnabled && !isActive && (
+              <button
+                onClick={() => startMutation.mutate()}
+                disabled={startMutation.isPending}
+                className="flex items-center gap-1.5 text-sm text-blue-600 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-100 disabled:opacity-50"
+              >
+                <Play className="w-3.5 h-3.5" />
+                {t("setup.runNow")}
+              </button>
+            )}
+            <button
+              onClick={() => toggleMutation.mutate(!isEnabled)}
+              disabled={toggleMutation.isPending}
+              className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
+                isEnabled ? "bg-green-500" : "bg-gray-300"
+              }`}
+            >
+              <span
+                className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform shadow ${
+                  isEnabled ? "translate-x-7" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
+        </div>
 
         {/* Stats */}
         <div className="grid grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">

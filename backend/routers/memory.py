@@ -36,7 +36,11 @@ async def list_visitors_with_memories(
                 "memory_count": 0,
                 "last_updated": mem.get("updated_at"),
             }
-        visitor_map[vid]["memory_count"] += 1
+        entry = visitor_map[vid]
+        entry["memory_count"] += 1
+        lu = mem.get("updated_at")
+        if lu and (not entry.get("last_updated") or lu > entry["last_updated"]):
+            entry["last_updated"] = lu
 
     return list(visitor_map.values())
 
