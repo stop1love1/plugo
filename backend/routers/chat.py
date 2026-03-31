@@ -323,6 +323,7 @@ async def _handle_message(
     await websocket.send_json({"type": "start"})
 
     full_response = ""
+    stream_error = False
     try:
         async for token in agent.stream_response(
             message=message,
@@ -332,23 +333,45 @@ async def _handle_message(
             conversation_summary=conversation_summary,
         ):
             full_response += token
-            await websocket.send_json({"type": "token", "content": token})
+            try:
+                await websocket.send_json({"type": "token", "content": token})
+            except Exception:
+                # Client disconnected mid-stream — stop generating but keep what we have
+                stream_error = True
+                break
+    except asyncio.TimeoutError:
+        logger.warning("Chat stream timeout", session_id=session_id)
+        full_response += "\n\n⚠️ Response timed out."
+        try:
+            await websocket.send_json({"type": "error", "message": "Response timed out. Please try again."})
+        except Exception:
+            stream_error = True
     except Exception as e:
         logger.error("Chat stream error", error=str(e), error_type=type(e).__name__, session_id=session_id)
-        await websocket.send_json({
-            "type": "error",
-            "message": "An error occurred. Please try again.",
+        try:
+            await websocket.send_json({"type": "error", "message": "An error occurred. Please try again."})
+        except Exception:
+            stream_error = True
+        if not full_response:
+            full_response = "Sorry, an error occurred. Please try again."
+
+    # Only save complete responses (skip if client disconnected with no content)
+    if full_response.strip():
+        messages.append({
+            "role": "assistant",
+            "content": full_response,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         })
-        full_response = "Sorry, an error occurred. Please try again."
+        try:
+            await repos.chat_sessions.update_messages(session_id, messages)
+        except Exception as e:
+            logger.error("Failed to save messages", session_id=session_id, error=str(e))
 
-    messages.append({
-        "role": "assistant",
-        "content": full_response,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    })
-    await repos.chat_sessions.update_messages(session_id, messages)
-
-    await websocket.send_json({"type": "end"})
+    if not stream_error:
+        try:
+            await websocket.send_json({"type": "end"})
+        except Exception:
+            pass
 
 
 async def _extract_and_save_memories(visitor_id, site, session_id, messages):

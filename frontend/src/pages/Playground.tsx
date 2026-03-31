@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getSite, type Site } from "../lib/api";
@@ -13,21 +13,28 @@ const deviceStyles: Record<Device, { width: string; label: string }> = {
   mobile: { width: "375px", label: "Mobile" },
 };
 
+declare const __BACKEND_URL__: string;
+
 function buildPlaygroundHtml(site: Site, siteUrl: string): string {
   const backendUrl = import.meta.env.VITE_BACKEND_URL || __BACKEND_URL__;
   const wsUrl = backendUrl.replace(/^http/, "ws");
 
+  // Escape for safe embedding in srcdoc
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${site.name || "Playground"}</title>
+<title>${esc(site.name || "Playground")}</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body, html { width: 100%; height: 100%; overflow: hidden; position: relative; }
-  /* Keep preview iframe under #plugo-widget so chat UI stays clickable */
-  iframe { width: 100%; height: 100%; border: 0; position: relative; z-index: 0; }
+  body, html { width: 100%; height: 100%; font-family: -apple-system, system-ui, sans-serif; background: #f9fafb; }
+  .playground-body { width: 100%; height: 100%; position: relative; overflow: auto; }
+  .site-frame { width: 100%; height: 100%; border: 0; }
 </style>
 </head><body>
-<iframe src="${siteUrl}" sandbox="allow-scripts allow-same-origin allow-popups allow-forms"></iframe>
+<div class="playground-body">
+  <iframe class="site-frame" src="${esc(siteUrl)}" sandbox="allow-scripts allow-same-origin allow-popups allow-forms"></iframe>
+</div>
 <script>
   window.PlugoConfig = {
     token: ${JSON.stringify(site.token || "")},
@@ -43,16 +50,15 @@ function buildPlaygroundHtml(site: Site, siteUrl: string): string {
     darkMode: ${site.dark_mode === "dark" ? "true" : site.dark_mode === "light" ? "false" : "undefined"},
   };
 </script>
-<script src="${backendUrl}/static/widget.js" async></script>
+<script src="${esc(backendUrl)}/static/widget.js" async><\/script>
 </body></html>`;
 }
 
 export default function Playground() {
   const { siteId } = useParams<{ siteId: string }>();
   const { t } = useLocale();
-  const iframeRef = useRef<HTMLIFrameElement>(null);
   const [device, setDevice] = useState<Device>("desktop");
-  const [key, setKey] = useState(0);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const { data: site } = useQuery({
     queryKey: ["site", siteId],
@@ -60,22 +66,27 @@ export default function Playground() {
     enabled: !!siteId,
   });
 
+  // Hide parent <main> overflow so only the iframe scrolls
+  useEffect(() => {
+    const main = document.querySelector("main");
+    if (main) {
+      main.style.overflow = "hidden";
+      return () => { main.style.overflow = ""; };
+    }
+  }, []);
+
   const siteUrl = site?.url
     ? (site.url.startsWith("http") ? site.url : `https://${site.url}`)
     : "";
 
-  // Write HTML into iframe whenever site/key changes
-  useEffect(() => {
-    if (!iframeRef.current || !site || !siteUrl) return;
-    const doc = iframeRef.current.contentDocument;
-    if (doc) {
-      doc.open();
-      doc.write(buildPlaygroundHtml(site, siteUrl));
-      doc.close();
-    }
-  }, [site, siteUrl, key]);
+  // Build srcdoc HTML — memoized to avoid unnecessary re-renders
+  const srcdoc = useMemo(() => {
+    if (!site || !siteUrl) return "";
+    return buildPlaygroundHtml(site, siteUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [site, siteUrl, reloadKey]);
 
-  const handleReload = () => setKey((k) => k + 1);
+  const handleReload = () => setReloadKey((k) => k + 1);
 
   if (!site) {
     return <div className="flex items-center justify-center h-64 text-gray-400">{t("common.loading")}</div>;
@@ -84,9 +95,9 @@ export default function Playground() {
   const deviceStyle = deviceStyles[device];
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col">
+    <div className="h-[calc(100vh-8rem)] lg:h-[calc(100vh-5rem)] flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-2 shrink-0">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{t("playground.title")}</h1>
           <p className="text-gray-500 text-sm">{t("playground.subtitle")}</p>
@@ -94,7 +105,7 @@ export default function Playground() {
       </div>
 
       {/* Toolbar */}
-      <div className="bg-white border border-gray-200 rounded-t-xl px-4 py-2 flex items-center gap-3">
+      <div className="bg-white border border-gray-200 rounded-t-xl px-4 py-2 flex items-center gap-3 shrink-0">
         <Globe className="w-4 h-4 text-gray-400 shrink-0" />
         <span className="flex-1 text-sm text-gray-600 truncate" title={siteUrl}>
           {siteUrl || t("playground.noUrl")}
@@ -141,17 +152,18 @@ export default function Playground() {
       </div>
 
       {/* Preview area */}
-      <div className="flex-1 bg-gray-100 border border-t-0 border-gray-200 rounded-b-xl flex items-start justify-center overflow-hidden p-4">
+      <div className="flex-1 min-h-0 bg-gray-100 border border-t-0 border-gray-200 rounded-b-xl flex justify-center overflow-hidden">
         {siteUrl ? (
           <div
-            className="bg-white shadow-lg rounded-lg overflow-hidden transition-all duration-300 h-full"
+            className="bg-white overflow-hidden h-full"
             style={{ width: deviceStyle.width, maxWidth: "100%" }}
           >
             <iframe
-              ref={iframeRef}
-              key={key}
+              key={reloadKey}
               title="Playground"
+              srcDoc={srcdoc}
               className="w-full h-full border-0"
+              style={{ overflow: "auto" }}
               sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
             />
           </div>
@@ -164,7 +176,7 @@ export default function Playground() {
       </div>
 
       {/* Info bar */}
-      <div className="mt-2 flex items-center justify-between text-xs text-gray-400">
+      <div className="mt-1 flex items-center justify-between text-xs text-gray-400 shrink-0">
         <span>
           Token: <code className="bg-gray-100 px-1 rounded">{site.token?.slice(0, 12)}...</code>
         </span>

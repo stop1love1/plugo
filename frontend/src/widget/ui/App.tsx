@@ -248,19 +248,21 @@ export function App({ token, serverUrl, primaryColor, greeting, position, widget
     (message: string) => {
       if (!ws || !message.trim()) return;
 
+      // Check connection BEFORE adding message to state
+      const sent = ws.send(message, getPageContext());
+      if (!sent) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "bot", content: "\u26a0\ufe0f Message could not be sent. Please check your connection.", timestamp: Date.now() },
+        ]);
+        return;
+      }
+
       setSuggestions([]);
       setMessages((prev) => {
         const updated = [...prev, { role: "user", content: message, timestamp: Date.now() }];
         return updated.length > MAX_MESSAGES ? updated.slice(-MAX_MESSAGES) : updated;
       });
-      const sent = ws.send(message, getPageContext());
-      if (!sent) {
-        // Message failed to send — notify user
-        setMessages((prev) => [
-          ...prev,
-          { role: "bot", content: "\u26a0\ufe0f Message could not be sent. Please check your connection.", timestamp: Date.now() },
-        ]);
-      }
     },
     [ws, getPageContext]
   );

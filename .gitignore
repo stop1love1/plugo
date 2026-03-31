@@ -42,3 +42,6 @@ coverage/
 
 # Ruff cache
 .ruff_cache/
+
+# Playwright
+.playwright-mcp/
