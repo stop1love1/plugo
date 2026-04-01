@@ -86,8 +86,7 @@ plugo/
 │   └── routers/      # API endpoints
 ├── widget/           # Embeddable chat widget (Preact)
 ├── dashboard/        # Management UI (React)
-├── docs/             # Documentation
-└── examples/         # Usage examples
+└── docs/             # Documentation
 ```
 
 ## Making Changes

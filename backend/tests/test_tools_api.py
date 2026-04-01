@@ -1,5 +1,7 @@
 """Tests for Tools CRUD flow."""
 
+import contextlib
+
 import pytest
 
 
@@ -23,10 +25,8 @@ async def test_tool(db_repos, test_site):
         "auth_value": "test-api-key",
     })
     yield tool
-    try:
+    with contextlib.suppress(Exception):
         await db_repos.tools.delete(tool["id"])
-    except Exception:
-        pass
 
 
 @pytest.mark.asyncio

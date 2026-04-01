@@ -1,11 +1,29 @@
 export type ConnectionState = "connecting" | "connected" | "reconnecting" | "disconnected";
 
+export type WsHistoryItem = {
+  role?: string;
+  content?: string;
+  timestamp?: number;
+};
+
+export type WsConnectedPayload = {
+  session_id?: string;
+  suggestions?: string[];
+  resumed?: boolean;
+  history?: WsHistoryItem[];
+  greeting?: string;
+};
+
+export type WsEndPayload = {
+  suggestions?: string[];
+};
+
 export type MessageHandler = {
   onToken: (token: string) => void;
   onStart: () => void;
-  onEnd: (data?: any) => void;
+  onEnd: (data?: WsEndPayload) => void;
   onError: (error: string) => void;
-  onConnected: (data: any) => void;
+  onConnected: (data: WsConnectedPayload) => void;
   onConnectionChange?: (state: ConnectionState) => void;
 };
 
@@ -104,7 +122,7 @@ export class PlugoWebSocket {
     }
   }
 
-  send(message: string, pageContext: any): boolean {
+  send(message: string, pageContext: Record<string, unknown>): boolean {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(
         JSON.stringify({

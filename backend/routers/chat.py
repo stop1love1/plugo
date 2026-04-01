@@ -1,20 +1,31 @@
-import json
+import asyncio
+import contextlib
 import re
 import uuid
-import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from time import time
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from repositories import create_repos
+
 from agent.core import ChatAgent
-from agent.memory import MemoryExtractor, ConversationSummarizer
-from providers.factory import get_llm_provider
+from agent.memory import ConversationSummarizer, MemoryExtractor
 from logging_config import logger
+from providers.factory import get_llm_provider
+from repositories import create_repos
 
 router = APIRouter()
 
 # Store active agents per session
 active_agents: dict[str, ChatAgent] = {}
+
+# Retain references until background tasks complete (RUF006 / asyncio.create_task)
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _fire_and_forget(coro):
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 # --- WebSocket rate limiting ---
 WS_RATE_LIMIT_WINDOW = 60  # seconds
@@ -111,7 +122,7 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
                 return
 
     if not site.get("is_approved"):
-        await websocket.send_json({"type": "error", "message": "Site is pending approval. Contact admin."})
+        await websocket.send_json({"type": "error", "message": "This chat is not available yet. Please try again later."})
         await websocket.close()
         return
 
@@ -143,14 +154,14 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
                 try:
                     ended_time = datetime.fromisoformat(ended_at)
                     if ended_time.tzinfo is None:
-                        ended_time = ended_time.replace(tzinfo=timezone.utc)
-                    can_resume = (datetime.now(timezone.utc) - ended_time).total_seconds() < 300
+                        ended_time = ended_time.replace(tzinfo=UTC)
+                    can_resume = (datetime.now(UTC) - ended_time).total_seconds() < 300
                 except ValueError:
                     pass
             elif ended_at and isinstance(ended_at, datetime):
                 if ended_at.tzinfo is None:
-                    ended_at = ended_at.replace(tzinfo=timezone.utc)
-                can_resume = (datetime.now(timezone.utc) - ended_at).total_seconds() < 300
+                    ended_at = ended_at.replace(tzinfo=UTC)
+                can_resume = (datetime.now(UTC) - ended_at).total_seconds() < 300
 
             if can_resume:
                 session_id = existing_session["id"]
@@ -271,9 +282,7 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
 
             # Periodic summarization (every 20 messages)
             if len(messages) > 0 and len(messages) % 20 == 0:
-                asyncio.create_task(
-                    _maybe_summarize(session_id, site, list(messages))
-                )
+                _fire_and_forget(_maybe_summarize(session_id, site, list(messages)))
 
     except WebSocketDisconnect:
         pass
@@ -282,10 +291,8 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
     finally:
         heartbeat_active = False
         heartbeat_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await heartbeat_task
-        except asyncio.CancelledError:
-            pass
 
         try:
             await repos.chat_sessions.set_ended(session_id)
@@ -297,9 +304,7 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
 
         # Background: extract memories from this conversation
         if visitor_id and messages and len(messages) >= 4:
-            asyncio.create_task(
-                _extract_and_save_memories(visitor_id, site, session_id, list(messages))
-            )
+            _fire_and_forget(_extract_and_save_memories(visitor_id, site, session_id, list(messages)))
 
 
 async def _handle_message(
@@ -317,7 +322,7 @@ async def _handle_message(
     messages.append({
         "role": "user",
         "content": message,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     })
 
     await websocket.send_json({"type": "start"})
@@ -339,28 +344,28 @@ async def _handle_message(
                 # Client disconnected mid-stream — stop generating but keep what we have
                 stream_error = True
                 break
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.warning("Chat stream timeout", session_id=session_id)
         full_response += "\n\n⚠️ Response timed out."
         try:
-            await websocket.send_json({"type": "error", "message": "Response timed out. Please try again."})
+            await websocket.send_json({"type": "error", "message": "Sorry, that took too long. Please try again."})
         except Exception:
             stream_error = True
     except Exception as e:
-        logger.error("Chat stream error", error=str(e), error_type=type(e).__name__, session_id=session_id)
+        logger.error("Chat stream error: {error_type}: {error}", error=str(e), error_type=type(e).__name__, session_id=session_id)
         try:
-            await websocket.send_json({"type": "error", "message": "An error occurred. Please try again."})
+            await websocket.send_json({"type": "error", "message": "Oops, something went wrong. Please try again."})
         except Exception:
             stream_error = True
         if not full_response:
-            full_response = "Sorry, an error occurred. Please try again."
+            full_response = "Oops, something went wrong. Please try again."
 
     # Only save complete responses (skip if client disconnected with no content)
     if full_response.strip():
         messages.append({
             "role": "assistant",
             "content": full_response,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         })
         try:
             await repos.chat_sessions.update_messages(session_id, messages)
@@ -368,10 +373,8 @@ async def _handle_message(
             logger.error("Failed to save messages", session_id=session_id, error=str(e))
 
     if not stream_error:
-        try:
+        with contextlib.suppress(Exception):
             await websocket.send_json({"type": "end"})
-        except Exception:
-            pass
 
 
 async def _extract_and_save_memories(visitor_id, site, session_id, messages):

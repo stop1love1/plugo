@@ -1,13 +1,14 @@
 import asyncio
 import json
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from typing import Optional
-from repositories import get_repos, Repositories
-from providers.factory import get_all_providers, get_llm_provider
-from auth import get_current_user, TokenData
-from routers.chat import invalidate_site_cache
+
+from auth import TokenData, get_current_user
 from logging_config import logger
+from providers.factory import get_all_providers, get_llm_provider
+from repositories import Repositories, get_repos
+from routers.chat import invalidate_site_cache
 
 router = APIRouter(prefix="/api/sites", tags=["sites"])
 
@@ -28,21 +29,21 @@ class SiteCreate(BaseModel):
 
 class SiteUpdate(BaseModel):
     """Editable site settings from the dashboard."""
-    name: Optional[str] = None
-    url: Optional[str] = None
-    llm_provider: Optional[str] = None
-    llm_model: Optional[str] = None
-    primary_color: Optional[str] = None
-    greeting: Optional[str] = None
-    position: Optional[str] = None
-    widget_title: Optional[str] = None
-    dark_mode: Optional[str] = None
-    show_branding: Optional[bool] = None
-    allowed_domains: Optional[str] = None
-    suggestions: Optional[list[str]] = None
-    system_prompt: Optional[str] = None
-    bot_rules: Optional[str] = None
-    response_language: Optional[str] = None  # "auto" | "vi" | "en"
+    name: str | None = None
+    url: str | None = None
+    llm_provider: str | None = None
+    llm_model: str | None = None
+    primary_color: str | None = None
+    greeting: str | None = None
+    position: str | None = None
+    widget_title: str | None = None
+    dark_mode: str | None = None
+    show_branding: bool | None = None
+    allowed_domains: str | None = None
+    suggestions: list[str] | None = None
+    system_prompt: str | None = None
+    bot_rules: str | None = None
+    response_language: str | None = None  # "auto" | "vi" | "en"
 
 
 class ApprovalUpdate(BaseModel):

@@ -1,28 +1,26 @@
 import os
 from contextlib import asynccontextmanager
+
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse
-import json as _json
-from html import escape as html_escape
-from dotenv import load_dotenv
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 load_dotenv()
 
+import models  # noqa: F401 — ensure all models registered for Base.metadata.create_all
 from config import settings, validate_settings
 from logging_config import logger
-from routers import chat, sites, crawl, knowledge, tools, sessions, memory, analytics
-from routers import auth as auth_router
+from routers import analytics, chat, crawl, knowledge, memory, sessions, sites, tools
 from routers import audit as audit_router
+from routers import auth as auth_router
 from routers import llm_keys as llm_keys_router
+from routers import config as config_router
 from routers import models as models_router
-from routers import demo_api
-import models  # noqa: F401 — ensure all models registered for Base.metadata.create_all
-
 
 # --- Rate limiter ---
 limiter = Limiter(key_func=get_remote_address, default_limits=[settings.rate_limit_default])
@@ -130,100 +128,7 @@ app.include_router(analytics.router)
 app.include_router(audit_router.router)
 app.include_router(llm_keys_router.router)
 app.include_router(models_router.router)
-app.include_router(demo_api.router)
-
-
-@app.get("/demo/{site_token}", response_class=HTMLResponse)
-async def demo_page(site_token: str):
-    """Serve a demo page with the widget embedded for testing."""
-    from repositories import create_repos
-    from routers.demo_api import ensure_demo_tools
-    repos = await create_repos()
-    try:
-        site = await repos.sites.get_by_token(site_token)
-        if site:
-            base_url = f"http://localhost:{settings.backend_port}"
-            await ensure_demo_tools(site["id"], repos, base_url)
-    finally:
-        await repos.close()
-    if not site:
-        return HTMLResponse("<h1>Site not found</h1>", status_code=404)
-
-    # Escape values for safe HTML/JS injection
-    safe_name = html_escape(site['name'] or '')
-    safe_color = html_escape(site['primary_color'] or '#6366f1')
-    js_token = _json.dumps(site['token'] or '')
-    js_color = _json.dumps(site['primary_color'] or '#6366f1')
-    js_greeting = _json.dumps(site['greeting'] or 'Hello! How can I help?')
-    js_position = _json.dumps(site['position'] or 'bottom-right')
-    js_widget_title = _json.dumps(site.get('widget_title') or '')
-    dark_mode = site.get('dark_mode', 'auto')
-    js_dark_mode = 'undefined' if dark_mode == 'auto' else ('true' if dark_mode == 'dark' else 'false')
-    html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{safe_name} — Plugo Demo</title>
-<style>
-  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f9fafb; color: #1e293b; }}
-  .container {{ max-width: 900px; margin: 0 auto; padding: 24px; }}
-  nav {{ display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid #e2e8f0; margin-bottom: 40px; }}
-  nav .brand {{ font-weight: 700; font-size: 1.25rem; color: {safe_color}; }}
-  nav .links {{ display: flex; gap: 24px; font-size: 0.875rem; color: #64748b; }}
-  nav .links a {{ color: inherit; text-decoration: none; }}
-  .hero {{ text-align: center; padding: 60px 0; }}
-  .hero h1 {{ font-size: 2.25rem; font-weight: 800; margin-bottom: 12px; }}
-  .hero p {{ font-size: 1.05rem; color: #64748b; max-width: 500px; margin: 0 auto 28px; }}
-  .hero .btn {{ display: inline-block; background: {safe_color}; color: #fff; padding: 12px 32px; border-radius: 8px; font-weight: 600; text-decoration: none; }}
-  .cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin: 40px 0; }}
-  .card {{ background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; }}
-  .card h3 {{ font-size: 1rem; margin-bottom: 6px; }}
-  .card p {{ font-size: 0.85rem; color: #64748b; }}
-  .badge {{ display: inline-block; background: #dcfce7; color: #166534; font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 9999px; margin-left: 8px; }}
-  footer {{ text-align: center; font-size: 0.8rem; color: #94a3b8; padding: 32px 0; border-top: 1px solid #e2e8f0; margin-top: 40px; }}
-</style>
-</head>
-<body>
-<div class="container">
-  <nav>
-    <div class="brand">{safe_name}</div>
-    <div class="links">
-      <a href="#">Home</a>
-      <a href="#">Features</a>
-      <a href="#">Pricing</a>
-      <a href="#">Docs</a>
-    </div>
-  </nav>
-  <div class="hero">
-    <h1>Welcome to {safe_name}<span class="badge">Demo</span></h1>
-    <p>This is a demo page to test the Plugo chat widget. Click the chat bubble to start a conversation!</p>
-    <a href="#" class="btn">Get Started</a>
-  </div>
-  <div class="cards">
-    <div class="card"><h3>AI Chat</h3><p>Chat with an AI assistant that knows about your website content.</p></div>
-    <div class="card"><h3>Knowledge Base</h3><p>Powered by crawled content and your custom knowledge entries.</p></div>
-    <div class="card"><h3>API Tools</h3><p>The bot can call your APIs to perform actions on behalf of visitors.</p></div>
-  </div>
-  <footer>Plugo Demo Page &mdash; This page is for testing only.</footer>
-</div>
-<script>
-  var proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  window.PlugoConfig = {{
-    token: {js_token},
-    serverUrl: proto + "//" + window.location.host,
-    primaryColor: {js_color},
-    greeting: {js_greeting},
-    position: {js_position},
-    widgetTitle: {js_widget_title},
-    darkMode: {js_dark_mode}
-  }};
-</script>
-<script src="/static/widget.js" async></script>
-</body>
-</html>"""
-    return HTMLResponse(html)
+app.include_router(config_router.router)
 
 
 @app.get("/")

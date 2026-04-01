@@ -184,11 +184,6 @@ export default function Settings() {
 
   const currentProvider = providers.find((p) => p.id === form.llm_provider);
 
-  // Build flat list of all models grouped by provider for display
-  const allModels = providers.flatMap((p) =>
-    p.models.map((m) => ({ ...m, provider_id: p.id, provider_name: p.name }))
-  );
-
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-2">{t("settings.title")}</h1>

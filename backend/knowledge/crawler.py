@@ -1,22 +1,24 @@
+import asyncio
+import fnmatch
+import hashlib
 import json
 import os
 import re
 import uuid
-import asyncio
-import hashlib
-import fnmatch
 from collections import deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import ParseResult, urljoin, urlparse
 from urllib.robotparser import RobotFileParser
+
 import httpx
 from bs4 import BeautifulSoup
+
 from agent.rag import rag_engine
-from providers.factory import get_llm_provider
-from knowledge.chunker import SemanticChunker
 from config import settings
+from knowledge.chunker import SemanticChunker
 from logging_config import logger
+from providers.factory import get_llm_provider
 
 
 def _normalize_host(netloc: str) -> str:
@@ -97,7 +99,7 @@ class WebCrawler:
             "error": error,
             "action": action,
             "page_number": len(self.visited),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         self.logs.append(entry)
         if status == "error":
@@ -564,7 +566,7 @@ class WebCrawler:
                         self._log(url, "error", error=str(e), action="unexpected error")
                         self.pages_failed += 1
                         job = await repos.crawl_jobs.get_by_id(job_id)
-                        error_log = (job.get("error_log") or "") + f"\n{url}: {str(e)}"
+                        error_log = (job.get("error_log") or "") + f"\n{url}: {e!s}"
                         await repos.crawl_jobs.update(job_id, {"error_log": error_log})
                         await self._save_progress(job_id, repos)
                         continue
@@ -600,7 +602,7 @@ class WebCrawler:
                 "chunks_created": self.chunks_created,
                 "current_url": None,
                 "crawl_log": json.dumps(self.logs),
-                "finished_at": datetime.now(timezone.utc),
+                "finished_at": datetime.now(UTC),
             })
 
         except Exception as e:
@@ -619,7 +621,7 @@ class WebCrawler:
                 "error_log": str(e),
                 "crawl_log": json.dumps(self.logs),
                 "current_url": None,
-                "finished_at": datetime.now(timezone.utc),
+                "finished_at": datetime.now(UTC),
             })
 
     # Structural tags that must never be decomposed by the class-name filter

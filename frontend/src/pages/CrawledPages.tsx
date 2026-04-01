@@ -7,8 +7,8 @@ import {
   type CrawledUrl, type KnowledgeChunk,
 } from "../lib/api";
 import {
-  Globe, Trash2, RefreshCw, ChevronDown, ChevronUp, FileText,
-  ExternalLink, Search, Clock, Database, AlertTriangle,
+  Globe, Trash2, RefreshCw, ChevronDown, ChevronUp,
+  ExternalLink, Search, AlertTriangle,
 } from "lucide-react";
 import { useLocale } from "../lib/useLocale";
 

@@ -1,24 +1,44 @@
-import { h } from "preact";
-import { useMemo, useState, useCallback } from "preact/hooks";
+import { useMemo, useState } from "preact/hooks";
 import { parseMarkdown, parseStreamingMarkdown } from "../markdown";
 
-/** Handle slideshow prev/next clicks via event delegation */
+/** Navigate slideshow to a specific index */
+function goToSlide(slideshow: Element, idx: number) {
+  const slides = slideshow.querySelectorAll(".plugo-slide");
+  const dots = slideshow.querySelectorAll(".plugo-slide-dot");
+  const counter = slideshow.querySelector(".plugo-slide-count");
+  if (idx < 0 || idx >= slides.length) return;
+  slides.forEach((s) => s.classList.remove("active"));
+  dots.forEach((d) => d.classList.remove("active"));
+  slides[idx].classList.add("active");
+  if (dots[idx]) dots[idx].classList.add("active");
+  if (counter) counter.textContent = `${idx + 1}/${slides.length}`;
+}
+
+/** Handle slideshow prev/next/dot clicks via event delegation */
 function handleMsgClick(e: Event) {
-  const btn = (e.target as HTMLElement).closest("[data-dir]") as HTMLElement | null;
+  const target = e.target as HTMLElement;
+
+  // Dot click
+  const dot = target.closest("[data-slide]") as HTMLElement | null;
+  if (dot) {
+    const slideshow = dot.closest(".plugo-slideshow");
+    if (slideshow) goToSlide(slideshow, Number(dot.dataset.slide));
+    return;
+  }
+
+  // Prev/Next click
+  const btn = target.closest("[data-dir]") as HTMLElement | null;
   if (!btn) return;
   const slideshow = btn.closest(".plugo-slideshow");
   if (!slideshow) return;
   const slides = slideshow.querySelectorAll(".plugo-slide");
-  const counter = slideshow.querySelector(".plugo-slide-count");
   let active = -1;
   slides.forEach((s, i) => { if (s.classList.contains("active")) active = i; });
   if (active < 0) return;
   const next = btn.dataset.dir === "next"
     ? (active + 1) % slides.length
     : (active - 1 + slides.length) % slides.length;
-  slides[active].classList.remove("active");
-  slides[next].classList.add("active");
-  if (counter) counter.textContent = `${next + 1}/${slides.length}`;
+  goToSlide(slideshow, next);
 }
 
 export type MessageProps = {
@@ -35,32 +55,6 @@ export type MessageProps = {
 
 function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-function CopyButton({ content }: { content: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(content).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  };
-
-  return (
-    <button class="plugo-copy-btn" onClick={handleCopy} aria-label="Copy message" title={copied ? "Copied!" : "Copy"}>
-      {copied ? (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
-      ) : (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-        </svg>
-      )}
-    </button>
-  );
 }
 
 /** Detect tool call markers in the content: "> Calling **name**..." */
@@ -95,32 +89,18 @@ function ToolCallCard({ toolName, isComplete }: { toolName: string; isComplete: 
   );
 }
 
-function BotAvatar() {
-  return (
-    <div class="plugo-avatar" aria-hidden="true">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 2L2 7l10 5 10-5-10-5z" />
-        <path d="M2 17l10 5 10-5" />
-        <path d="M2 12l10 5 10-5" />
-      </svg>
-    </div>
-  );
-}
-
 export function Message({ role, content, timestamp, index, isError, isStreaming, isLastInGroup = true, onFeedback, onRetry }: MessageProps) {
   const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
 
-  if (!content) return null;
-
   // Check for tool call markers in bot content
   const toolCall = useMemo(
-    () => (role === "bot" && !isError ? parseToolCalls(content) : null),
+    () => (content && role === "bot" && !isError ? parseToolCalls(content) : null),
     [role, content, isError]
   );
 
   // Strip tool call lines from content for markdown rendering
   const cleanContent = useMemo(() => {
-    if (!toolCall) return content;
+    if (!content || !toolCall) return content ?? "";
     return content.replace(/^>\s*Calling \*\*.+?\*\*.*$/gm, "").trim();
   }, [content, toolCall]);
 
@@ -131,6 +111,8 @@ export function Message({ role, content, timestamp, index, isError, isStreaming,
     },
     [role, cleanContent, isError, isStreaming]
   );
+
+  if (!content) return null;
 
   const handleFeedback = (rating: "up" | "down") => {
     setFeedback(rating);

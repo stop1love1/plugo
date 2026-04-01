@@ -34,6 +34,7 @@ def test_provider_factory_valid():
 def test_provider_factory_invalid():
     """Factory should raise ValueError for unknown provider."""
     import pytest
+
     from providers.factory import get_llm_provider
 
     with pytest.raises(ValueError, match="Unknown LLM provider"):

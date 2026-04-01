@@ -74,7 +74,6 @@ export function OnboardingChecklist() {
   ];
 
   const completedCount = steps.filter((s) => s.done).length;
-  const allDone = completedCount === steps.length;
   const progressPercent = Math.round((completedCount / steps.length) * 100);
 
   // Don't show if most steps are done

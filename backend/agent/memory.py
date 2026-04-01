@@ -5,9 +5,9 @@ and summarize long conversations to reduce token usage.
 """
 
 import json
-from typing import Optional
-from providers.base import BaseLLMProvider
+
 from logging_config import logger
+from providers.base import BaseLLMProvider
 
 
 class MemoryExtractor:
@@ -125,7 +125,7 @@ Summary:"""
         self,
         messages: list[dict],
         provider: BaseLLMProvider,
-        existing_summary: Optional[str] = None,
+        existing_summary: str | None = None,
     ) -> tuple[str, int]:
         """Summarize older messages. Returns (summary_text, messages_summarized_count)."""
         messages_to_summarize = messages[: -self.KEEP_RECENT_MESSAGES]

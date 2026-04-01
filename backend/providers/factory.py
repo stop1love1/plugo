@@ -1,5 +1,5 @@
-from providers.base import BaseLLMProvider
 from config import settings
+from providers.base import BaseLLMProvider
 
 # In-memory cache for DB keys (refreshed on each provider creation)
 _key_cache: dict[str, str] = {}
@@ -80,9 +80,9 @@ async def refresh_key_cache():
 def get_all_providers() -> list[dict]:
     """Return info about all available providers and their models."""
     from providers.claude_provider import ClaudeProvider
-    from providers.openai_provider import OpenAIProvider
     from providers.gemini_provider import GeminiProvider
     from providers.ollama_provider import OllamaProvider
+    from providers.openai_provider import OpenAIProvider
 
     return [
         {

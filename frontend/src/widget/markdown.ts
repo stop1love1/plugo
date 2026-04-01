@@ -83,16 +83,83 @@ function wrapButtonGroups(html: string): string {
   );
 }
 
-/** Post-process: wrap consecutive images into a slideshow */
+/**
+ * Pre-process: extract :::gallery blocks from markdown source and replace
+ * with placeholder tokens. After marked parses the rest, we swap the
+ * placeholders with rendered slideshow HTML.
+ *
+ * This is more reliable than post-processing HTML because:
+ * 1. Explicit intent — the LLM declares a gallery, no guessing
+ * 2. Works during streaming — partial :::gallery block is left as-is
+ * 3. No fragile HTML regex that breaks when <p> tags appear between images
+ */
+const GALLERY_RE = /:::gallery\n([\s\S]*?):::/g;
+const GALLERY_PLACEHOLDER = "PLUGOGALLERY";
+
+function extractGalleries(text: string): { text: string; galleries: string[] } {
+  const galleries: string[] = [];
+  const replaced = text.replace(GALLERY_RE, (_match, content: string) => {
+    const idx = galleries.length;
+    galleries.push(content.trim());
+    // Use a plain-text placeholder that survives marked parsing (HTML comments get escaped)
+    return `${GALLERY_PLACEHOLDER}${idx}END`;
+  });
+  return { text: replaced, galleries };
+}
+
+/** Build slideshow HTML from an array of image HTML strings */
+function renderSlideshow(imageHtmlArr: string[]): string {
+  const total = imageHtmlArr.length;
+  const slides = imageHtmlArr
+    .map((imgHtml, i) => `<div class="plugo-slide${i === 0 ? " active" : ""}">${imgHtml}</div>`)
+    .join("");
+  const dots = imageHtmlArr
+    .map((_, i) => `<button class="plugo-slide-dot${i === 0 ? " active" : ""}" data-slide="${i}"></button>`)
+    .join("");
+  return (
+    `<div class="plugo-slideshow" data-total="${total}">` +
+      `<div class="plugo-slides">${slides}` +
+        `<button class="plugo-slide-prev" data-dir="prev">\u2039</button>` +
+        `<button class="plugo-slide-next" data-dir="next">\u203A</button>` +
+      `</div>` +
+      `<div class="plugo-slide-nav">${dots}<span class="plugo-slide-count">1/${total}</span></div>` +
+    `</div>`
+  );
+}
+
+function buildSlideshowHtml(markdownImages: string): string {
+  const imgRe = /!\[([^\]]*)\]\(([^)]+)\)/g;
+  const images: { alt: string; url: string }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = imgRe.exec(markdownImages)) !== null) {
+    images.push({ alt: m[1], url: sanitizeUrl(m[2]) });
+  }
+  if (images.length === 0) return "";
+  if (images.length === 1) {
+    return `<div class="plugo-image"><img src="${images[0].url}" alt="${images[0].alt}" loading="lazy" /></div>`;
+  }
+  const htmlArr = images.map(
+    (img) => `<div class="plugo-image"><img src="${img.url}" alt="${img.alt}" loading="lazy" /></div>`,
+  );
+  return renderSlideshow(htmlArr);
+}
+
+function restoreGalleries(html: string, galleries: string[]): string {
+  // Match the placeholder in any context (may be wrapped in <p> tags by marked)
+  return html.replace(new RegExp(`(?:<p>)?${GALLERY_PLACEHOLDER}(\\d+)END(?:<\\/p>)?`, "g"), (_m, idx) => {
+    const content = galleries[Number(idx)];
+    return content ? buildSlideshowHtml(content) : "";
+  });
+}
+
+/** Fallback: wrap consecutive images into a slideshow (for old responses without :::gallery) */
 function wrapImageSlideshow(html: string): string {
   return html.replace(
     /(<div class="plugo-image">.*?<\/div>\s*){2,}/g,
     (match) => {
       const images = match.match(/<div class="plugo-image">.*?<\/div>/gs) || [];
-      const slides = images.map((img, i) =>
-        `<div class="plugo-slide${i === 0 ? " active" : ""}">${img}</div>`
-      ).join("");
-      return `<div class="plugo-slideshow" data-total="${images.length}"><div class="plugo-slides">${slides}</div><div class="plugo-slide-nav"><button class="plugo-slide-prev" data-dir="prev">\u2039</button><span class="plugo-slide-count">1/${images.length}</span><button class="plugo-slide-next" data-dir="next">\u203A</button></div></div>`;
+      if (images.length < 2) return match;
+      return renderSlideshow(images);
     }
   );
 }
@@ -115,6 +182,14 @@ function closeIncompleteMarkdown(text: string): string {
   if (inlineCode && inlineCode.length % 2 !== 0) {
     s += "`";
   }
+
+  // Close unclosed :::gallery block — append ::: so it renders as slideshow during streaming
+  if (/:::gallery\n/.test(s) && !(GALLERY_RE.test(s))) {
+    // Reset regex lastIndex since we use /g flag
+    GALLERY_RE.lastIndex = 0;
+    s += "\n:::";
+  }
+  GALLERY_RE.lastIndex = 0;
 
   // Close unclosed bold/italic markers
   const closePairs = (src: string, marker: string): string => {
@@ -141,8 +216,10 @@ function closeIncompleteMarkdown(text: string): string {
 }
 
 export function parseMarkdown(text: string): string {
-  let html = marked.parse(text) as string;
-  html = wrapImageSlideshow(html);
+  const { text: cleaned, galleries } = extractGalleries(text);
+  let html = marked.parse(cleaned) as string;
+  html = restoreGalleries(html, galleries);
+  html = wrapImageSlideshow(html); // fallback for old responses without :::gallery
   html = wrapButtonGroups(html);
   return html;
 }
@@ -150,5 +227,10 @@ export function parseMarkdown(text: string): string {
 /** Parse markdown with incomplete syntax handling — for streaming */
 export function parseStreamingMarkdown(text: string): string {
   const closed = closeIncompleteMarkdown(text);
-  return marked.parse(closed) as string;
+  const { text: cleaned, galleries } = extractGalleries(closed);
+  let html = marked.parse(cleaned) as string;
+  html = restoreGalleries(html, galleries);
+  html = wrapImageSlideshow(html); // fallback
+  html = wrapButtonGroups(html);
+  return html;
 }

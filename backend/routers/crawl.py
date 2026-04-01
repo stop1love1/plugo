@@ -1,13 +1,14 @@
 import json
-from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from datetime import UTC, datetime, timedelta
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
-from typing import Optional
-from repositories import get_repos, create_repos, Repositories
-from knowledge.crawler import WebCrawler
-from auth import get_current_user, TokenData
+
+from auth import TokenData, get_current_user
 from config import settings
+from knowledge.crawler import WebCrawler
 from logging_config import logger
+from repositories import Repositories, create_repos, get_repos
 
 router = APIRouter(prefix="/api/crawl", tags=["crawl"])
 
@@ -32,7 +33,7 @@ async def cleanup_stale_crawls_on_startup():
                         await repos.crawl_jobs.update(job["id"], {
                             "status": "failed",
                             "error_log": "Auto-failed: server restarted while crawl was active",
-                            "finished_at": datetime.now(timezone.utc),
+                            "finished_at": datetime.now(UTC),
                         })
     finally:
         await repos.close()
@@ -44,27 +45,27 @@ async def cleanup_stale_crawls_on_startup():
 
 class CrawlToggleRequest(BaseModel):
     enabled: bool
-    auto_interval: Optional[int] = None
-    max_pages: Optional[int] = None
-    max_depth: Optional[int] = None
-    exclude_patterns: Optional[str] = None  # Newline-separated patterns
+    auto_interval: int | None = None
+    max_pages: int | None = None
+    max_depth: int | None = None
+    exclude_patterns: str | None = None  # Newline-separated patterns
 
 
 class CrawlStartRequest(BaseModel):
     site_id: str
-    url: Optional[str] = None
-    max_pages: Optional[int] = None
-    max_depth: Optional[int] = None
+    url: str | None = None
+    max_pages: int | None = None
+    max_depth: int | None = None
     force_recrawl: bool = False
-    exclude_patterns: Optional[str] = None
+    exclude_patterns: str | None = None
 
 
 class CrawlSettingsRequest(BaseModel):
     """Update crawl settings without toggling or starting."""
-    max_pages: Optional[int] = None
-    max_depth: Optional[int] = None
-    auto_interval: Optional[int] = None
-    exclude_patterns: Optional[str] = None
+    max_pages: int | None = None
+    max_depth: int | None = None
+    auto_interval: int | None = None
+    exclude_patterns: str | None = None
 
 
 def _parse_exclude_patterns(raw: str | None) -> list[str]:
@@ -158,7 +159,7 @@ async def toggle_crawl(
 
 async def _cleanup_stale_crawls(repos: Repositories, site_id: str) -> None:
     stale_minutes = settings.crawl_stale_timeout_minutes
-    stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
+    stale_cutoff = datetime.now(UTC) - timedelta(minutes=stale_minutes)
     jobs = await repos.crawl_jobs.list_by_site(site_id)
     for job in jobs:
         started = job.get("started_at")
@@ -173,7 +174,7 @@ async def _cleanup_stale_crawls(repos: Repositories, site_id: str) -> None:
             await repos.crawl_jobs.update(job["id"], {
                 "status": "failed",
                 "error_log": f"Auto-failed: crawl exceeded {stale_minutes} minute timeout",
-                "finished_at": datetime.now(timezone.utc),
+                "finished_at": datetime.now(UTC),
             })
     site = await repos.sites.get_by_id(site_id)
     if site and site.get("crawl_status") == "running" and site_id not in _active_crawlers:
@@ -485,7 +486,7 @@ async def _run_crawl_with_tracking(
 
             await repos.sites.update(site_id, {
                 "crawl_status": "idle",
-                "last_crawled_at": datetime.now(timezone.utc),
+                "last_crawled_at": datetime.now(UTC),
                 "knowledge_count": total_chunks,
             })
 
@@ -535,7 +536,7 @@ async def _run_crawl_with_tracking(
             await repos.crawl_jobs.update(current_job_id, {
                 "status": "failed",
                 "error_log": str(e),
-                "finished_at": datetime.now(timezone.utc),
+                "finished_at": datetime.now(UTC),
             })
             break
         finally:

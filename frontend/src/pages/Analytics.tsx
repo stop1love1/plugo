@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { TrendingUp, MessageSquare, Clock, Users, Download, Calendar } from "lucide-react";
+import { TrendingUp, MessageSquare, Clock, Users, Download, Calendar, type LucideIcon } from "lucide-react";
 import api from "../lib/api";
 import { useLocale } from "../lib/useLocale";
 import { SkeletonCard, SkeletonChart } from "../components/Skeleton";
@@ -18,7 +18,11 @@ const getKnowledgeGaps = (siteId: string) =>
 const getToolUsage = (siteId: string, days = 30) =>
   api.get(`/analytics/tool-usage?site_id=${siteId}&days=${days}`).then((r) => r.data);
 
-function StatCard({ icon: Icon, label, value, color }: { icon: any; label: string; value: string | number; color: string }) {
+type ChartDay = { date: string; messages: number };
+type QuestionRow = { question: string; count: number };
+type ToolUsageRow = { name: string; calls: number; errors: number; enabled: boolean };
+
+function StatCard({ icon: Icon, label, value, color }: { icon: LucideIcon; label: string; value: string | number; color: string }) {
   return (
     <div className="bg-white p-5 rounded-xl border border-gray-200">
       <div className="flex items-center gap-3">
@@ -56,25 +60,25 @@ export default function Analytics() {
     enabled: !!siteId,
   });
 
-  const { data: chartData = [], isLoading: chartLoading } = useQuery({
+  const { data: chartData = [], isLoading: chartLoading } = useQuery<ChartDay[]>({
     queryKey: ["analytics-chart", siteId, days],
     queryFn: () => getMessagesPerDay(siteId!, days),
     enabled: !!siteId,
   });
 
-  const { data: questions = [] } = useQuery({
+  const { data: questions = [] } = useQuery<QuestionRow[]>({
     queryKey: ["analytics-questions", siteId],
     queryFn: () => getPopularQuestions(siteId!),
     enabled: !!siteId,
   });
 
-  const { data: knowledgeGaps = [] } = useQuery({
+  const { data: knowledgeGaps = [] } = useQuery<QuestionRow[]>({
     queryKey: ["analytics-gaps", siteId],
     queryFn: () => getKnowledgeGaps(siteId!),
     enabled: !!siteId,
   });
 
-  const { data: toolUsage = [] } = useQuery({
+  const { data: toolUsage = [] } = useQuery<ToolUsageRow[]>({
     queryKey: ["analytics-tool-usage", siteId, days],
     queryFn: () => getToolUsage(siteId!, days),
     enabled: !!siteId,
@@ -82,7 +86,7 @@ export default function Analytics() {
 
   const exportCsv = () => {
     if (!chartData.length) return;
-    const csv = "Date,Messages\n" + chartData.map((d: any) => `${d.date},${d.messages}`).join("\n");
+    const csv = "Date,Messages\n" + chartData.map((d) => `${d.date},${d.messages}`).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -225,7 +229,7 @@ export default function Analytics() {
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip
                   labelFormatter={(v) => `Date: ${v}`}
-                  formatter={(v: any) => [v, "Messages"]}
+                  formatter={(v) => [v as number, "Messages"]}
                 />
                 <Bar dataKey="messages" fill="#6366f1" radius={[3, 3, 0, 0]} />
               </BarChart>
@@ -246,7 +250,7 @@ export default function Analytics() {
             <p className="text-sm text-gray-400">{t("analytics.noData")}</p>
           ) : (
             <div className="space-y-2">
-              {questions.map((q: any, i: number) => (
+              {questions.map((q, i: number) => (
                 <div key={`${q.question}-${i}`} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                   <p className="text-sm text-gray-700 truncate flex-1">{q.question}</p>
                   <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full ml-2 shrink-0">
@@ -265,7 +269,7 @@ export default function Analytics() {
             <p className="text-sm text-gray-400">{t("analytics.noData")}</p>
           ) : (
             <div className="space-y-2">
-              {knowledgeGaps.map((q: any, i: number) => (
+              {knowledgeGaps.map((q, i: number) => (
                 <div key={`${q.question}-${i}`} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                   <p className="text-sm text-gray-700 truncate flex-1">{q.question}</p>
                   <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full ml-2 shrink-0">
@@ -293,7 +297,7 @@ export default function Analytics() {
                 </tr>
               </thead>
               <tbody>
-                {toolUsage.map((tool: any) => (
+                {toolUsage.map((tool) => (
                   <tr key={tool.name} className="border-t border-gray-50">
                     <td className="px-4 py-2 font-medium text-gray-700">{tool.name}</td>
                     <td className="px-4 py-2 text-right text-gray-600">{tool.calls}</td>

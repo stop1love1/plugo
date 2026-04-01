@@ -87,7 +87,6 @@ plugo/
 │   │   └── pages/        # Dashboard pages
 │   └── vite.config.ts
 ├── docs/                 # Documentation
-├── examples/             # Usage examples
 └── docker-compose.yml
 ```
 
@@ -185,7 +184,7 @@ npm run build    # Production build
 
 ### Testing the Widget
 
-Open `examples/demo.html` in a browser, or embed in any HTML page:
+Use the dashboard **Playground** for a site, or embed in any HTML page:
 
 ```html
 <script>

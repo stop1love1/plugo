@@ -1,14 +1,16 @@
+import contextlib
+import ipaddress
 import json
 from urllib.parse import urlparse
-import ipaddress
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from typing import Optional
-from repositories import get_repos, Repositories
+
 from agent.tools import tool_executor
-from auth import get_current_user, TokenData
+from auth import TokenData, get_current_user
 from logging_config import logger
-from utils.crypto import encrypt_value, decrypt_value
+from repositories import Repositories, get_repos
+from utils.crypto import decrypt_value, encrypt_value
 
 router = APIRouter(prefix="/api/tools", tags=["tools"])
 
@@ -21,20 +23,20 @@ class ToolCreate(BaseModel):
     url: str
     params_schema: dict = {}
     headers: dict = {}
-    auth_type: Optional[str] = None
-    auth_value: Optional[str] = None
+    auth_type: str | None = None
+    auth_value: str | None = None
 
 
 class ToolUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    method: Optional[str] = None
-    url: Optional[str] = None
-    params_schema: Optional[dict] = None
-    headers: Optional[dict] = None
-    auth_type: Optional[str] = None
-    auth_value: Optional[str] = None
-    enabled: Optional[bool] = None
+    name: str | None = None
+    description: str | None = None
+    method: str | None = None
+    url: str | None = None
+    params_schema: dict | None = None
+    headers: dict | None = None
+    auth_type: str | None = None
+    auth_value: str | None = None
+    enabled: bool | None = None
 
 
 class ToolTestRequest(BaseModel):
@@ -42,13 +44,8 @@ class ToolTestRequest(BaseModel):
 
 
 def validate_tool_url(url: str) -> bool:
-    """Prevent SSRF by blocking internal/private IPs.
-    Exception: /api/demo/* paths are allowed (our own mock endpoints).
-    """
+    """Prevent SSRF by blocking internal/private IPs."""
     parsed = urlparse(url)
-    # Allow our own demo API endpoints
-    if parsed.path.startswith("/api/demo/"):
-        return True
     hostname = parsed.hostname
     if not hostname:
         return False
@@ -70,10 +67,8 @@ async def list_tools(site_id: str, repos: Repositories = Depends(get_repos), _us
     tools = await repos.tools.list_by_site(site_id)
     for tool in tools:
         if tool.get("auth_value"):
-            try:
+            with contextlib.suppress(Exception):  # Value may not be encrypted (legacy data)
                 tool["auth_value"] = decrypt_value(tool["auth_value"])
-            except Exception:
-                pass  # Value may not be encrypted (legacy data)
     return tools
 
 
@@ -160,10 +155,8 @@ async def test_tool(tool_id: str, data: ToolTestRequest, repos: Repositories = D
     # Decrypt auth_value before executing
     auth_value = tool.get("auth_value")
     if auth_value:
-        try:
+        with contextlib.suppress(Exception):  # Value may not be encrypted (legacy data)
             auth_value = decrypt_value(auth_value)
-        except Exception:
-            pass  # Value may not be encrypted (legacy data)
 
     result = await tool_executor.execute_tool(
         tool_meta={

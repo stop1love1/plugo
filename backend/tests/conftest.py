@@ -1,5 +1,6 @@
 """Shared test fixtures for the Plugo backend."""
 
+import contextlib
 import os
 import sys
 
@@ -28,7 +29,7 @@ async def _ensure_db():
     if not _db_initialized:
         # Import all models so Base.metadata knows about all tables
         import models  # noqa: F401
-        from database import engine, Base
+        from database import Base, engine
 
         # Drop and recreate all tables to ensure schema is up-to-date
         async with engine.begin() as conn:
@@ -85,7 +86,5 @@ async def test_site(db_repos, auth_headers):
     })
     yield site
     # Cleanup
-    try:
+    with contextlib.suppress(Exception):
         await db_repos.sites.delete(site["id"])
-    except Exception:
-        pass

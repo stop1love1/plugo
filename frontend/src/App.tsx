@@ -16,6 +16,7 @@ import Models from "./pages/Models";
 import Playground from "./pages/Playground";
 import CrawledPages from "./pages/CrawledPages";
 import Notifications from "./pages/Notifications";
+import GlobalSettings from "./pages/GlobalSettings";
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
       >
         <Route index element={<Sites />} />
         <Route path="notifications" element={<Notifications />} />
+        <Route path="global-settings" element={<GlobalSettings />} />
         <Route path="models" element={<Models />} />
         <Route path="audit" element={<AuditLog />} />
         <Route path="site/:siteId">

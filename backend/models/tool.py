@@ -1,6 +1,8 @@
 import uuid
-from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Text, Boolean, ForeignKey, JSON
+from datetime import UTC, datetime
+
+from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, String, Text
+
 from database import Base
 
 
@@ -22,4 +24,4 @@ class Tool(Base):
     auth_value = Column(String(500), nullable=True)
 
     enabled = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))

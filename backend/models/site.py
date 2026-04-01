@@ -1,6 +1,8 @@
 import uuid
-from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Text, Boolean, Integer, JSON
+from datetime import UTC, datetime
+
+from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, String, Text
+
 from database import Base
 
 
@@ -53,5 +55,5 @@ class Site(Base):
     last_crawled_at = Column(DateTime, nullable=True)        # Last crawl timestamp
     knowledge_count = Column(Integer, default=0)             # Total knowledge chunks stored
 
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))

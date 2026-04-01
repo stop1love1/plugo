@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import AsyncGenerator, Optional
+from collections.abc import AsyncGenerator
 
 
 class BaseLLMProvider(ABC):
@@ -10,7 +10,7 @@ class BaseLLMProvider(ABC):
         self,
         messages: list[dict],
         system_prompt: str = "",
-        tools: Optional[list[dict]] = None,
+        tools: list[dict] | None = None,
         temperature: float = 0.7,
     ) -> dict:
         """Send messages and get a complete response."""
@@ -21,7 +21,7 @@ class BaseLLMProvider(ABC):
         self,
         messages: list[dict],
         system_prompt: str = "",
-        tools: Optional[list[dict]] = None,
+        tools: list[dict] | None = None,
         temperature: float = 0.7,
     ) -> AsyncGenerator[str, None]:
         """Send messages and stream the response token by token."""

@@ -1,15 +1,21 @@
 """MongoDB implementation using Motor (async driver)."""
 
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
+
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from repositories.base import (
-    BaseSiteRepo, BaseKnowledgeRepo, BaseToolRepo,
-    BaseChatSessionRepo, BaseCrawlJobRepo, BaseUserRepo, BaseLLMKeyRepo,
-    BaseVisitorMemoryRepo, BaseConversationSummaryRepo,
     BaseAuditLogRepo,
+    BaseChatSessionRepo,
+    BaseConversationSummaryRepo,
+    BaseCrawlJobRepo,
+    BaseKnowledgeRepo,
+    BaseLLMKeyRepo,
+    BaseSiteRepo,
+    BaseToolRepo,
+    BaseUserRepo,
+    BaseVisitorMemoryRepo,
 )
 
 
@@ -60,17 +66,17 @@ class MongoSiteRepo(BaseSiteRepo):
             "last_crawled_at": None,
             "knowledge_count": 0,
             # Timestamps
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
         }
         await self.col.insert_one(doc)
         return _clean_doc(doc)
 
-    async def get_by_id(self, site_id: str) -> Optional[dict]:
+    async def get_by_id(self, site_id: str) -> dict | None:
         doc = await self.col.find_one({"_id": site_id})
         return _clean_doc(doc) if doc else None
 
-    async def get_by_token(self, token: str) -> Optional[dict]:
+    async def get_by_token(self, token: str) -> dict | None:
         doc = await self.col.find_one({"token": token})
         return _clean_doc(doc) if doc else None
 
@@ -78,9 +84,9 @@ class MongoSiteRepo(BaseSiteRepo):
         cursor = self.col.find().sort("created_at", -1)
         return [_clean_doc(doc) async for doc in cursor]
 
-    async def update(self, site_id: str, data: dict) -> Optional[dict]:
+    async def update(self, site_id: str, data: dict) -> dict | None:
         update_data = {k: v for k, v in data.items() if v is not None}
-        update_data["updated_at"] = datetime.now(timezone.utc)
+        update_data["updated_at"] = datetime.now(UTC)
         result = await self.col.find_one_and_update(
             {"_id": site_id},
             {"$set": update_data},
@@ -108,16 +114,16 @@ class MongoKnowledgeRepo(BaseKnowledgeRepo):
             "content": data["content"],
             "chunk_index": data.get("chunk_index", 0),
             "embedding_id": data.get("embedding_id"),
-            "crawled_at": datetime.now(timezone.utc),
+            "crawled_at": datetime.now(UTC),
         }
         await self.col.insert_one(doc)
         return _clean_doc(doc)
 
-    async def get_by_id(self, chunk_id: str) -> Optional[dict]:
+    async def get_by_id(self, chunk_id: str) -> dict | None:
         doc = await self.col.find_one({"_id": chunk_id})
         return _clean_doc(doc) if doc else None
 
-    async def list_by_site(self, site_id: str, page: int = 1, per_page: int = 20, search: Optional[str] = None) -> dict:
+    async def list_by_site(self, site_id: str, page: int = 1, per_page: int = 20, search: str | None = None) -> dict:
         skip = (page - 1) * per_page
         query: dict = {"site_id": site_id}
         if search:
@@ -131,7 +137,7 @@ class MongoKnowledgeRepo(BaseKnowledgeRepo):
         total = await self.col.count_documents(query)
         return {"chunks": chunks, "total": total, "page": page, "per_page": per_page}
 
-    async def update(self, chunk_id: str, data: dict) -> Optional[dict]:
+    async def update(self, chunk_id: str, data: dict) -> dict | None:
         result = await self.col.find_one_and_update(
             {"_id": chunk_id},
             {"$set": data},
@@ -175,7 +181,7 @@ class MongoKnowledgeRepo(BaseKnowledgeRepo):
                 "content_hash": content_hash,
                 "chunk_index": data.get("chunk_index", 0),
                 "embedding_id": data.get("embedding_id", doc_id),
-                "crawled_at": datetime.now(timezone.utc),
+                "crawled_at": datetime.now(UTC),
             })
             ids.append(doc_id)
         if docs:
@@ -253,12 +259,12 @@ class MongoToolRepo(BaseToolRepo):
             "auth_type": data.get("auth_type"),
             "auth_value": data.get("auth_value"),
             "enabled": data.get("enabled", True),
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
         }
         await self.col.insert_one(doc)
         return _clean_doc(doc)
 
-    async def get_by_id(self, tool_id: str) -> Optional[dict]:
+    async def get_by_id(self, tool_id: str) -> dict | None:
         doc = await self.col.find_one({"_id": tool_id})
         return _clean_doc(doc) if doc else None
 
@@ -270,7 +276,7 @@ class MongoToolRepo(BaseToolRepo):
         cursor = self.col.find({"site_id": site_id, "enabled": True})
         return [_clean_doc(doc) async for doc in cursor]
 
-    async def update(self, tool_id: str, data: dict) -> Optional[dict]:
+    async def update(self, tool_id: str, data: dict) -> dict | None:
         update_data = {k: v for k, v in data.items() if v is not None}
         result = await self.col.find_one_and_update(
             {"_id": tool_id}, {"$set": update_data}, return_document=True,
@@ -294,7 +300,7 @@ class MongoChatSessionRepo(BaseChatSessionRepo):
             "visitor_id": data.get("visitor_id"),
             "page_url": data.get("page_url"),
             "messages": data.get("messages", []),
-            "started_at": datetime.now(timezone.utc),
+            "started_at": datetime.now(UTC),
             "ended_at": None,
         }
         await self.col.insert_one(doc)
@@ -312,7 +318,7 @@ class MongoChatSessionRepo(BaseChatSessionRepo):
         doc["first_message"] = first_msg
         return doc
 
-    async def get_by_id(self, session_id: str) -> Optional[dict]:
+    async def get_by_id(self, session_id: str) -> dict | None:
         doc = await self.col.find_one({"_id": session_id})
         if doc:
             self._enrich_session(doc)
@@ -346,7 +352,7 @@ class MongoChatSessionRepo(BaseChatSessionRepo):
         return result.modified_count > 0
 
     async def set_ended(self, session_id: str, clear: bool = False) -> bool:
-        update = {"$set": {"ended_at": None}} if clear else {"$set": {"ended_at": datetime.now(timezone.utc)}}
+        update = {"$set": {"ended_at": None}} if clear else {"$set": {"ended_at": datetime.now(UTC)}}
         result = await self.col.update_one({"_id": session_id}, update)
         return result.modified_count > 0
 
@@ -370,13 +376,13 @@ class MongoCrawlJobRepo(BaseCrawlJobRepo):
             "current_url": None,
             "error_log": None,
             "crawl_log": None,
-            "started_at": datetime.now(timezone.utc),
+            "started_at": datetime.now(UTC),
             "finished_at": None,
         }
         await self.col.insert_one(doc)
         return _clean_doc(doc)
 
-    async def get_by_id(self, job_id: str) -> Optional[dict]:
+    async def get_by_id(self, job_id: str) -> dict | None:
         doc = await self.col.find_one({"_id": job_id})
         return _clean_doc(doc) if doc else None
 
@@ -400,16 +406,16 @@ class MongoUserRepo(BaseUserRepo):
             "username": data["username"],
             "password_hash": data["password_hash"],
             "role": data.get("role", "admin"),
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
         }
         await self.col.insert_one(doc)
         return _clean_doc(doc)
 
-    async def get_by_id(self, user_id: str) -> Optional[dict]:
+    async def get_by_id(self, user_id: str) -> dict | None:
         doc = await self.col.find_one({"_id": user_id})
         return _clean_doc(doc) if doc else None
 
-    async def get_by_username(self, username: str) -> Optional[dict]:
+    async def get_by_username(self, username: str) -> dict | None:
         doc = await self.col.find_one({"username": username})
         return _clean_doc(doc) if doc else None
 
@@ -423,7 +429,7 @@ class MongoUserRepo(BaseUserRepo):
             users.append({"id": doc["_id"], "username": doc["username"], "role": doc.get("role", "admin"), "created_at": str(doc.get("created_at", ""))})
         return users
 
-    async def update_role(self, user_id: str, role: str) -> Optional[dict]:
+    async def update_role(self, user_id: str, role: str) -> dict | None:
         result = await self.col.find_one_and_update(
             {"_id": user_id}, {"$set": {"role": role}}, return_document=True
         )
@@ -451,13 +457,13 @@ class MongoVisitorMemoryRepo(BaseVisitorMemoryRepo):
             "value": data["value"],
             "confidence": data.get("confidence", "medium"),
             "source_session_id": data.get("source_session_id"),
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
         }
         await self.col.insert_one(doc)
         return _clean_doc(doc)
 
-    async def get_by_id(self, memory_id: str) -> Optional[dict]:
+    async def get_by_id(self, memory_id: str) -> dict | None:
         doc = await self.col.find_one({"_id": memory_id})
         return _clean_doc(doc) if doc else None
 
@@ -472,7 +478,7 @@ class MongoVisitorMemoryRepo(BaseVisitorMemoryRepo):
         existing = await self.col.find_one(filter_query)
         if existing:
             update_data = {k: v for k, v in data.items() if v is not None}
-            update_data["updated_at"] = datetime.now(timezone.utc)
+            update_data["updated_at"] = datetime.now(UTC)
             result = await self.col.find_one_and_update(
                 filter_query, {"$set": update_data}, return_document=True,
             )
@@ -487,8 +493,8 @@ class MongoVisitorMemoryRepo(BaseVisitorMemoryRepo):
                 "value": data.get("value", ""),
                 "confidence": data.get("confidence", "medium"),
                 "source_session_id": data.get("source_session_id"),
-                "created_at": datetime.now(timezone.utc),
-                "updated_at": datetime.now(timezone.utc),
+                "created_at": datetime.now(UTC),
+                "updated_at": datetime.now(UTC),
             }
             await self.col.insert_one(doc)
             return _clean_doc(doc)
@@ -519,13 +525,13 @@ class MongoConversationSummaryRepo(BaseConversationSummaryRepo):
             "summary_text": data["summary_text"],
             "message_count_summarized": data.get("message_count_summarized", 0),
             "total_message_count": data.get("total_message_count", 0),
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
         }
         await self.col.insert_one(doc)
         return _clean_doc(doc)
 
-    async def get_by_session(self, session_id: str) -> Optional[dict]:
+    async def get_by_session(self, session_id: str) -> dict | None:
         doc = await self.col.find_one({"session_id": session_id})
         return _clean_doc(doc) if doc else None
 
@@ -533,7 +539,7 @@ class MongoConversationSummaryRepo(BaseConversationSummaryRepo):
         existing = await self.col.find_one({"session_id": session_id})
         if existing:
             update_data = {k: v for k, v in data.items() if v is not None}
-            update_data["updated_at"] = datetime.now(timezone.utc)
+            update_data["updated_at"] = datetime.now(UTC)
             result = await self.col.find_one_and_update(
                 {"session_id": session_id}, {"$set": update_data}, return_document=True,
             )
@@ -546,8 +552,8 @@ class MongoConversationSummaryRepo(BaseConversationSummaryRepo):
                 "summary_text": data.get("summary_text", ""),
                 "message_count_summarized": data.get("message_count_summarized", 0),
                 "total_message_count": data.get("total_message_count", 0),
-                "created_at": datetime.now(timezone.utc),
-                "updated_at": datetime.now(timezone.utc),
+                "created_at": datetime.now(UTC),
+                "updated_at": datetime.now(UTC),
             }
             await self.col.insert_one(doc)
             return _clean_doc(doc)
@@ -571,7 +577,7 @@ class MongoAuditLogRepo(BaseAuditLogRepo):
             "resource_type": data["resource_type"],
             "resource_id": data.get("resource_id"),
             "details": data.get("details"),
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
         }
         await self.col.insert_one(doc)
         return _clean_doc(doc)
@@ -593,7 +599,7 @@ class MongoLLMKeyRepo(BaseLLMKeyRepo):
         cursor = self.col.find()
         return [_clean_doc(doc) async for doc in cursor]
 
-    async def get_by_provider(self, provider: str) -> Optional[dict]:
+    async def get_by_provider(self, provider: str) -> dict | None:
         doc = await self.col.find_one({"provider": provider})
         return _clean_doc(doc) if doc else None
 
@@ -601,7 +607,7 @@ class MongoLLMKeyRepo(BaseLLMKeyRepo):
         existing = await self.col.find_one({"provider": provider})
         if existing:
             update_data = {k: v for k, v in data.items() if v is not None}
-            update_data["updated_at"] = datetime.now(timezone.utc)
+            update_data["updated_at"] = datetime.now(UTC)
             result = await self.col.find_one_and_update(
                 {"provider": provider}, {"$set": update_data}, return_document=True,
             )
@@ -612,8 +618,8 @@ class MongoLLMKeyRepo(BaseLLMKeyRepo):
                 "provider": provider,
                 "api_key": data["api_key"],
                 "label": data.get("label", ""),
-                "created_at": datetime.now(timezone.utc),
-                "updated_at": datetime.now(timezone.utc),
+                "created_at": datetime.now(UTC),
+                "updated_at": datetime.now(UTC),
             }
             await self.col.insert_one(doc)
             return _clean_doc(doc)

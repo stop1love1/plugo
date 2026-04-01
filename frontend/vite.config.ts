@@ -17,7 +17,6 @@ export default defineConfig({
       "/api": backendUrl,
       "/ws": { target: backendUrl, ws: true },
       "/static": backendUrl,
-      "/demo": backendUrl,
       "/health": backendUrl,
     },
   },

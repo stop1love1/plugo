@@ -10,11 +10,10 @@ Public endpoints (no auth required):
 - GET /static/* (widget JS)
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel
 
@@ -31,7 +30,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 class TokenData(BaseModel):
     sub: str  # username
     role: str = "admin"
-    exp: Optional[datetime] = None
+    exp: datetime | None = None
 
 
 def verify_credentials(username: str, password: str) -> bool:
@@ -39,8 +38,8 @@ def verify_credentials(username: str, password: str) -> bool:
     return username == settings.admin_username and password == settings.admin_password
 
 
-def create_access_token(subject: str, role: str = "admin", expires_delta: Optional[timedelta] = None) -> str:
-    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+def create_access_token(subject: str, role: str = "admin", expires_delta: timedelta | None = None) -> str:
+    expire = datetime.now(UTC) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     payload = {"sub": subject, "role": role, "exp": expire}
     return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
 
@@ -54,13 +53,13 @@ def decode_access_token(token: str) -> TokenData:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from None
 
 
 # --- FastAPI Dependencies ---
 
 async def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> TokenData:
     """Dependency: requires a valid JWT token."""
     if credentials is None:
@@ -73,8 +72,8 @@ async def get_current_user(
 
 
 async def get_optional_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
-) -> Optional[TokenData]:
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> TokenData | None:
     """Dependency: returns user if token provided, None otherwise."""
     if credentials is None:
         return None

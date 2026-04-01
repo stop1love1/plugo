@@ -1,6 +1,7 @@
-import json
-from typing import AsyncGenerator, Optional
+from collections.abc import AsyncGenerator
+
 import anthropic
+
 from providers.base import BaseLLMProvider
 
 
@@ -13,7 +14,7 @@ class ClaudeProvider(BaseLLMProvider):
         self,
         messages: list[dict],
         system_prompt: str = "",
-        tools: Optional[list[dict]] = None,
+        tools: list[dict] | None = None,
         temperature: float = 0.7,
     ) -> dict:
         kwargs = {
@@ -34,7 +35,7 @@ class ClaudeProvider(BaseLLMProvider):
         self,
         messages: list[dict],
         system_prompt: str = "",
-        tools: Optional[list[dict]] = None,
+        tools: list[dict] | None = None,
         temperature: float = 0.7,
     ) -> AsyncGenerator[str, None]:
         kwargs = {

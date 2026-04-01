@@ -1,11 +1,13 @@
 """Analytics router — aggregate stats from chat sessions."""
 
 import logging
-from datetime import datetime, timedelta, timezone
 from collections import Counter
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Depends, Query
-from repositories import get_repos, Repositories
-from auth import get_current_user, TokenData
+
+from auth import TokenData, get_current_user
+from repositories import Repositories, get_repos
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +29,7 @@ async def get_overview(
         "avg_session_duration_seconds": 0,
     }
     try:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
         sessions = await repos.chat_sessions.list_by_site_since(site_id, cutoff)
         if not sessions:
             return empty_overview
@@ -77,7 +79,7 @@ async def get_messages_per_day(
 ):
     """Get daily message counts for chart."""
     try:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
         sessions = await repos.chat_sessions.list_by_site_since(site_id, cutoff)
         daily_counts: dict[str, int] = {}
 
@@ -102,7 +104,7 @@ async def get_messages_per_day(
         # Fill in missing days
         result = []
         for i in range(days):
-            day = (datetime.now(timezone.utc) - timedelta(days=days - 1 - i)).strftime("%Y-%m-%d")
+            day = (datetime.now(UTC) - timedelta(days=days - 1 - i)).strftime("%Y-%m-%d")
             result.append({"date": day, "messages": daily_counts.get(day, 0)})
 
         return result
@@ -111,7 +113,7 @@ async def get_messages_per_day(
         # Return empty chart with all days zeroed
         result = []
         for i in range(days):
-            day = (datetime.now(timezone.utc) - timedelta(days=days - 1 - i)).strftime("%Y-%m-%d")
+            day = (datetime.now(UTC) - timedelta(days=days - 1 - i)).strftime("%Y-%m-%d")
             result.append({"date": day, "messages": 0})
         return result
 
@@ -125,7 +127,7 @@ async def get_popular_questions(
 ):
     """Get most common user questions."""
     try:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+        cutoff = datetime.now(UTC) - timedelta(days=90)
         sessions = await repos.chat_sessions.list_by_site_since(site_id, cutoff)
         if not sessions:
             return []
@@ -156,7 +158,7 @@ async def get_knowledge_gaps(
 ):
     """Find user questions where bot responses indicated no knowledge was found."""
     try:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+        cutoff = datetime.now(UTC) - timedelta(days=90)
         sessions = await repos.chat_sessions.list_by_site_since(site_id, cutoff)
         if not sessions:
             return []
@@ -198,7 +200,7 @@ async def get_tool_usage(
 ):
     """Get tool call statistics from chat sessions."""
     try:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
         sessions = await repos.chat_sessions.list_by_site_since(site_id, cutoff)
         tool_calls: Counter = Counter()
         tool_errors: Counter = Counter()

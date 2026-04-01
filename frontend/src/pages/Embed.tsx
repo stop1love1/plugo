@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getSite } from "../lib/api";
-import { Copy, Check, Code, Eye, Sliders, ShieldCheck, ShieldX, ExternalLink, AlertTriangle } from "lucide-react";
+import { Copy, Check, Code, Eye, Sliders, ShieldCheck, AlertTriangle } from "lucide-react";
 import { useLocale } from "../lib/useLocale";
 
 export default function Embed() {
@@ -248,25 +248,6 @@ p{text-align:center;font-size:14px;}</style></head>
               </div>
             </>
           )}
-        </div>
-      )}
-
-      {/* Demo page link */}
-      {site && (
-        <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6 flex items-center justify-between">
-          <div>
-            <p className="font-medium text-sm">{t("embed.demoPage")}</p>
-            <p className="text-xs text-gray-500 mt-1">{t("embed.demoPageDesc")}</p>
-          </div>
-          <a
-            href={`${backendUrl}/demo/${site.token}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700 font-medium border border-primary-200 px-3 py-1.5 rounded-lg"
-          >
-            <ExternalLink className="w-4 h-4" />
-            {t("embed.openDemo")}
-          </a>
         </div>
       )}
 

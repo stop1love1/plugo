@@ -281,20 +281,3 @@ async def test_approve_site_viewer_forbidden(client):
         headers=headers,
     )
     assert response.status_code == 403
-
-
-@pytest.mark.asyncio
-async def test_demo_page_returns_html(client, test_site):
-    """GET /demo/{site_token} should return HTML demo page."""
-    response = await client.get(f"/demo/{test_site['token']}")
-    assert response.status_code == 200
-    assert "text/html" in response.headers["content-type"]
-    assert test_site["name"] in response.text
-    assert "PlugoConfig" in response.text
-
-
-@pytest.mark.asyncio
-async def test_demo_page_not_found(client):
-    """GET /demo/{invalid_token} should return 404."""
-    response = await client.get("/demo/nonexistent-token")
-    assert response.status_code == 404

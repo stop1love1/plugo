@@ -1,3 +1,4 @@
+import axios from "axios";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
@@ -53,9 +54,9 @@ export default function Models() {
       resetAddForm();
       toast.success(t("models.modelAdded"));
     },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.detail || "Failed to add model";
-      toast.error(msg);
+    onError: (err: unknown) => {
+      const detail = axios.isAxiosError(err) ? (err.response?.data as { detail?: string } | undefined)?.detail : undefined;
+      toast.error(detail || "Failed to add model");
     },
   });
 

@@ -1,5 +1,3 @@
-import { h } from "preact";
-
 type BubbleProps = {
   position: "bottom-right" | "bottom-left";
   isOpen: boolean;

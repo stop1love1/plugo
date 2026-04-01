@@ -1,5 +1,7 @@
-from typing import AsyncGenerator, Optional
+from collections.abc import AsyncGenerator
+
 import google.generativeai as genai
+
 from providers.base import BaseLLMProvider
 
 
@@ -12,7 +14,7 @@ class GeminiProvider(BaseLLMProvider):
         self,
         messages: list[dict],
         system_prompt: str = "",
-        tools: Optional[list[dict]] = None,
+        tools: list[dict] | None = None,
         temperature: float = 0.7,
     ) -> dict:
         model = genai.GenerativeModel(
@@ -37,7 +39,7 @@ class GeminiProvider(BaseLLMProvider):
         self,
         messages: list[dict],
         system_prompt: str = "",
-        tools: Optional[list[dict]] = None,
+        tools: list[dict] | None = None,
         temperature: float = 0.7,
     ) -> AsyncGenerator[str, None]:
         model = genai.GenerativeModel(

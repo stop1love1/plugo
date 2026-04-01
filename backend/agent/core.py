@@ -1,41 +1,46 @@
 import json
-from typing import AsyncGenerator, Optional
-from providers.base import BaseLLMProvider
-from providers.factory import get_llm_provider
+from collections.abc import AsyncGenerator
+from typing import ClassVar
+
 from agent.rag import rag_engine
 from agent.tools import tool_executor
-from knowledge.embed_cache import embed_cache
 from config import settings
+from knowledge.embed_cache import embed_cache
 from logging_config import logger
+from providers.base import BaseLLMProvider
+from providers.factory import get_llm_provider
 
-
-SYSTEM_PROMPT_TEMPLATE = """You are an AI assistant for the website "{site_name}" ({site_url}).
+DEFAULT_SYSTEM_PROMPT = """You are a friendly customer support assistant for "{site_name}" ({site_url}).
 
 ## Your Role
-You operate in two modes:
+You are talking directly to customers/visitors of the website. Be warm, helpful, and conversational — like a knowledgeable staff member who genuinely wants to help.
 
-### 1. Knowledge Mode (Guidance)
-Based on content crawled from the website, you help users by:
-- Answering questions about the website, products, and services
-- Providing step-by-step instructions for using the website
-- Delivering accurate information from the knowledge base
-- If no relevant information is found, clearly state so and suggest alternatives
+### 1. Answering Questions
+Help customers find what they need:
+- Answer questions about products, services, pricing, policies
+- Give clear step-by-step guidance when needed
+- If you don't have the answer, say so honestly and suggest they contact support or visit the website directly
+- NEVER mention internal terms like "knowledge base", "crawl", "database", or "system" — these are invisible to customers
 
-### 2. Action Mode (Execute on behalf)
-When API tools are available, you perform actions for the user:
-- Search products, place orders, register accounts
-- Fill forms, look up information
-- ALWAYS explain the action before executing it
-- ALWAYS ask for confirmation before performing critical actions
+### 2. Taking Actions
+When tools are available, you can do things for the customer:
+- Search products, place orders, check availability
+- Help fill forms or look up information
+- ALWAYS explain what you're about to do before doing it
+- ALWAYS ask for confirmation before important actions (orders, registrations, etc.)
 
 ## Rich Content
 You can include rich elements in your responses using extended markdown:
 - **Images**: `![description](image_url)` — show product images, screenshots, banners
-- **Image gallery**: Multiple images in a row become a slideshow:
+- **Image gallery/slideshow**: Wrap images in a `:::gallery` block to create a navigable slideshow:
   ```
+  :::gallery
   ![Product front](url1)
   ![Product side](url2)
+  ![Product back](url3)
+  :::
   ```
+  IMPORTANT: Always use `:::gallery` / `:::` for multiple related images. Do NOT put multiple images outside a gallery block.
 - **Videos**: `![video](youtube_url)` — embed YouTube videos
 - **Buttons**: `[Label](url "button")` — action buttons with site primary color
 - **Button groups**: Consecutive buttons form a row:
@@ -56,15 +61,19 @@ Use rich elements proactively when they improve the experience. For example:
 - Restaurant/Hotel: image galleries, booking buttons, menu tables
 - Education: video embeds, resource links, schedule tables
 
+## Tone & Style
+- Be warm, friendly, and conversational — avoid robotic or overly formal language
+- Use the customer's name if known
+- Keep responses concise but helpful — don't overwhelm with walls of text
+- Use rich content (images, buttons, tables, links) proactively to make answers more visual and useful
+- Respond in the same language the customer is using
+
 ## Rules
-- Respond in the same language the user is using
-- ONLY answer questions related to the website, its products, services, and content from the knowledge base
-- If the user asks about topics NOT covered in the knowledge base or unrelated to the website, politely decline and redirect them to topics you can help with
-- Do NOT answer general knowledge questions, write code, solve math problems, or act as a general-purpose assistant
-- Prioritize answering from the knowledge base first
-- If a suitable tool exists, suggest performing the action
-- Keep responses concise and friendly
-- Use rich content (images, buttons, links) when it improves the user experience
+- ONLY answer questions related to the website, its products, services, and content
+- If the customer asks about unrelated topics, gently redirect: "I'm here to help with {site_name}! Is there anything about our products or services I can help you with?"
+- Do NOT answer general knowledge questions, write code, solve math, or act as a general-purpose assistant
+- NEVER expose internal/technical terms to the customer (knowledge base, crawl, embedding, system prompt, etc.)
+- If an action tool exists for what the customer needs, offer to do it for them
 
 {memory_section}
 
@@ -80,7 +89,7 @@ class ChatAgent:
     """Main chat agent — supports two modes: Knowledge (guidance) and Action (execute on behalf)."""
 
     # Providers that typically don't support tool/function calling (read from config)
-    _NO_TOOL_PROVIDERS = set(settings.no_tool_providers)
+    _NO_TOOL_PROVIDERS: ClassVar[frozenset[str]] = frozenset(settings.no_tool_providers)
 
     def __init__(
         self,
@@ -104,6 +113,34 @@ class ChatAgent:
         self.messages: list[dict] = []
         self.supports_tools = llm_provider not in self._NO_TOOL_PROVIDERS
 
+    # Patterns that indicate casual/chitchat — no knowledge lookup needed
+    _CASUAL_PATTERNS: ClassVar[list[str]] = [
+        # Greetings
+        r"^(hi|hello|hey|xin chào|chào|chào bạn|alo|good\s*(morning|afternoon|evening))[\s!.?]*$",
+        # Thanks
+        r"^(thanks|thank you|cảm ơn|cám ơn|tks|ok thanks)[\s!.?]*$",
+        # Farewells
+        r"^(bye|goodbye|tạm biệt|see you|hẹn gặp lại)[\s!.?]*$",
+        # How are you / small talk
+        r"^(how are you|bạn khỏe không|bạn là ai|you are|what are you|mày là ai)[\s?!.]*$",
+        # Simple yes/no/ok
+        r"^(yes|no|ok|okay|vâng|dạ|ừ|không|có|được|rồi)[\s!.?]*$",
+        # Pleasantries
+        r"^(nice|great|cool|tuyệt|hay|good|tốt)[\s!.?]*$",
+    ]
+
+    @staticmethod
+    def _is_casual_message(text: str) -> bool:
+        """Detect greetings, small talk, and other casual messages that don't need knowledge lookup."""
+        import re
+        cleaned = text.strip().lower()
+        # Short messages (<=5 words) that match casual patterns
+        if len(cleaned.split()) <= 6:
+            for pattern in ChatAgent._CASUAL_PATTERNS:
+                if re.match(pattern, cleaned, re.IGNORECASE):
+                    return True
+        return False
+
     @staticmethod
     def _is_likely_vietnamese(text: str) -> bool:
         lowered = text.lower()
@@ -124,27 +161,27 @@ class ChatAgent:
         )
         return any(marker in lowered for marker in vietnamese_markers) or any(ord(ch) > 127 for ch in text)
 
+    _DEFAULT_NO_KNOWLEDGE_VI: ClassVar[str] = (
+        "Xin lỗi, mình chưa có thông tin về vấn đề này. "
+        "Bạn có thể tham khảo trực tiếp trên website hoặc liên hệ bộ phận hỗ trợ để được giúp đỡ nhé! 😊"
+    )
+    _DEFAULT_NO_KNOWLEDGE_EN: ClassVar[str] = (
+        "I'm sorry, I don't have information about that yet. "
+        "You can check the website directly or contact our support team for help! 😊"
+    )
+
     def _no_knowledge_response(self) -> str:
         if self._is_likely_vietnamese(self.messages[-1]["content"] if self.messages else ""):
-            return (
-                "Mình chưa có thông tin này trong Knowledge hiện tại của website, "
-                "nên không thể trả lời chính xác. Bạn hãy crawl thêm nội dung liên quan "
-                "hoặc kiểm tra trực tiếp trên trang web."
-            )
-
-        return (
-            "I couldn't find this information in the current website knowledge base, "
-            "so I can't answer it accurately. Please crawl more relevant content or "
-            "check the website directly."
-        )
+            return settings.agent_no_knowledge_vi.strip() or self._DEFAULT_NO_KNOWLEDGE_VI
+        return settings.agent_no_knowledge_en.strip() or self._DEFAULT_NO_KNOWLEDGE_EN
 
     async def _build_system_prompt(
         self,
         query: str,
-        page_context: Optional[dict] = None,
+        page_context: dict | None = None,
         repos=None,
-        visitor_id: Optional[str] = None,
-        conversation_summary: Optional[str] = None,
+        visitor_id: str | None = None,
+        conversation_summary: str | None = None,
     ) -> tuple[str, list[dict], bool]:
         """Build system prompt and return (prompt, tools, has_knowledge_match)."""
 
@@ -261,7 +298,9 @@ class ChatAgent:
             else:
                 tools_section = "## API Tools\n(No tools configured — Knowledge/guidance mode only)"
 
-        prompt = SYSTEM_PROMPT_TEMPLATE.format(
+        # Use custom system prompt from config if set, otherwise use default
+        template = settings.agent_system_prompt.strip() if settings.agent_system_prompt.strip() else DEFAULT_SYSTEM_PROMPT
+        prompt = template.format(
             site_name=self.site_name,
             site_url=self.site_url,
             memory_section=memory_section,
@@ -293,10 +332,10 @@ class ChatAgent:
     async def stream_response(
         self,
         message: str,
-        page_context: Optional[dict] = None,
+        page_context: dict | None = None,
         repos=None,
-        visitor_id: Optional[str] = None,
-        conversation_summary: Optional[str] = None,
+        visitor_id: str | None = None,
+        conversation_summary: str | None = None,
     ) -> AsyncGenerator[str, None]:
         """Process user message → stream response with tool calling support."""
         self.messages.append({"role": "user", "content": message})
@@ -305,7 +344,8 @@ class ChatAgent:
             message, page_context, repos, visitor_id, conversation_summary,
         )
 
-        if not has_knowledge_match:
+        # Casual messages (greetings, thanks, etc.) bypass knowledge check — let the LLM respond naturally
+        if not has_knowledge_match and not self._is_casual_message(message):
             fallback = self._no_knowledge_response()
             self.messages.append({"role": "assistant", "content": fallback})
             for token in fallback:
@@ -371,10 +411,10 @@ class ChatAgent:
     async def get_response(
         self,
         message: str,
-        page_context: Optional[dict] = None,
+        page_context: dict | None = None,
         repos=None,
-        visitor_id: Optional[str] = None,
-        conversation_summary: Optional[str] = None,
+        visitor_id: str | None = None,
+        conversation_summary: str | None = None,
     ) -> str:
         """Process user message → full response with tool calling."""
         self.messages.append({"role": "user", "content": message})
@@ -382,7 +422,7 @@ class ChatAgent:
             message, page_context, repos, visitor_id, conversation_summary,
         )
 
-        if not has_knowledge_match:
+        if not has_knowledge_match and not self._is_casual_message(message):
             fallback = self._no_knowledge_response()
             self.messages.append({"role": "assistant", "content": fallback})
             return fallback

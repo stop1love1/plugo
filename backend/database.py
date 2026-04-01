@@ -1,7 +1,9 @@
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase
-from config import settings
+import contextlib
 
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase
+
+from config import settings
 
 engine = create_async_engine(settings.database_url, echo=False)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -43,7 +45,5 @@ async def _migrate_add_columns(conn):
         ("sites", "response_language", "VARCHAR(10) DEFAULT 'auto'"),
     ]
     for table, column, col_type in migrations:
-        try:
+        with contextlib.suppress(Exception):  # Column may already exist
             await conn.execute(sa.text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
-        except Exception:
-            pass  # Column already exists

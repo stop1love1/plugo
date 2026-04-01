@@ -5,8 +5,9 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from bs4 import BeautifulSoup
 from urllib.parse import urlparse
+
+from bs4 import BeautifulSoup
 
 from knowledge.crawler import WebCrawler, _canonical_internal_url, _normalize_host
 

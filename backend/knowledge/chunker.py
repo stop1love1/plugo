@@ -3,7 +3,7 @@
 import hashlib
 import re
 import uuid
-from typing import Optional
+
 from bs4 import BeautifulSoup, Tag
 
 
@@ -161,10 +161,7 @@ class SemanticChunker:
             if len(current) + len(para) > self.max_chars and current:
                 chunks.append(current.strip())
                 # Keep overlap from end of current chunk
-                if self.overlap_chars > 0:
-                    current = current[-self.overlap_chars:].strip() + "\n\n" + para
-                else:
-                    current = para
+                current = current[-self.overlap_chars:].strip() + "\n\n" + para if self.overlap_chars > 0 else para
             else:
                 current = current + "\n\n" + para if current else para
 

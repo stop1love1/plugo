@@ -1,6 +1,8 @@
 import json
-from typing import AsyncGenerator, Optional
+from collections.abc import AsyncGenerator
+
 import httpx
+
 from providers.base import BaseLLMProvider
 
 
@@ -13,7 +15,7 @@ class OllamaProvider(BaseLLMProvider):
         self,
         messages: list[dict],
         system_prompt: str = "",
-        tools: Optional[list[dict]] = None,
+        tools: list[dict] | None = None,
         temperature: float = 0.7,
     ) -> dict:
         msgs = []
@@ -42,7 +44,7 @@ class OllamaProvider(BaseLLMProvider):
         self,
         messages: list[dict],
         system_prompt: str = "",
-        tools: Optional[list[dict]] = None,
+        tools: list[dict] | None = None,
         temperature: float = 0.7,
     ) -> AsyncGenerator[str, None]:
         msgs = []
@@ -50,23 +52,22 @@ class OllamaProvider(BaseLLMProvider):
             msgs.append({"role": "system", "content": system_prompt})
         msgs.extend(messages)
 
-        async with httpx.AsyncClient(timeout=120) as client:
-            async with client.stream(
-                "POST",
-                f"{self.base_url}/api/chat",
-                json={
-                    "model": self.model,
-                    "messages": msgs,
-                    "stream": True,
-                    "options": {"temperature": temperature},
-                },
-            ) as response:
-                async for line in response.aiter_lines():
-                    if line:
-                        data = json.loads(line)
-                        content = data.get("message", {}).get("content", "")
-                        if content:
-                            yield content
+        async with httpx.AsyncClient(timeout=120) as client, client.stream(
+            "POST",
+            f"{self.base_url}/api/chat",
+            json={
+                "model": self.model,
+                "messages": msgs,
+                "stream": True,
+                "options": {"temperature": temperature},
+            },
+        ) as response:
+            async for line in response.aiter_lines():
+                if line:
+                    data = json.loads(line)
+                    content = data.get("message", {}).get("content", "")
+                    if content:
+                        yield content
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         import asyncio

@@ -1,14 +1,15 @@
 import json
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
-from typing import Optional
-from repositories import get_repos, Repositories
+
 from agent.rag import rag_engine
-from providers.factory import get_llm_provider
+from auth import TokenData, get_current_user
 from config import settings
-from auth import get_current_user, TokenData
 from logging_config import logger
+from providers.factory import get_llm_provider
+from repositories import Repositories, get_repos
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
 
@@ -21,7 +22,7 @@ async def list_knowledge(
     site_id: str,
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=1, le=MAX_PER_PAGE),
-    search: Optional[str] = None,
+    search: str | None = None,
     repos: Repositories = Depends(get_repos),
     _user: TokenData = Depends(get_current_user),
 ):
@@ -88,8 +89,8 @@ async def delete_chunk(
 
 
 class ChunkUpdate(BaseModel):
-    title: Optional[str] = Field(None, min_length=1, max_length=500)
-    content: Optional[str] = Field(None, min_length=1, max_length=50000)
+    title: str | None = Field(None, min_length=1, max_length=500)
+    content: str | None = Field(None, min_length=1, max_length=50000)
 
 
 @router.put("/{chunk_id}")
@@ -252,14 +253,14 @@ async def recrawl_url(
         }
     except Exception as e:
         logger.error("Recrawl failed", url=data.source_url, error=str(e))
-        raise HTTPException(status_code=500, detail=f"Recrawl failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Recrawl failed: {e!s}") from e
 
 
 class ManualChunkCreate(BaseModel):
     site_id: str
     title: str = Field(min_length=1, max_length=500)
     content: str = Field(min_length=1, max_length=50000)
-    source_url: Optional[str] = None
+    source_url: str | None = None
 
 
 @router.post("/manual")

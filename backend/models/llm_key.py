@@ -1,6 +1,8 @@
 import uuid
-from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Text
+from datetime import UTC, datetime
+
+from sqlalchemy import Column, DateTime, String, Text
+
 from database import Base
 
 
@@ -12,5 +14,5 @@ class LLMKey(Base):
     api_key = Column(Text, nullable=False)  # encrypted in production
     label = Column(String(255), default="")  # optional label, e.g. "Production key"
 
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))

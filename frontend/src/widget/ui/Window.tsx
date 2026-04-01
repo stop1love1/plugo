@@ -1,4 +1,3 @@
-import { h } from "preact";
 import { useState, useRef, useEffect, useCallback } from "preact/hooks";
 import { Message } from "./Message";
 import { getWidgetString, detectLanguage } from "../i18n";
@@ -146,11 +145,6 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
     return messages[i].role !== messages[i + 1].role;
   };
 
-  const isSameRoleAsPrev = (i: number) => {
-    if (i === 0) return false;
-    return messages[i].role === messages[i - 1].role;
-  };
-
   return (
     <div class={`plugo-window ${position}`} ref={windowRef} role="dialog" aria-modal="true">
       <div class="plugo-header">
@@ -163,7 +157,13 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
                 class={`plugo-header-status-dot${connectionState === "connected" ? " online" : ""}`}
                 style={connectionState !== "connected" ? "background:#f59e0b" : ""}
               />
-              {headerSubtitle || (connectionState === "connected" ? "Online" : getWidgetString(connectionState as any, lang))}
+              {headerSubtitle ||
+                (connectionState === "connected"
+                  ? "Online"
+                  : getWidgetString(
+                      connectionState as "connecting" | "reconnecting" | "disconnected",
+                      lang
+                    ))}
             </div>
           </div>
         </div>

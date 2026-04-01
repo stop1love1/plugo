@@ -2,12 +2,23 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { getTools, createTool, updateTool, deleteTool, testTool } from "../lib/api";
+import {
+  getTools,
+  createTool,
+  updateTool,
+  deleteTool,
+  testTool,
+  type Tool,
+  type UpdateToolData,
+} from "../lib/api";
 import { Wrench, Plus, Trash2, Play, CheckCircle, Pencil, X, ToggleLeft, ToggleRight } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { FormField } from "../components/FormField";
 import { EmptyState } from "../components/EmptyState";
 import { useLocale } from "../lib/useLocale";
+
+type ParamRow = { name: string; type: string; description: string; required: boolean };
+type ParamSchemaField = { type?: string; description?: string; required?: boolean };
 
 const emptyForm = {
   name: "",
@@ -25,10 +36,10 @@ export default function Tools() {
   const { t } = useLocale();
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [testResults, setTestResults] = useState<Record<string, any>>({});
+  const [testResults, setTestResults] = useState<Record<string, unknown>>({});
   const [form, setForm] = useState({ ...emptyForm });
   const [useBuilder, setUseBuilder] = useState(false);
-  const [params, setParams] = useState<Array<{ name: string; type: string; description: string; required: boolean }>>([]);
+  const [params, setParams] = useState<ParamRow[]>([]);
   const [testParamsJson, setTestParamsJson] = useState<Record<string, string>>({});
 
   const { data: tools = [], isLoading } = useQuery({
@@ -49,7 +60,7 @@ export default function Tools() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => updateTool(id, data),
+    mutationFn: ({ id, data }: { id: string; data: UpdateToolData }) => updateTool(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tools", siteId] });
       setEditingId(null);
@@ -68,7 +79,7 @@ export default function Tools() {
     onError: () => toast.error("Failed to delete tool"),
   });
 
-  const startEdit = (tool: any) => {
+  const startEdit = (tool: Tool) => {
     setEditingId(tool.id);
     setShowAdd(false);
     setForm({
@@ -89,7 +100,7 @@ export default function Tools() {
 
   // Sync visual builder → JSON
   const syncBuilderToJson = () => {
-    const schema: Record<string, any> = {};
+    const schema: Record<string, ParamSchemaField> = {};
     params.forEach((p) => {
       schema[p.name] = { type: p.type, description: p.description, required: p.required };
     });
@@ -99,27 +110,29 @@ export default function Tools() {
   // Sync JSON → visual builder
   const syncJsonToBuilder = () => {
     try {
-      const parsed = JSON.parse(form.params_schema);
-      const entries = Object.entries(parsed).map(([name, val]: [string, any]) => ({
+      const parsed = JSON.parse(form.params_schema) as Record<string, ParamSchemaField>;
+      const entries = Object.entries(parsed).map(([name, val]) => ({
         name,
         type: val.type || "string",
         description: val.description || "",
         required: val.required || false,
       }));
       setParams(entries);
-    } catch {}
+    } catch {
+      void 0;
+    }
   };
 
   const addParam = () => {
     setParams([...params, { name: "", type: "string", description: "", required: false }]);
   };
 
-  const updateParam = (index: number, field: string, value: any) => {
+  const updateParam = (index: number, field: keyof ParamRow, value: string | boolean) => {
     const next = [...params];
-    (next[index] as any)[field] = value;
+    next[index] = { ...next[index], [field]: value };
     setParams(next);
     // Auto-sync to JSON
-    const schema: Record<string, any> = {};
+    const schema: Record<string, ParamSchemaField> = {};
     next.forEach((p) => {
       if (p.name) schema[p.name] = { type: p.type, description: p.description, required: p.required };
     });
@@ -129,7 +142,7 @@ export default function Tools() {
   const removeParam = (index: number) => {
     const next = params.filter((_, i) => i !== index);
     setParams(next);
-    const schema: Record<string, any> = {};
+    const schema: Record<string, ParamSchemaField> = {};
     next.forEach((p) => {
       if (p.name) schema[p.name] = { type: p.type, description: p.description, required: p.required };
     });
@@ -142,7 +155,7 @@ export default function Tools() {
     let parsedParams = {};
     try {
       parsedParams = JSON.parse(form.params_schema);
-    } catch (e) {
+    } catch {
       toast.error("Invalid JSON in parameters schema");
       return;
     }
@@ -152,13 +165,20 @@ export default function Tools() {
       description: form.description,
       method: form.method,
       url: form.url,
-      auth_type: form.auth_type === "none" ? null : form.auth_type,
-      auth_value: form.auth_value || null,
+      auth_type: form.auth_type === "none" ? undefined : form.auth_type,
+      auth_value: form.auth_value || undefined,
       params_schema: parsedParams,
     };
 
     if (editingId) {
-      updateMutation.mutate({ id: editingId, data: payload });
+      updateMutation.mutate({
+        id: editingId,
+        data: {
+          ...payload,
+          auth_type: form.auth_type === "none" ? null : form.auth_type,
+          auth_value: form.auth_value || null,
+        },
+      });
     } else {
       createMutation.mutate({ site_id: siteId, ...payload });
     }
@@ -333,7 +353,7 @@ export default function Tools() {
         <EmptyState icon={Wrench} message={t("tools.noTools")} />
       ) : (
         <div className="space-y-3">
-          {tools.map((tool: any) => (
+          {tools.map((tool) => (
             <div key={tool.id} className={`bg-white p-4 rounded-xl border ${editingId === tool.id ? "border-primary-300 bg-primary-50" : "border-gray-200"}`}>
               <div className="flex items-center justify-between">
                 <div>
@@ -366,11 +386,11 @@ export default function Tools() {
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
-              {testResults[tool.id] && (
+              {tool.id in testResults ? (
                 <pre className="mt-3 p-3 bg-gray-50 rounded-lg text-xs font-mono overflow-auto max-h-40">
                   {JSON.stringify(testResults[tool.id], null, 2)}
                 </pre>
-              )}
+              ) : null}
             </div>
           ))}
         </div>

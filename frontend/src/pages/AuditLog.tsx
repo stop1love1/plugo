@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getAuditLogs, type AuditLogEntry } from "../lib/api";
-import { FileText, User, Clock, Search } from "lucide-react";
+import { FileText, Search } from "lucide-react";
 import { EmptyState } from "../components/EmptyState";
 import { useLocale } from "../lib/useLocale";
 

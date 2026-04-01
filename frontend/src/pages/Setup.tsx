@@ -88,7 +88,13 @@ export default function Setup() {
       if (crawlStatus.crawl_exclude_patterns !== undefined) setExcludePatterns(crawlStatus.crawl_exclude_patterns);
       if (crawlStatus.crawl_max_pages !== undefined) setMaxPages(crawlStatus.crawl_max_pages);
     }
-  }, [crawlStatus?.crawl_auto_interval, crawlStatus?.crawl_max_depth, crawlStatus?.crawl_exclude_patterns, crawlStatus?.crawl_max_pages]);
+  }, [
+    crawlStatus,
+    crawlStatus?.crawl_auto_interval,
+    crawlStatus?.crawl_max_depth,
+    crawlStatus?.crawl_exclude_patterns,
+    crawlStatus?.crawl_max_pages,
+  ]);
 
   // Tick every second while crawl is running
   useEffect(() => {

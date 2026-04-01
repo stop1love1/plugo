@@ -1,26 +1,31 @@
 """SQLite implementation using SQLAlchemy async."""
 
-import uuid
-from datetime import datetime, timezone
-from typing import Optional
-from sqlalchemy import select, func
+from datetime import UTC, datetime
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from repositories.base import (
-    BaseSiteRepo, BaseKnowledgeRepo, BaseToolRepo,
-    BaseChatSessionRepo, BaseCrawlJobRepo, BaseUserRepo,
-    BaseVisitorMemoryRepo, BaseConversationSummaryRepo,
-    BaseAuditLogRepo, BaseLLMKeyRepo,
-)
-from models.site import Site
-from models.knowledge import KnowledgeChunk
-from models.tool import Tool
+from models.audit_log import AuditLog
 from models.chat import ChatSession
 from models.crawl import CrawlJob
-from models.user import User
-from models.memory import VisitorMemory, ConversationSummary
-from models.audit_log import AuditLog
+from models.knowledge import KnowledgeChunk
 from models.llm_key import LLMKey
+from models.memory import ConversationSummary, VisitorMemory
+from models.site import Site
+from models.tool import Tool
+from models.user import User
+from repositories.base import (
+    BaseAuditLogRepo,
+    BaseChatSessionRepo,
+    BaseConversationSummaryRepo,
+    BaseCrawlJobRepo,
+    BaseKnowledgeRepo,
+    BaseLLMKeyRepo,
+    BaseSiteRepo,
+    BaseToolRepo,
+    BaseUserRepo,
+    BaseVisitorMemoryRepo,
+)
 
 
 def _site_to_dict(s: Site) -> dict:
@@ -139,11 +144,11 @@ class SQLiteSiteRepo(BaseSiteRepo):
         await self.db.refresh(site)
         return _site_to_dict(site)
 
-    async def get_by_id(self, site_id: str) -> Optional[dict]:
+    async def get_by_id(self, site_id: str) -> dict | None:
         site = await self.db.get(Site, site_id)
         return _site_to_dict(site) if site else None
 
-    async def get_by_token(self, token: str) -> Optional[dict]:
+    async def get_by_token(self, token: str) -> dict | None:
         result = await self.db.execute(select(Site).where(Site.token == token))
         site = result.scalar_one_or_none()
         return _site_to_dict(site) if site else None
@@ -152,7 +157,7 @@ class SQLiteSiteRepo(BaseSiteRepo):
         result = await self.db.execute(select(Site).order_by(Site.created_at.desc()))
         return [_site_to_dict(s) for s in result.scalars().all()]
 
-    async def update(self, site_id: str, data: dict) -> Optional[dict]:
+    async def update(self, site_id: str, data: dict) -> dict | None:
         site = await self.db.get(Site, site_id)
         if not site:
             return None
@@ -183,11 +188,11 @@ class SQLiteKnowledgeRepo(BaseKnowledgeRepo):
         await self.db.commit()
         return _chunk_to_dict(chunk)
 
-    async def get_by_id(self, chunk_id: str) -> Optional[dict]:
+    async def get_by_id(self, chunk_id: str) -> dict | None:
         chunk = await self.db.get(KnowledgeChunk, chunk_id)
         return _chunk_to_dict(chunk) if chunk else None
 
-    async def list_by_site(self, site_id: str, page: int = 1, per_page: int = 20, search: Optional[str] = None) -> dict:
+    async def list_by_site(self, site_id: str, page: int = 1, per_page: int = 20, search: str | None = None) -> dict:
         offset = (page - 1) * per_page
         base_filter = KnowledgeChunk.site_id == site_id
         if search:
@@ -211,7 +216,7 @@ class SQLiteKnowledgeRepo(BaseKnowledgeRepo):
         total = count_result.scalar()
         return {"chunks": chunks, "total": total, "page": page, "per_page": per_page}
 
-    async def update(self, chunk_id: str, data: dict) -> Optional[dict]:
+    async def update(self, chunk_id: str, data: dict) -> dict | None:
         chunk = await self.db.get(KnowledgeChunk, chunk_id)
         if not chunk:
             return None
@@ -341,7 +346,7 @@ class SQLiteToolRepo(BaseToolRepo):
         await self.db.refresh(tool)
         return _tool_to_dict(tool)
 
-    async def get_by_id(self, tool_id: str) -> Optional[dict]:
+    async def get_by_id(self, tool_id: str) -> dict | None:
         tool = await self.db.get(Tool, tool_id)
         return _tool_to_dict(tool) if tool else None
 
@@ -353,11 +358,11 @@ class SQLiteToolRepo(BaseToolRepo):
 
     async def list_enabled_by_site(self, site_id: str) -> list[dict]:
         result = await self.db.execute(
-            select(Tool).where(Tool.site_id == site_id, Tool.enabled == True)
+            select(Tool).where(Tool.site_id == site_id, Tool.enabled)
         )
         return [_tool_to_dict(t) for t in result.scalars().all()]
 
-    async def update(self, tool_id: str, data: dict) -> Optional[dict]:
+    async def update(self, tool_id: str, data: dict) -> dict | None:
         tool = await self.db.get(Tool, tool_id)
         if not tool:
             return None
@@ -388,7 +393,7 @@ class SQLiteChatSessionRepo(BaseChatSessionRepo):
         await self.db.refresh(session)
         return _session_to_dict(session)
 
-    async def get_by_id(self, session_id: str) -> Optional[dict]:
+    async def get_by_id(self, session_id: str) -> dict | None:
         session = await self.db.get(ChatSession, session_id)
         return _session_to_dict(session) if session else None
 
@@ -421,7 +426,7 @@ class SQLiteChatSessionRepo(BaseChatSessionRepo):
         session = await self.db.get(ChatSession, session_id)
         if not session:
             return False
-        session.ended_at = None if clear else datetime.now(timezone.utc)
+        session.ended_at = None if clear else datetime.now(UTC)
         await self.db.commit()
         return True
 
@@ -438,7 +443,7 @@ class SQLiteCrawlJobRepo(BaseCrawlJobRepo):
         await self.db.refresh(job)
         return _job_to_dict(job)
 
-    async def get_by_id(self, job_id: str) -> Optional[dict]:
+    async def get_by_id(self, job_id: str) -> dict | None:
         job = await self.db.get(CrawlJob, job_id)
         return _job_to_dict(job) if job else None
 
@@ -479,11 +484,11 @@ class SQLiteUserRepo(BaseUserRepo):
         await self.db.refresh(user)
         return _user_to_dict(user)
 
-    async def get_by_id(self, user_id: str) -> Optional[dict]:
+    async def get_by_id(self, user_id: str) -> dict | None:
         user = await self.db.get(User, user_id)
         return _user_to_dict(user) if user else None
 
-    async def get_by_username(self, username: str) -> Optional[dict]:
+    async def get_by_username(self, username: str) -> dict | None:
         result = await self.db.execute(select(User).where(User.username == username))
         user = result.scalar_one_or_none()
         return _user_to_dict(user) if user else None
@@ -496,7 +501,7 @@ class SQLiteUserRepo(BaseUserRepo):
         result = await self.db.execute(select(User).order_by(User.created_at.desc()))
         return [{"id": u.id, "username": u.username, "role": u.role, "created_at": str(u.created_at)} for u in result.scalars().all()]
 
-    async def update_role(self, user_id: str, role: str) -> Optional[dict]:
+    async def update_role(self, user_id: str, role: str) -> dict | None:
         user = await self.db.get(User, user_id)
         if not user:
             return None
@@ -524,7 +529,7 @@ class SQLiteVisitorMemoryRepo(BaseVisitorMemoryRepo):
         await self.db.commit()
         return _memory_to_dict(memory)
 
-    async def get_by_id(self, memory_id: str) -> Optional[dict]:
+    async def get_by_id(self, memory_id: str) -> dict | None:
         result = await self.db.execute(select(VisitorMemory).where(VisitorMemory.id == memory_id))
         m = result.scalar_one_or_none()
         return _memory_to_dict(m) if m else None
@@ -550,7 +555,7 @@ class SQLiteVisitorMemoryRepo(BaseVisitorMemoryRepo):
             for k, v in data.items():
                 if v is not None:
                     setattr(existing, k, v)
-            existing.updated_at = datetime.now(timezone.utc)
+            existing.updated_at = datetime.now(UTC)
             await self.db.commit()
             return _memory_to_dict(existing)
         else:
@@ -604,7 +609,7 @@ class SQLiteConversationSummaryRepo(BaseConversationSummaryRepo):
         await self.db.commit()
         return _summary_to_dict(summary)
 
-    async def get_by_session(self, session_id: str) -> Optional[dict]:
+    async def get_by_session(self, session_id: str) -> dict | None:
         result = await self.db.execute(
             select(ConversationSummary).where(ConversationSummary.session_id == session_id)
         )
@@ -620,7 +625,7 @@ class SQLiteConversationSummaryRepo(BaseConversationSummaryRepo):
             for k, v in data.items():
                 if v is not None:
                     setattr(existing, k, v)
-            existing.updated_at = datetime.now(timezone.utc)
+            existing.updated_at = datetime.now(UTC)
             await self.db.commit()
             return _summary_to_dict(existing)
         else:
@@ -657,7 +662,19 @@ class SQLiteAuditLogRepo(BaseAuditLogRepo):
         result = await self.db.execute(
             select(AuditLog).order_by(AuditLog.created_at.desc()).offset(offset).limit(per_page)
         )
-        logs = [{"id": l.id, "user_id": l.user_id, "username": l.username, "action": l.action, "resource_type": l.resource_type, "resource_id": l.resource_id, "details": l.details, "created_at": str(l.created_at)} for l in result.scalars().all()]
+        logs = [
+            {
+                "id": row.id,
+                "user_id": row.user_id,
+                "username": row.username,
+                "action": row.action,
+                "resource_type": row.resource_type,
+                "resource_id": row.resource_id,
+                "details": row.details,
+                "created_at": str(row.created_at),
+            }
+            for row in result.scalars().all()
+        ]
         count_result = await self.db.execute(select(func.count()).select_from(AuditLog))
         total = count_result.scalar()
         return {"logs": logs, "total": total, "page": page, "per_page": per_page}
@@ -683,7 +700,7 @@ class SQLiteLLMKeyRepo(BaseLLMKeyRepo):
         result = await self.db.execute(select(LLMKey))
         return [_llm_key_to_dict(k) for k in result.scalars().all()]
 
-    async def get_by_provider(self, provider: str) -> Optional[dict]:
+    async def get_by_provider(self, provider: str) -> dict | None:
         result = await self.db.execute(select(LLMKey).where(LLMKey.provider == provider))
         k = result.scalar_one_or_none()
         return _llm_key_to_dict(k) if k else None

@@ -1,8 +1,9 @@
 import json
-from typing import AsyncGenerator, Optional
-from openai import AsyncOpenAI
-from providers.base import BaseLLMProvider
+from collections.abc import AsyncGenerator
 
+from openai import AsyncOpenAI
+
+from providers.base import BaseLLMProvider
 
 _EMBEDDING_MODELS = {"text-embedding-ada-002", "text-embedding-3-small", "text-embedding-3-large"}
 
@@ -19,7 +20,7 @@ class OpenAIProvider(BaseLLMProvider):
         self,
         messages: list[dict],
         system_prompt: str = "",
-        tools: Optional[list[dict]] = None,
+        tools: list[dict] | None = None,
         temperature: float = 0.7,
     ) -> dict:
         msgs = []
@@ -42,7 +43,7 @@ class OpenAIProvider(BaseLLMProvider):
         self,
         messages: list[dict],
         system_prompt: str = "",
-        tools: Optional[list[dict]] = None,
+        tools: list[dict] | None = None,
         temperature: float = 0.7,
     ) -> AsyncGenerator[str, None]:
         msgs = []

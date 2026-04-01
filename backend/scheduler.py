@@ -1,12 +1,16 @@
 """Auto-crawl scheduler — checks for sites needing re-crawl on a regular interval."""
 
 import asyncio
+import contextlib
 import random
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
+
 from config import settings
 from logging_config import logger
 
 _scheduler_task: asyncio.Task | None = None
+# Retain references until auto-crawl tasks complete (RUF006)
+_auto_crawl_tasks: set[asyncio.Task] = set()
 JITTER_SECONDS = 30
 
 
@@ -32,7 +36,7 @@ async def _scheduler_loop():
             repos = await create_repos()
             try:
                 sites = await repos.sites.list_all()
-                now = datetime.now(timezone.utc)
+                now = datetime.now(UTC)
 
                 running_count = len(_active_crawlers)
 
@@ -65,7 +69,7 @@ async def _scheduler_loop():
                         if isinstance(last_crawled, str):
                             last_crawled = datetime.fromisoformat(last_crawled)
                         if not last_crawled.tzinfo:
-                            last_crawled = last_crawled.replace(tzinfo=timezone.utc)
+                            last_crawled = last_crawled.replace(tzinfo=UTC)
                         next_crawl_at = last_crawled + timedelta(hours=interval_hours)
                         if now < next_crawl_at:
                             continue
@@ -99,13 +103,15 @@ async def _scheduler_loop():
                         job_id=job["id"],
                     )
 
-                    asyncio.create_task(
+                    crawl_task = asyncio.create_task(
                         _run_crawl_with_tracking(
                             site_id, crawl_url, job["id"], max_pages,
                             max_depth=max_depth,
                             exclude_patterns=exclude_patterns,
                         )
                     )
+                    _auto_crawl_tasks.add(crawl_task)
+                    crawl_task.add_done_callback(_auto_crawl_tasks.discard)
                     running_count += 1
 
             finally:
@@ -134,9 +140,7 @@ async def stop_scheduler():
     global _scheduler_task
     if _scheduler_task and not _scheduler_task.done():
         _scheduler_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await _scheduler_task
-        except asyncio.CancelledError:
-            pass
         _scheduler_task = None
         logger.info("Auto-crawl scheduler stopped")

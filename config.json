@@ -55,5 +55,11 @@
     "default": "60/minute",
     "chat": "30/minute",
     "crawl": "5/minute"
+  },
+  "agent": {
+    "system_prompt": "",
+    "no_knowledge_response_vi": "",
+    "no_knowledge_response_en": "",
+    "no_tool_providers": ["ollama", "lmstudio"]
   }
 }

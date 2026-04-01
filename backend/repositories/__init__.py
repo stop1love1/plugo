@@ -16,10 +16,15 @@ Usage in background tasks / scripts (caller must close):
 """
 
 from repositories.base import (
-    BaseSiteRepo, BaseKnowledgeRepo, BaseToolRepo,
-    BaseChatSessionRepo, BaseCrawlJobRepo,
-    BaseVisitorMemoryRepo, BaseConversationSummaryRepo,
-    BaseAuditLogRepo, BaseLLMKeyRepo,
+    BaseAuditLogRepo,
+    BaseChatSessionRepo,
+    BaseConversationSummaryRepo,
+    BaseCrawlJobRepo,
+    BaseKnowledgeRepo,
+    BaseLLMKeyRepo,
+    BaseSiteRepo,
+    BaseToolRepo,
+    BaseVisitorMemoryRepo,
 )
 
 
@@ -64,6 +69,7 @@ def _get_mongo_db():
     global _mongo_client, _mongo_db
     if _mongo_db is None:
         from motor.motor_asyncio import AsyncIOMotorClient
+
         from config import settings
         _mongo_client = AsyncIOMotorClient(settings.mongodb_url)
         _mongo_db = _mongo_client[settings.mongodb_database]
@@ -91,10 +97,15 @@ async def create_repos() -> Repositories:
 
     if settings.database_provider == "mongodb":
         from repositories.mongo_repo import (
-            MongoSiteRepo, MongoKnowledgeRepo, MongoToolRepo,
-            MongoChatSessionRepo, MongoCrawlJobRepo,
-            MongoVisitorMemoryRepo, MongoConversationSummaryRepo,
-            MongoAuditLogRepo, MongoLLMKeyRepo,
+            MongoAuditLogRepo,
+            MongoChatSessionRepo,
+            MongoConversationSummaryRepo,
+            MongoCrawlJobRepo,
+            MongoKnowledgeRepo,
+            MongoLLMKeyRepo,
+            MongoSiteRepo,
+            MongoToolRepo,
+            MongoVisitorMemoryRepo,
         )
         db = _get_mongo_db()
         return Repositories(
@@ -111,10 +122,15 @@ async def create_repos() -> Repositories:
     else:
         # Default: SQLite
         from repositories.sqlite_repo import (
-            SQLiteSiteRepo, SQLiteKnowledgeRepo, SQLiteToolRepo,
-            SQLiteChatSessionRepo, SQLiteCrawlJobRepo,
-            SQLiteVisitorMemoryRepo, SQLiteConversationSummaryRepo,
-            SQLiteAuditLogRepo, SQLiteLLMKeyRepo,
+            SQLiteAuditLogRepo,
+            SQLiteChatSessionRepo,
+            SQLiteConversationSummaryRepo,
+            SQLiteCrawlJobRepo,
+            SQLiteKnowledgeRepo,
+            SQLiteLLMKeyRepo,
+            SQLiteSiteRepo,
+            SQLiteToolRepo,
+            SQLiteVisitorMemoryRepo,
         )
         session_factory = _get_sqlite_session()
         db = session_factory()

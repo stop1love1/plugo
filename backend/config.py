@@ -11,7 +11,6 @@ import json
 import os
 import warnings
 from pathlib import Path
-from typing import Optional
 
 from dotenv import dotenv_values
 from pydantic_settings import BaseSettings
@@ -31,7 +30,7 @@ _CONFIG_PATHS = [
 _json_config: dict = {}
 for _path in _CONFIG_PATHS:
     if _path.exists():
-        with open(_path, "r", encoding="utf-8") as f:
+        with open(_path, encoding="utf-8") as f:
             _json_config = json.load(f)
         break
 
@@ -47,9 +46,9 @@ class Settings(BaseSettings):
     llm_model: str = _get("llm", "model", "claude-sonnet-4-20250514")
 
     # --- API Keys (from .env only — secrets) ---
-    anthropic_api_key: Optional[str] = None
-    openai_api_key: Optional[str] = None
-    gemini_api_key: Optional[str] = None
+    anthropic_api_key: str | None = None
+    openai_api_key: str | None = None
+    gemini_api_key: str | None = None
 
     # --- Ollama (from config.json → ollama) ---
     ollama_base_url: str = _get("ollama", "base_url", "http://localhost:11434")
@@ -112,6 +111,9 @@ class Settings(BaseSettings):
 
     # --- Agent (from config.json → agent) ---
     no_tool_providers: list[str] = _get("agent", "no_tool_providers", ["ollama", "lmstudio"])
+    agent_system_prompt: str = _get("agent", "system_prompt", "")
+    agent_no_knowledge_vi: str = _get("agent", "no_knowledge_response_vi", "")
+    agent_no_knowledge_en: str = _get("agent", "no_knowledge_response_en", "")
 
     class Config:
         env_file = ".env"
@@ -123,9 +125,9 @@ settings = Settings()
 
 def validate_settings():
     """Validate critical settings on startup. Call from lifespan."""
-    _INSECURE_KEYS = {"change-me-to-a-random-string", "secret", "password", ""}
+    insecure_keys = {"change-me-to-a-random-string", "secret", "password", ""}
 
-    if settings.secret_key in _INSECURE_KEYS:
+    if settings.secret_key in insecure_keys:
         env = os.environ.get("ENV", "development")
         if env == "production":
             raise RuntimeError(
@@ -139,7 +141,7 @@ def validate_settings():
                 stacklevel=2,
             )
 
-    if len(settings.secret_key) < 16 and settings.secret_key not in _INSECURE_KEYS:
+    if len(settings.secret_key) < 16 and settings.secret_key not in insecure_keys:
         warnings.warn(
             "SECRET_KEY is shorter than 16 characters. Use a longer key for better security.",
             stacklevel=2,

@@ -373,4 +373,10 @@ export const getAuditLogs = (page = 1) =>
 export const submitFeedback = (sessionId: string, messageIndex: number, rating: "up" | "down") =>
   api.post<{ message: string }>(`/sessions/${sessionId}/feedback`, { message_index: messageIndex, rating }).then((r) => r.data);
 
+// Global Config
+export type GlobalConfig = Record<string, Record<string, unknown>>;
+export const getGlobalConfig = () => api.get<GlobalConfig>("/config").then((r) => r.data);
+export const updateGlobalConfig = (data: GlobalConfig) =>
+  api.put<{ status: string; message: string }>("/config", data).then((r) => r.data);
+
 export default api;

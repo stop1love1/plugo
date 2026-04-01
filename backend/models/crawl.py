@@ -1,6 +1,8 @@
 import uuid
-from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Integer, Text, ForeignKey
+from datetime import UTC, datetime
+
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+
 from database import Base
 
 
@@ -22,5 +24,5 @@ class CrawlJob(Base):
     error_log = Column(Text, nullable=True)
     crawl_log = Column(Text, nullable=True)  # JSON array of per-page log entries (ALL entries)
 
-    started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    started_at = Column(DateTime, default=lambda: datetime.now(UTC))
     finished_at = Column(DateTime, nullable=True)

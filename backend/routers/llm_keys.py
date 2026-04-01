@@ -1,11 +1,12 @@
 """LLM API Key management — save/retrieve provider API keys via dashboard."""
 
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from typing import Optional
-from repositories import get_repos, Repositories
-from auth import get_current_user, TokenData
-from utils.crypto import encrypt_value, decrypt_value
+
+from auth import TokenData, get_current_user
+from repositories import Repositories, get_repos
+from utils.crypto import decrypt_value, encrypt_value
 
 router = APIRouter(prefix="/api/llm-keys", tags=["llm-keys"])
 
@@ -17,8 +18,8 @@ class KeySave(BaseModel):
 
 
 class KeyUpdate(BaseModel):
-    api_key: Optional[str] = Field(None, min_length=1, max_length=500)
-    label: Optional[str] = None
+    api_key: str | None = Field(None, min_length=1, max_length=500)
+    label: str | None = None
 
 
 def _mask_key(key: str) -> str:
@@ -97,7 +98,7 @@ async def delete_key(
     return {"message": f"API key for {provider} deleted"}
 
 
-async def get_key_for_provider(provider: str) -> Optional[str]:
+async def get_key_for_provider(provider: str) -> str | None:
     """Get the API key for a provider from DB. Used by provider factory."""
     from repositories import create_repos
     try:

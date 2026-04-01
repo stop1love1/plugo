@@ -1,7 +1,8 @@
 """Tests for Sessions & Feedback flow."""
 
+import contextlib
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -11,23 +12,21 @@ async def test_session(db_repos, test_site):
     """Create a test chat session with messages."""
     session_id = str(uuid.uuid4())
     messages = [
-        {"role": "user", "content": "Hello", "timestamp": datetime.now(timezone.utc).isoformat()},
-        {"role": "assistant", "content": "Hi there! How can I help?", "timestamp": datetime.now(timezone.utc).isoformat()},
-        {"role": "user", "content": "Tell me about your product", "timestamp": datetime.now(timezone.utc).isoformat()},
-        {"role": "assistant", "content": "Our product is great!", "timestamp": datetime.now(timezone.utc).isoformat()},
+        {"role": "user", "content": "Hello", "timestamp": datetime.now(UTC).isoformat()},
+        {"role": "assistant", "content": "Hi there! How can I help?", "timestamp": datetime.now(UTC).isoformat()},
+        {"role": "user", "content": "Tell me about your product", "timestamp": datetime.now(UTC).isoformat()},
+        {"role": "assistant", "content": "Our product is great!", "timestamp": datetime.now(UTC).isoformat()},
     ]
     session = await db_repos.chat_sessions.create({
         "id": session_id,
         "site_id": test_site["id"],
         "visitor_id": f"visitor_{uuid.uuid4().hex[:8]}",
         "messages": messages,
-        "started_at": datetime.now(timezone.utc),
+        "started_at": datetime.now(UTC),
     })
     yield session
-    try:
+    with contextlib.suppress(Exception):
         await db_repos.chat_sessions.delete(session_id)
-    except Exception:
-        pass
 
 
 @pytest.mark.asyncio

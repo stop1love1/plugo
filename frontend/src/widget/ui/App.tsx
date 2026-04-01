@@ -1,8 +1,7 @@
-import { h } from "preact";
 import { useState, useCallback, useRef, useEffect } from "preact/hooks";
 import { Bubble } from "./Bubble";
 import { ChatWindow } from "./Window";
-import { PlugoWebSocket, ConnectionState } from "../websocket";
+import { PlugoWebSocket, ConnectionState, type WsHistoryItem } from "../websocket";
 
 type Message = {
   role: "user" | "bot";
@@ -22,7 +21,7 @@ type AppProps = {
   inputPlaceholder?: string;
   autoOpenDelay?: number;
   bubbleSize?: string;
-  getPageContext: () => any;
+  getPageContext: () => Record<string, unknown>;
 };
 
 const SESSION_KEY = "plugo_session_";
@@ -68,7 +67,11 @@ let _audioCtx: AudioContext | null = null;
 function getAudioContext(): AudioContext | null {
   try {
     if (!_audioCtx) {
-      _audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const Ctx =
+        window.AudioContext ||
+        (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Ctx) return null;
+      _audioCtx = new Ctx();
     }
     return _audioCtx;
   } catch {
@@ -89,7 +92,20 @@ function playNotificationSound() {
   osc.stop(ctx.currentTime + 0.1);
 }
 
-export function App({ token, serverUrl, primaryColor, greeting, position, widgetTitle, botAvatar, headerSubtitle, inputPlaceholder, autoOpenDelay, bubbleSize, getPageContext }: AppProps) {
+export function App({
+  token,
+  serverUrl,
+  primaryColor: _primaryColor,
+  greeting: _greeting,
+  position,
+  widgetTitle,
+  botAvatar,
+  headerSubtitle,
+  inputPlaceholder,
+  autoOpenDelay,
+  bubbleSize,
+  getPageContext,
+}: AppProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -135,21 +151,21 @@ export function App({ token, serverUrl, primaryColor, greeting, position, widget
         }
 
         if (data.resumed && data.history && data.history.length > 0) {
-          const restored: Message[] = data.history.map((m: any) => ({
-            role: m.role === "user" ? "user" : "bot",
-            content: m.content,
-            timestamp: m.timestamp || Date.now(),
+          const restored: Message[] = data.history.map((m: WsHistoryItem) => ({
+            role: (m.role === "user" ? "user" : "bot") as Message["role"],
+            content: m.content ?? "",
+            timestamp: m.timestamp ?? Date.now(),
           }));
           setMessages(restored);
         } else if (data.greeting && messagesRef.current.length === 0) {
-          setMessages([{ role: "bot", content: data.greeting, timestamp: Date.now() }]);
+          setMessages([{ role: "bot" as const, content: data.greeting, timestamp: Date.now() }]);
         }
       },
       onStart: () => {
         setIsTyping(true);
         setSuggestions([]);
         setMessages((prev) => {
-          const updated = [...prev, { role: "bot", content: "", timestamp: Date.now() }];
+          const updated = [...prev, { role: "bot" as const, content: "", timestamp: Date.now() }];
           return updated.length > MAX_MESSAGES ? updated.slice(-MAX_MESSAGES) : updated;
         });
       },
@@ -183,7 +199,7 @@ export function App({ token, serverUrl, primaryColor, greeting, position, widget
         setMessages((prev) => {
           const updated = [
             ...prev,
-            { role: "bot", content: `\u26a0\ufe0f ${error}`, timestamp: Date.now() },
+            { role: "bot" as const, content: `\u26a0\ufe0f ${error}`, timestamp: Date.now() },
           ];
           return updated.length > MAX_MESSAGES ? updated.slice(-MAX_MESSAGES) : updated;
         });
@@ -253,14 +269,14 @@ export function App({ token, serverUrl, primaryColor, greeting, position, widget
       if (!sent) {
         setMessages((prev) => [
           ...prev,
-          { role: "bot", content: "\u26a0\ufe0f Message could not be sent. Please check your connection.", timestamp: Date.now() },
+          { role: "bot" as const, content: "\u26a0\ufe0f Message could not be sent. Please check your connection.", timestamp: Date.now() },
         ]);
         return;
       }
 
       setSuggestions([]);
       setMessages((prev) => {
-        const updated = [...prev, { role: "user", content: message, timestamp: Date.now() }];
+        const updated = [...prev, { role: "user" as const, content: message, timestamp: Date.now() }];
         return updated.length > MAX_MESSAGES ? updated.slice(-MAX_MESSAGES) : updated;
       });
     },

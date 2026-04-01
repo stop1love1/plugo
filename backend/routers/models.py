@@ -1,15 +1,15 @@
 import asyncio
 import json
 import os
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from typing import Optional
-from auth import get_current_user, TokenData
-from providers.factory import get_all_providers, get_embedding_providers
-from providers.factory import get_llm_provider, load_provider_key
-from routers.llm_keys import get_key_for_provider
-from logging_config import logger
+
+from auth import TokenData, get_current_user
 from config import settings
+from logging_config import logger
+from providers.factory import get_all_providers, get_embedding_providers, get_llm_provider, load_provider_key
+from routers.llm_keys import get_key_for_provider
 
 router = APIRouter(prefix="/api/models", tags=["models"])
 
@@ -20,7 +20,7 @@ def _load_custom_models() -> list[dict]:
     if not os.path.exists(CUSTOM_MODELS_FILE):
         return []
     try:
-        with open(CUSTOM_MODELS_FILE, "r", encoding="utf-8") as f:
+        with open(CUSTOM_MODELS_FILE, encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return []
@@ -118,7 +118,7 @@ async def list_all_providers(_user: TokenData = Depends(get_current_user)):
     statuses = await asyncio.gather(
         *(get_provider_key_status(p["id"], p["requires_key"], p["has_key"]) for p in providers)
     )
-    for provider, key_status in zip(providers, statuses):
+    for provider, key_status in zip(providers, statuses, strict=False):
         provider["key_status"] = key_status
 
     return providers

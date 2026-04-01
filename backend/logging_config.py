@@ -9,6 +9,7 @@ Usage:
 """
 
 import sys
+
 from loguru import logger as _logger
 
 # Remove default handler

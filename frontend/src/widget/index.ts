@@ -461,27 +461,53 @@ function getWidgetStyles(primaryColor: string): string {
     .plugo-btn-group { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
 
     /* Rich content — Slideshow */
-    .plugo-slideshow { margin: 6px 0; position: relative; }
-    .plugo-slide { display: none; }
-    .plugo-slide.active { display: block; }
-    .plugo-slide .plugo-image { margin: 0; }
-    .plugo-slide-nav {
-      display: flex; align-items: center; justify-content: center; gap: 8px;
-      padding: 6px 0 2px;
+    .plugo-slideshow { margin: 6px 0; position: relative; border-radius: 10px; overflow: hidden; }
+    .plugo-slides { position: relative; }
+    .plugo-slide {
+      display: none; opacity: 0;
+      animation: plugo-fade-in 0.25s ease forwards;
     }
+    .plugo-slide.active { display: block; opacity: 1; }
+    .plugo-slide .plugo-image { margin: 0; border-radius: 0; }
+    .plugo-slide .plugo-image img { border-radius: 0; }
+    @keyframes plugo-fade-in { from { opacity: 0.4; } to { opacity: 1; } }
+
+    /* Prev/Next arrow buttons — overlaid on image */
     .plugo-slide-prev, .plugo-slide-next {
-      background: #e8e8ec; border: none; border-radius: 50%;
-      width: 26px; height: 26px; font-size: 16px; cursor: pointer;
+      position: absolute; top: 50%; transform: translateY(-50%); z-index: 2;
+      background: rgba(0,0,0,0.35); backdrop-filter: blur(4px);
+      border: none; border-radius: 50%;
+      width: 30px; height: 30px; font-size: 18px; line-height: 1; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
-      color: #555; transition: background 0.15s;
+      color: #fff; transition: background 0.15s;
+      opacity: 0; pointer-events: none;
     }
-    .plugo-slide-prev:hover, .plugo-slide-next:hover { background: #ddd; }
-    .plugo-slide-count { font-size: 11px; color: #999; min-width: 30px; text-align: center; }
+    .plugo-slideshow:hover .plugo-slide-prev,
+    .plugo-slideshow:hover .plugo-slide-next { opacity: 1; pointer-events: auto; }
+    .plugo-slide-prev { left: 6px; }
+    .plugo-slide-next { right: 6px; }
+    .plugo-slide-prev:hover, .plugo-slide-next:hover { background: rgba(0,0,0,0.55); }
+
+    /* Bottom bar: dots + counter */
+    .plugo-slide-nav {
+      display: flex; align-items: center; justify-content: center; gap: 5px;
+      padding: 7px 0 5px;
+    }
+    .plugo-slide-dot {
+      width: 6px; height: 6px; border-radius: 50%; border: none; padding: 0;
+      background: #ccc; cursor: pointer; transition: all 0.2s;
+    }
+    .plugo-slide-dot.active { background: var(--plugo-primary, #6366f1); transform: scale(1.3); }
+    .plugo-slide-count {
+      font-size: 10px; color: #999; margin-left: 6px; min-width: 28px; text-align: center;
+    }
 
     /* Dark mode — rich content */
     .plugo-dark .plugo-btn { background: var(--plugo-primary); }
-    .plugo-dark .plugo-slide-prev, .plugo-dark .plugo-slide-next { background: #3d3d5c; color: #ccc; }
-    .plugo-dark .plugo-slide-prev:hover, .plugo-dark .plugo-slide-next:hover { background: #4d4d6c; }
+    .plugo-dark .plugo-slide-prev, .plugo-dark .plugo-slide-next { background: rgba(255,255,255,0.2); }
+    .plugo-dark .plugo-slide-prev:hover, .plugo-dark .plugo-slide-next:hover { background: rgba(255,255,255,0.35); }
+    .plugo-dark .plugo-slide-dot { background: #555; }
+    .plugo-dark .plugo-slide-dot.active { background: var(--plugo-primary, #818cf8); }
     .plugo-dark .plugo-slide-count { color: #666; }
     .plugo-markdown ul, .plugo-markdown ol {
       margin: 0 0 2px 0;

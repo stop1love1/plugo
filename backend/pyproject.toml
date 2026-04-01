@@ -31,6 +31,10 @@ ignore = [
     "B008",   # allow function calls in default arguments (FastAPI Depends)
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# Imports after load_dotenv() so the env file is loaded before config/models.
+"main.py" = ["E402"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["agent", "knowledge", "models", "providers", "repositories", "routers"]
 

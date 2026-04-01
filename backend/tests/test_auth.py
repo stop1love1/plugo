@@ -83,8 +83,10 @@ async def test_token_contains_correct_claims():
 async def test_expired_token_rejected():
     """Expired token should raise 401."""
     from datetime import timedelta
-    from auth import create_access_token, decode_access_token
+
     from fastapi import HTTPException
+
+    from auth import create_access_token, decode_access_token
 
     token = create_access_token(
         subject="admin",

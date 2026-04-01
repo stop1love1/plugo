@@ -1,8 +1,9 @@
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from typing import Optional
-from repositories import get_repos, Repositories
-from auth import get_current_user, TokenData
+
+from auth import TokenData, get_current_user
+from repositories import Repositories, get_repos
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -40,7 +41,7 @@ async def submit_feedback(
     session_id: str,
     data: FeedbackRequest,
     repos: Repositories = Depends(get_repos),
-    site_token: Optional[str] = None,
+    site_token: str | None = None,
 ):
     session = await repos.chat_sessions.get_by_id(session_id)
     if not session:

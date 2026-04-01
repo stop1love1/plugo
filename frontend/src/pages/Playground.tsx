@@ -50,7 +50,7 @@ function buildPlaygroundHtml(site: Site, siteUrl: string): string {
     darkMode: ${site.dark_mode === "dark" ? "true" : site.dark_mode === "light" ? "false" : "undefined"},
   };
 </script>
-<script src="${esc(backendUrl)}/static/widget.js" async><\/script>
+<script src="${esc(backendUrl)}/static/widget.js" async></script>
 </body></html>`;
 }
 

@@ -1,6 +1,5 @@
-import json
-from typing import Optional
 import httpx
+
 from utils.crypto import decrypt_value
 
 

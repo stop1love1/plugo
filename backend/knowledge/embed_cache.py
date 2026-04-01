@@ -3,7 +3,7 @@
 import hashlib
 import time
 from collections import OrderedDict
-from typing import Optional
+
 from config import settings
 
 
@@ -23,7 +23,7 @@ class EmbeddingCache:
     def _key(text: str) -> str:
         return hashlib.sha256(text.strip().lower().encode()).hexdigest()
 
-    def get(self, text: str) -> Optional[list[float]]:
+    def get(self, text: str) -> list[float] | None:
         key = self._key(text)
         if key in self._cache:
             embedding, timestamp = self._cache[key]

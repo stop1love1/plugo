@@ -1,18 +1,19 @@
 """Memory management router — view, edit, delete visitor memories."""
 
-from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from repositories import get_repos, Repositories
-from auth import get_current_user, TokenData
+
+from auth import TokenData, get_current_user
+from repositories import Repositories, get_repos
 
 router = APIRouter(prefix="/api/memory", tags=["memory"])
 
 
 class MemoryUpdate(BaseModel):
-    value: Optional[str] = None
-    category: Optional[str] = None
-    confidence: Optional[str] = None
+    value: str | None = None
+    category: str | None = None
+    confidence: str | None = None
 
 
 @router.get("/visitors")

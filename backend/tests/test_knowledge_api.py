@@ -1,5 +1,6 @@
 """Tests for Knowledge management flow."""
 
+import contextlib
 import uuid
 
 import pytest
@@ -19,10 +20,8 @@ async def test_chunk(db_repos, test_site):
         "embedding_id": chunk_id,
     })
     yield chunk
-    try:
+    with contextlib.suppress(Exception):
         await db_repos.knowledge.delete(chunk_id)
-    except Exception:
-        pass
 
 
 @pytest.mark.asyncio

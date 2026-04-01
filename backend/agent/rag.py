@@ -1,5 +1,7 @@
-from typing import Optional
+import contextlib
+
 import chromadb
+
 from config import settings
 
 
@@ -47,7 +49,7 @@ class RAGEngine:
         site_id: str,
         query_embedding: list[float],
         top_k: int = 10,
-        min_score: Optional[float] = None,
+        min_score: float | None = None,
     ) -> list[dict]:
         """Search for the most relevant chunks with optional relevance filtering."""
         if min_score is None:
@@ -87,10 +89,8 @@ class RAGEngine:
 
     async def delete_site(self, site_id: str):
         """Delete all data for a site."""
-        try:
-            self.client.delete_collection(f"site_{site_id}")
-        except ValueError:
-            pass  # Collection doesn't exist
+        with contextlib.suppress(ValueError):
+            self.client.delete_collection(f"site_{site_id}")  # Collection may not exist
 
 
 rag_engine = RAGEngine()

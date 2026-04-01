@@ -1,11 +1,11 @@
 import { Outlet, Link, useParams, useLocation, useNavigate } from "react-router-dom";
-import { Database, Wrench, Code, Settings, LayoutDashboard, MessageCircle, LogOut, User, Brain, BarChart3, Globe, FileText, Menu, X, Play, Link2, Bell, Cpu } from "lucide-react";
+import { Database, Wrench, Code, Settings, LayoutDashboard, MessageCircle, LogOut, User, Brain, BarChart3, Globe, FileText, Menu, X, Play, Link2, Bell, Cpu, SlidersHorizontal } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { getSite, getSites } from "../lib/api";
+import { getSites } from "../lib/api";
 import { useStore } from "../lib/store";
 import { useLocale } from "../lib/useLocale";
 import { useNotifications } from "../lib/useNotifications";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 const sidebarGroups = [
   {
@@ -46,6 +46,7 @@ const sidebarGroups = [
 ];
 
 const globalLinks = [
+  { to: "/global-settings", label: "nav.globalSettings", icon: SlidersHorizontal },
   { to: "/models", label: "nav.models", icon: Cpu },
   { to: "/audit", label: "nav.audit", icon: FileText },
 ];
@@ -64,6 +65,30 @@ export default function Layout() {
     location.pathname === "/notifications" ||
     (siteId != null && location.pathname === `/site/${siteId}/notifications`);
 
+  // Fallback translations for nav items not yet in i18n
+  const navT = useCallback(
+    (key: string) => {
+      const val = t(key);
+      if (val === key) {
+        const fallbacks: Record<string, string> = {
+          "nav.setup": "Crawl & Setup",
+          "nav.embed": "Embed Code",
+          "nav.chatLog": "Chat Log",
+          "nav.users": "Users",
+          "nav.globalSettings": "Global Settings",
+          "nav.models": "Models",
+          "nav.audit": "Audit Log",
+          "nav.group.content": "Content",
+          "nav.group.deploy": "Deploy",
+          "nav.group.monitor": "Monitor",
+        };
+        return fallbacks[key] || key.split(".").pop() || key;
+      }
+      return val;
+    },
+    [t]
+  );
+
   // Update document title based on current route
   useEffect(() => {
     const path = location.pathname;
@@ -71,6 +96,8 @@ export default function Layout() {
     const match = allLinks.find((link) => path.endsWith(`/${link.to}`));
     if (match) {
       document.title = `${navT(match.label)} | Plugo`;
+    } else if (path === "/global-settings") {
+      document.title = "Global Settings | Plugo";
     } else if (path === "/models") {
       document.title = "Models | Plugo";
     } else if (path === "/audit") {
@@ -82,13 +109,7 @@ export default function Layout() {
     } else {
       document.title = "Plugo Dashboard";
     }
-  }, [location.pathname, t]);
-
-  const { data: currentSite } = useQuery({
-    queryKey: ["site", siteId],
-    queryFn: () => getSite(siteId!),
-    enabled: !!siteId,
-  });
+  }, [location.pathname, t, navT]);
 
   const { data: sites = [] } = useQuery({
     queryKey: ["sites"],
@@ -98,27 +119,6 @@ export default function Layout() {
   const handleLogout = () => {
     logout();
     navigate("/login");
-  };
-
-  // Fallback translations for nav items not yet in i18n
-  const navT = (key: string) => {
-    const val = t(key);
-    if (val === key) {
-      // Fallback for keys not in i18n
-      const fallbacks: Record<string, string> = {
-        "nav.setup": "Crawl & Setup",
-        "nav.embed": "Embed Code",
-        "nav.chatLog": "Chat Log",
-        "nav.users": "Users",
-        "nav.models": "Models",
-        "nav.audit": "Audit Log",
-        "nav.group.content": "Content",
-        "nav.group.deploy": "Deploy",
-        "nav.group.monitor": "Monitor",
-      };
-      return fallbacks[key] || key.split(".").pop() || key;
-    }
-    return val;
   };
 
   // Close sidebar on navigation (mobile)

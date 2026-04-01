@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { getSites, createSite, updateSiteApproval, type Site } from "../lib/api";
-import { Plus, Globe, ArrowRight, ShieldCheck, ShieldX, ExternalLink } from "lucide-react";
+import { Plus, Globe, ArrowRight, ShieldCheck, ShieldX } from "lucide-react";
 import { useLocale } from "../lib/useLocale";
 
 export default function Sites() {
@@ -67,12 +67,6 @@ export default function Sites() {
   const handleApproval = (e: React.MouseEvent, siteId: string, approve: boolean) => {
     e.stopPropagation();
     approvalMutation.mutate({ siteId, approve });
-  };
-
-  const handleOpenDemo = (e: React.MouseEvent, token: string) => {
-    e.stopPropagation();
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || __BACKEND_URL__;
-    window.open(`${backendUrl}/demo/${token}`, "_blank");
   };
 
   return (
@@ -165,16 +159,6 @@ export default function Sites() {
                 </div>
 
                 <div className="flex items-center gap-2 ml-4">
-                  {/* Demo page link */}
-                  <button
-                    onClick={(e) => handleOpenDemo(e, site.token)}
-                    className="text-xs text-gray-500 hover:text-primary-600 border border-gray-200 px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
-                    title={t("sites.openDemo")}
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    Demo
-                  </button>
-
                   {/* Approval toggle */}
                   {site.is_approved ? (
                     <button

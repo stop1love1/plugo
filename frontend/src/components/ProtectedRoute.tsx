@@ -4,7 +4,7 @@ import { useStore } from "../lib/store";
 import { getMe } from "../lib/api";
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, setUser, logout } = useStore();
+  const { user, logout } = useStore();
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {

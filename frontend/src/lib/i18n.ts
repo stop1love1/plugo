@@ -145,6 +145,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "models.modelAdded": "Đã thêm model",
     "models.modelRemoved": "Đã xóa model",
     // Nav
+    "nav.globalSettings": "Cài đặt chung",
     "nav.models": "Models",
     // Tools - Edit
     "tools.editTool": "Sửa công cụ",
@@ -364,7 +365,6 @@ const translations: Record<Locale, Record<string, string>> = {
     "knowledge.uploading": "Đang tải lên...",
     "knowledge.uploadComplete": "Tải lên hoàn tất",
     // Sites approval
-    "nav.demo": "Mở trang Demo",
     "sites.created": "Đã tạo site",
     "sites.createFailed": "Tạo site thất bại",
     "sites.approved": "Đã phê duyệt site",
@@ -375,15 +375,11 @@ const translations: Record<Locale, Record<string, string>> = {
     "sites.statusPending": "Chờ duyệt",
     "sites.approve": "Phê duyệt",
     "sites.revoke": "Thu hồi",
-    "sites.openDemo": "Xem Demo",
     // Embed auth
     "embed.siteApproved": "Site đã được phê duyệt — widget đang hoạt động",
     "embed.siteApprovedDesc": "Widget chat có thể nhận tin nhắn từ khách truy cập.",
     "embed.sitePending": "Site chưa được phê duyệt — widget không hoạt động",
     "embed.sitePendingDesc": "Vào trang Sites để phê duyệt trước khi nhúng widget vào website.",
-    "embed.demoPage": "Trang demo",
-    "embed.demoPageDesc": "Mở trang mẫu có widget để test nhanh",
-    "embed.openDemo": "Mở Demo",
     "embed.authGuide": "Hướng dẫn nhúng Widget",
     "embed.authStep1": "Tạo site trên dashboard và điền URL website của bạn.",
     "embed.authStep2": "Admin phê duyệt site (trang Sites > nút Phê duyệt). Widget chỉ hoạt động sau khi được duyệt.",
@@ -550,6 +546,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "models.modelAdded": "Model added",
     "models.modelRemoved": "Model removed",
     // Nav
+    "nav.globalSettings": "Global Settings",
     "nav.models": "Models",
     // Tools - Edit
     "tools.editTool": "Edit Tool",
@@ -769,7 +766,6 @@ const translations: Record<Locale, Record<string, string>> = {
     "knowledge.uploading": "Uploading...",
     "knowledge.uploadComplete": "Upload complete",
     // Sites approval
-    "nav.demo": "Open Demo Page",
     "sites.created": "Site created",
     "sites.createFailed": "Failed to create site",
     "sites.approved": "Site approved",
@@ -780,15 +776,11 @@ const translations: Record<Locale, Record<string, string>> = {
     "sites.statusPending": "Pending",
     "sites.approve": "Approve",
     "sites.revoke": "Revoke",
-    "sites.openDemo": "Open Demo",
     // Embed auth
     "embed.siteApproved": "Site is approved — widget is active",
     "embed.siteApprovedDesc": "The chat widget can receive messages from visitors.",
     "embed.sitePending": "Site is not approved — widget is inactive",
     "embed.sitePendingDesc": "Go to the Sites page to approve this site before embedding the widget.",
-    "embed.demoPage": "Demo Page",
-    "embed.demoPageDesc": "Open a sample page with the widget to test quickly",
-    "embed.openDemo": "Open Demo",
     "embed.authGuide": "Widget Integration Guide",
     "embed.authStep1": "Create a site on the dashboard and enter your website URL.",
     "embed.authStep2": "Admin approves the site (Sites page > Approve button). The widget only works after approval.",
@@ -819,7 +811,9 @@ function getSavedLocale(): Locale {
   try {
     const saved = localStorage.getItem(LOCALE_KEY);
     if (saved === "vi" || saved === "en") return saved;
-  } catch {}
+  } catch {
+    void 0;
+  }
   // Default to Vietnamese
   return "vi";
 }
@@ -835,7 +829,9 @@ export function setLocale(locale: Locale) {
   currentLocale = locale;
   try {
     localStorage.setItem(LOCALE_KEY, locale);
-  } catch {}
+  } catch {
+    void 0;
+  }
   listeners.forEach((fn) => fn());
 }
 
