@@ -32,7 +32,11 @@ def _normalize_host(netloc: str) -> str:
 
 
 def _canonical_internal_url(start_url: str, parsed: ParseResult) -> str | None:
-    """If parsed URL is on the same site as start_url (www-agnostic), return a stable URL using the seed host."""
+    """If parsed URL is on the same site as start_url (www-agnostic), return a stable URL using the seed host.
+
+    Preserves path, params, and query so distinct pages (e.g. ?page=2, ?id=1) are not collapsed.
+    Fragment is omitted: it is not sent to the server and would incorrectly dedupe different HTML fetches.
+    """
     seed = urlparse(start_url)
     if _normalize_host(parsed.netloc) != _normalize_host(seed.netloc):
         return None
@@ -40,7 +44,9 @@ def _canonical_internal_url(start_url: str, parsed: ParseResult) -> str | None:
     if scheme not in ("http", "https"):
         scheme = seed.scheme if seed.scheme in ("http", "https") else "https"
     path = parsed.path if parsed.path else "/"
-    return f"{scheme}://{seed.netloc.lower()}{path}"
+    params = f";{parsed.params}" if parsed.params else ""
+    query = f"?{parsed.query}" if parsed.query else ""
+    return f"{scheme}://{seed.netloc.lower()}{path}{params}{query}"
 
 
 class WebCrawler:
@@ -349,7 +355,10 @@ class WebCrawler:
     ):
         """Crawl a website starting from the given URL."""
         p0 = urlparse(start_url)
-        start_url = f"{p0.scheme}://{p0.netloc.lower()}{p0.path or '/'}"
+        _seed_path = p0.path if p0.path else "/"
+        _seed_params = f";{p0.params}" if p0.params else ""
+        _seed_q = f"?{p0.query}" if p0.query else ""
+        start_url = f"{p0.scheme}://{p0.netloc.lower()}{_seed_path}{_seed_params}{_seed_q}"
         base_domain = urlparse(start_url).netloc
         # Queue stores (url, depth) tuples
         queue: deque[tuple[str, int]] = deque([(start_url, 0)])
@@ -489,7 +498,7 @@ class WebCrawler:
                         # Discover links BEFORE chunking/text extraction mutates the soup
                         child_depth = depth + 1
                         if self.max_depth == 0 or child_depth <= self.max_depth:
-                            for link in soup.find_all("a", href=True):
+                            for link in soup.find_all(["a", "area"], href=True):
                                 href = urljoin(url, link["href"])
                                 parsed = urlparse(href)
                                 clean_url = _canonical_internal_url(start_url, parsed)

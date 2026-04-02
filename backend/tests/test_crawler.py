@@ -90,6 +90,25 @@ def test_canonical_internal_url_rejects_other_domains():
     assert _canonical_internal_url("https://example.com/", urlparse("https://other.org/x")) is None
 
 
+def test_canonical_internal_url_preserves_query_and_params():
+    """Distinct query strings must not collapse to one URL (common for pagination and IDs)."""
+    seed = "https://example.com/"
+    u1 = _canonical_internal_url(seed, urlparse("https://example.com/list?page=2"))
+    u2 = _canonical_internal_url(seed, urlparse("https://example.com/list?page=3"))
+    assert u1 == "https://example.com/list?page=2"
+    assert u2 == "https://example.com/list?page=3"
+    assert u1 != u2
+    assert _canonical_internal_url(seed, urlparse("https://example.com/doc;type=pdf?id=1")) == (
+        "https://example.com/doc;type=pdf?id=1"
+    )
+
+
+def test_canonical_internal_url_strips_fragment():
+    assert _canonical_internal_url("https://example.com/", urlparse("https://example.com/docs#section")) == (
+        "https://example.com/docs"
+    )
+
+
 def test_crawler_stop_signal():
     """Crawler stop() should set the internal flag."""
     crawler = WebCrawler()
