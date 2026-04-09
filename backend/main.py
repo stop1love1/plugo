@@ -15,7 +15,7 @@ load_dotenv()
 import models  # noqa: F401 — ensure all models registered for Base.metadata.create_all
 from config import settings, validate_settings
 from logging_config import logger
-from routers import analytics, chat, crawl, knowledge, memory, sessions, sites, tools
+from routers import analytics, chat, crawl, flows, knowledge, memory, sessions, sites, tools
 from routers import audit as audit_router
 from routers import auth as auth_router
 from routers import llm_keys as llm_keys_router
@@ -129,6 +129,7 @@ app.include_router(audit_router.router)
 app.include_router(llm_keys_router.router)
 app.include_router(models_router.router)
 app.include_router(config_router.router)
+app.include_router(flows.router)
 
 
 @app.get("/")

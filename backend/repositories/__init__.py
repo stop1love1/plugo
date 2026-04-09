@@ -20,6 +20,8 @@ from repositories.base import (
     BaseChatSessionRepo,
     BaseConversationSummaryRepo,
     BaseCrawlJobRepo,
+    BaseFlowRepo,
+    BaseFlowStepRepo,
     BaseKnowledgeRepo,
     BaseLLMKeyRepo,
     BaseSiteRepo,
@@ -41,6 +43,8 @@ class Repositories:
         conversation_summaries: BaseConversationSummaryRepo,
         audit_logs: BaseAuditLogRepo,
         llm_keys: BaseLLMKeyRepo,
+        flows: BaseFlowRepo | None = None,
+        flow_steps: BaseFlowStepRepo | None = None,
     ):
         self.sites = sites
         self.knowledge = knowledge
@@ -51,6 +55,8 @@ class Repositories:
         self.conversation_summaries = conversation_summaries
         self.audit_logs = audit_logs
         self.llm_keys = llm_keys
+        self.flows = flows
+        self.flow_steps = flow_steps
         self._db_session = None  # holds SQLite AsyncSession for cleanup
 
     async def close(self) -> None:
@@ -126,6 +132,8 @@ async def create_repos() -> Repositories:
             SQLiteChatSessionRepo,
             SQLiteConversationSummaryRepo,
             SQLiteCrawlJobRepo,
+            SQLiteFlowRepo,
+            SQLiteFlowStepRepo,
             SQLiteKnowledgeRepo,
             SQLiteLLMKeyRepo,
             SQLiteSiteRepo,
@@ -144,6 +152,8 @@ async def create_repos() -> Repositories:
             conversation_summaries=SQLiteConversationSummaryRepo(db),
             audit_logs=SQLiteAuditLogRepo(db),
             llm_keys=SQLiteLLMKeyRepo(db),
+            flows=SQLiteFlowRepo(db),
+            flow_steps=SQLiteFlowStepRepo(db),
         )
         repos._db_session = db  # track session for cleanup
         return repos

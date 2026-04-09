@@ -15,6 +15,7 @@ import AuditLog from "./pages/AuditLog";
 import Models from "./pages/Models";
 import Playground from "./pages/Playground";
 import CrawledPages from "./pages/CrawledPages";
+import Flows from "./pages/Flows";
 import Notifications from "./pages/Notifications";
 import GlobalSettings from "./pages/GlobalSettings";
 
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="knowledge" element={<Knowledge />} />
           <Route path="crawled-pages" element={<CrawledPages />} />
           <Route path="tools" element={<Tools />} />
+          <Route path="flows" element={<Flows />} />
           <Route path="embed" element={<Embed />} />
           <Route path="playground" element={<Playground />} />
           <Route path="chat-log" element={<ChatLog />} />

@@ -170,6 +170,48 @@ class SemanticChunker:
 
         return chunks
 
+    def chunk_plain_text(
+        self,
+        text: str,
+        title: str,
+        source_url: str,
+        site_id: str,
+    ) -> list[dict]:
+        """Split plain text (non-HTML) into overlapping chunks.
+
+        Used for uploaded files (PDF, DOCX, CSV, TXT) and other non-HTML content.
+        """
+        if not text or not text.strip():
+            return []
+
+        # Split into paragraphs and recombine into chunks
+        paragraphs = text.split("\n\n")
+        chunks = []
+        current = ""
+        chunk_index = 0
+
+        for para in paragraphs:
+            para = para.strip()
+            if not para:
+                continue
+
+            if len(current) + len(para) > self.max_chars and current:
+                chunks.append(self._make_chunk(
+                    current.strip(), title, source_url, site_id, chunk_index,
+                ))
+                chunk_index += 1
+                # Keep overlap from end of current chunk
+                current = current[-self.overlap_chars:].strip() + "\n\n" + para if self.overlap_chars > 0 else para
+            else:
+                current = current + "\n\n" + para if current else para
+
+        if current.strip():
+            chunks.append(self._make_chunk(
+                current.strip(), title, source_url, site_id, chunk_index,
+            ))
+
+        return chunks
+
     @staticmethod
     def _make_chunk(
         content: str,

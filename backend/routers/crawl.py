@@ -66,6 +66,15 @@ class CrawlSettingsRequest(BaseModel):
     max_depth: int | None = None
     auto_interval: int | None = None
     exclude_patterns: str | None = None
+    # Browser auth settings
+    crawl_use_browser: bool | None = None
+    crawl_login_url: str | None = None
+    crawl_login_username_selector: str | None = None
+    crawl_login_password_selector: str | None = None
+    crawl_login_submit_selector: str | None = None
+    crawl_login_username: str | None = None
+    crawl_login_password: str | None = None
+    crawl_login_success_url: str | None = None
 
 
 def _parse_exclude_patterns(raw: str | None) -> list[str]:
@@ -129,6 +138,7 @@ async def toggle_crawl(
             site_id, crawl_url, job["id"], max_pages,
             max_depth=max_depth,
             exclude_patterns=_parse_exclude_patterns(exclude_raw),
+            use_browser=site.get("crawl_use_browser", False),
         )
 
         return {
@@ -217,6 +227,7 @@ async def start_crawl(
         force_recrawl=data.force_recrawl,
         max_depth=max_depth,
         exclude_patterns=_parse_exclude_patterns(exclude_raw),
+        use_browser=site.get("crawl_use_browser", False),
     )
 
     return {
@@ -331,6 +342,19 @@ async def update_crawl_settings(
         update_data["crawl_auto_interval"] = data.auto_interval
     if data.exclude_patterns is not None:
         update_data["crawl_exclude_patterns"] = data.exclude_patterns
+    # Browser auth settings
+    for field in (
+        "crawl_use_browser", "crawl_login_url",
+        "crawl_login_username_selector", "crawl_login_password_selector",
+        "crawl_login_submit_selector", "crawl_login_username",
+        "crawl_login_password", "crawl_login_success_url",
+    ):
+        val = getattr(data, field, None)
+        if val is not None:
+            # Don't overwrite password with the masked placeholder
+            if field == "crawl_login_password" and val == "********":
+                continue
+            update_data[field] = val
 
     if not update_data:
         return {"message": "No settings to update"}
@@ -377,6 +401,15 @@ async def get_crawl_status(
         "is_running": site_id in _active_crawlers,
         "is_paused": is_paused,
         "current_url": current_url,
+        # Browser auth
+        "crawl_use_browser": site.get("crawl_use_browser", False),
+        "crawl_login_url": site.get("crawl_login_url", ""),
+        "crawl_login_username_selector": site.get("crawl_login_username_selector", ""),
+        "crawl_login_password_selector": site.get("crawl_login_password_selector", ""),
+        "crawl_login_submit_selector": site.get("crawl_login_submit_selector", ""),
+        "crawl_login_username": site.get("crawl_login_username", ""),
+        "crawl_login_password": "********" if site.get("crawl_login_password") and site["crawl_login_password"] != "" else "",
+        "crawl_login_success_url": site.get("crawl_login_success_url", ""),
     }
 
 
@@ -450,6 +483,47 @@ async def clear_knowledge(
 
 
 # ============================================================
+# 9. TEST BROWSER LOGIN
+# ============================================================
+
+@router.post("/test-login/{site_id}")
+async def test_browser_login(
+    site_id: str,
+    repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
+):
+    """Test the browser login configuration for a site."""
+    from knowledge.browser_crawler import PLAYWRIGHT_AVAILABLE, test_browser_login as _test_login
+
+    if not PLAYWRIGHT_AVAILABLE:
+        raise HTTPException(status_code=400, detail="Playwright is not installed on the server")
+
+    site = await repos.sites.get_by_id(site_id)
+    if not site:
+        raise HTTPException(status_code=404, detail="Site not found")
+
+    if not site.get("crawl_login_url"):
+        raise HTTPException(status_code=400, detail="Login URL not configured")
+    if not site.get("crawl_login_username"):
+        raise HTTPException(status_code=400, detail="Login credentials not configured")
+
+    raw_password = await repos.sites.get_crawl_password(site_id)
+    if not raw_password:
+        raise HTTPException(status_code=400, detail="Login password not configured")
+
+    result = await _test_login(
+        login_url=site["crawl_login_url"],
+        username=site["crawl_login_username"],
+        password=raw_password,
+        username_selector=site.get("crawl_login_username_selector", ""),
+        password_selector=site.get("crawl_login_password_selector", ""),
+        submit_selector=site.get("crawl_login_submit_selector", ""),
+        success_url=site.get("crawl_login_success_url") or None,
+    )
+    return result
+
+
+# ============================================================
 # Background task helper
 # ============================================================
 
@@ -461,11 +535,37 @@ async def _run_crawl_with_tracking(
     force_recrawl: bool = False,
     max_depth: int = 0,
     exclude_patterns: list[str] | None = None,
+    use_browser: bool = False,
 ):
     """Background task: crawl + update site status when done. Supports continuous crawling via iteration."""
     current_job_id = job_id
     round_number = 0
     max_rounds = settings.crawl_max_continuous_rounds
+
+    # Browser login: extract cookies once before crawl loop
+    auth_cookies = None
+    if use_browser:
+        try:
+            from knowledge.browser_crawler import browser_login_and_extract_cookies
+            repos_init = await create_repos()
+            try:
+                site = await repos_init.sites.get_by_id(site_id)
+                if site and site.get("crawl_login_url") and site.get("crawl_login_username"):
+                    raw_pw = await repos_init.sites.get_crawl_password(site_id)
+                    auth_cookies = await browser_login_and_extract_cookies(
+                        login_url=site["crawl_login_url"],
+                        username=site["crawl_login_username"],
+                        password=raw_pw or "",
+                        username_selector=site.get("crawl_login_username_selector", ""),
+                        password_selector=site.get("crawl_login_password_selector", ""),
+                        submit_selector=site.get("crawl_login_submit_selector", ""),
+                        success_url=site.get("crawl_login_success_url") or None,
+                    )
+                    logger.info("Browser login successful", site_id=site_id, cookies=len(auth_cookies))
+            finally:
+                await repos_init.close()
+        except Exception as e:
+            logger.error("Browser login failed, crawling without auth", site_id=site_id, error=str(e))
 
     while True:
         round_number += 1
@@ -475,6 +575,7 @@ async def _run_crawl_with_tracking(
             force_recrawl=force_recrawl,
             max_depth=max_depth,
             exclude_patterns=exclude_patterns,
+            auth_cookies=auth_cookies,
         )
         _active_crawlers[site_id] = crawler
 

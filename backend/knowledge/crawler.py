@@ -63,6 +63,7 @@ class WebCrawler:
         force_recrawl: bool = False,
         max_depth: int = 0,
         exclude_patterns: list[str] | None = None,
+        auth_cookies: dict[str, str] | None = None,
     ):
         self.max_pages = max_pages
         self.delay = delay if delay is not None else settings.crawl_request_delay
@@ -83,6 +84,7 @@ class WebCrawler:
         self.max_depth = 0 if max_depth is None else int(max_depth)  # 0 = unlimited
         self.exclude_patterns = exclude_patterns or []
         self.max_retries = settings.crawl_max_retries
+        self.auth_cookies = auth_cookies
 
     def stop(self):
         """Signal the crawler to stop. Data already crawled will be persisted."""
@@ -399,12 +401,17 @@ class WebCrawler:
         self._log(start_url, "success", action=f"crawl started — target: {base_domain}, max {self.max_pages} pages{feature_str}")
 
         try:
-            async with httpx.AsyncClient(
-                timeout=settings.crawl_request_timeout,
-                follow_redirects=True,
-                verify=settings.crawl_verify_ssl,
-                headers={"User-Agent": "PlugoBot/1.0 (+https://github.com/stop1love1/plugo)"},
-            ) as client:
+            client_kwargs = {
+                "timeout": settings.crawl_request_timeout,
+                "follow_redirects": True,
+                "verify": settings.crawl_verify_ssl,
+                "headers": {"User-Agent": "PlugoBot/1.0 (+https://github.com/stop1love1/plugo)"},
+            }
+            if self.auth_cookies:
+                client_kwargs["cookies"] = self.auth_cookies
+                self._log("", "success", action=f"using {len(self.auth_cookies)} auth cookies for authenticated crawl")
+
+            async with httpx.AsyncClient(**client_kwargs) as client:
                 robot_parser = await self._check_robots_txt(client, start_url)
 
                 # Seed queue from sitemap.xml

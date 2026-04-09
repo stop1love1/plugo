@@ -1,5 +1,5 @@
 import { Outlet, Link, useParams, useLocation, useNavigate } from "react-router-dom";
-import { Database, Wrench, Code, Settings, LayoutDashboard, MessageCircle, LogOut, User, Brain, BarChart3, Globe, FileText, Menu, X, Play, Link2, Bell, Cpu, SlidersHorizontal } from "lucide-react";
+import { Database, Wrench, Code, Settings, LayoutDashboard, MessageCircle, LogOut, User, Brain, BarChart3, Globe, FileText, Menu, X, Play, Link2, Bell, Cpu, SlidersHorizontal, GitBranch } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { getSites } from "../lib/api";
 import { useStore } from "../lib/store";
@@ -21,6 +21,7 @@ const sidebarGroups = [
       { to: "knowledge", label: "nav.knowledge", icon: Database },
       { to: "crawled-pages", label: "nav.crawledPages", icon: Link2 },
       { to: "tools", label: "nav.tools", icon: Wrench },
+      { to: "flows", label: "nav.flows", icon: GitBranch },
     ],
   },
   {

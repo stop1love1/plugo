@@ -168,6 +168,15 @@ export type CrawlStatus = {
   is_running: boolean;
   is_paused: boolean;
   current_url: string | null;
+  // Browser auth
+  crawl_use_browser: boolean;
+  crawl_login_url: string;
+  crawl_login_username_selector: string;
+  crawl_login_password_selector: string;
+  crawl_login_submit_selector: string;
+  crawl_login_username: string;
+  crawl_login_password: string;
+  crawl_login_success_url: string;
 };
 
 export type ManualChunkData = {
@@ -209,6 +218,30 @@ export type AuditLogResponse = {
   total: number;
   page: number;
   per_page: number;
+};
+
+export type FlowStep = {
+  id: string;
+  flow_id: string;
+  step_order: number;
+  title: string;
+  description: string;
+  url: string | null;
+  screenshot_url: string | null;
+  created_at: string | null;
+};
+
+export type Flow = {
+  id: string;
+  site_id: string;
+  name: string;
+  description: string;
+  requires_login: boolean;
+  is_enabled: boolean;
+  steps?: FlowStep[];
+  step_count?: number;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 // ============================================================
@@ -378,5 +411,24 @@ export type GlobalConfig = Record<string, Record<string, unknown>>;
 export const getGlobalConfig = () => api.get<GlobalConfig>("/config").then((r) => r.data);
 export const updateGlobalConfig = (data: GlobalConfig) =>
   api.put<{ status: string; message: string }>("/config", data).then((r) => r.data);
+
+// Flows
+export const getFlows = (siteId: string) => api.get<Flow[]>(`/flows?site_id=${siteId}`).then((r) => r.data);
+export const getFlow = (id: string) => api.get<Flow>(`/flows/${id}`).then((r) => r.data);
+export const createFlow = (data: { site_id: string; name: string; description?: string; requires_login?: boolean }) =>
+  api.post<{ id: string; message: string }>("/flows", data).then((r) => r.data);
+export const updateFlow = (id: string, data: Partial<Flow>) =>
+  api.put<{ message: string }>(`/flows/${id}`, data).then((r) => r.data);
+export const deleteFlow = (id: string) => api.delete<{ message: string }>(`/flows/${id}`).then((r) => r.data);
+export const addFlowStep = (flowId: string, data: { title: string; description?: string; url?: string }) =>
+  api.post<{ id: string; message: string }>(`/flows/${flowId}/steps`, data).then((r) => r.data);
+export const updateFlowStep = (stepId: string, data: Partial<FlowStep>) =>
+  api.put<{ message: string }>(`/flows/steps/${stepId}`, data).then((r) => r.data);
+export const deleteFlowStep = (stepId: string) =>
+  api.delete<{ message: string }>(`/flows/steps/${stepId}`).then((r) => r.data);
+export const reorderFlowSteps = (flowId: string, stepIds: string[]) =>
+  api.post<{ message: string }>(`/flows/${flowId}/reorder`, { step_ids: stepIds }).then((r) => r.data);
+export const testBrowserLogin = (siteId: string) =>
+  api.post<{ success: boolean; message: string }>(`/crawl/test-login/${siteId}`).then((r) => r.data);
 
 export default api;

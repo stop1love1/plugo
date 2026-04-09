@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.audit_log import AuditLog
 from models.chat import ChatSession
 from models.crawl import CrawlJob
+from models.flow import Flow, FlowStep
 from models.knowledge import KnowledgeChunk
 from models.llm_key import LLMKey
 from models.memory import ConversationSummary, VisitorMemory
@@ -19,6 +20,8 @@ from repositories.base import (
     BaseChatSessionRepo,
     BaseConversationSummaryRepo,
     BaseCrawlJobRepo,
+    BaseFlowRepo,
+    BaseFlowStepRepo,
     BaseKnowledgeRepo,
     BaseLLMKeyRepo,
     BaseSiteRepo,
@@ -52,6 +55,15 @@ def _site_to_dict(s: Site) -> dict:
         "crawl_status": s.crawl_status,
         "last_crawled_at": s.last_crawled_at.isoformat() if s.last_crawled_at else None,
         "knowledge_count": s.knowledge_count,
+        # Authenticated crawl
+        "crawl_use_browser": s.crawl_use_browser if s.crawl_use_browser is not None else False,
+        "crawl_login_url": s.crawl_login_url or "",
+        "crawl_login_username_selector": s.crawl_login_username_selector or "",
+        "crawl_login_password_selector": s.crawl_login_password_selector or "",
+        "crawl_login_submit_selector": s.crawl_login_submit_selector or "",
+        "crawl_login_username": s.crawl_login_username or "",
+        "crawl_login_password": "********" if s.crawl_login_password else "",
+        "crawl_login_success_url": s.crawl_login_success_url or "",
         # Timestamps
         "created_at": s.created_at.isoformat() if s.created_at else None,
         "updated_at": s.updated_at.isoformat() if s.updated_at else None,
@@ -175,6 +187,10 @@ class SQLiteSiteRepo(BaseSiteRepo):
         await self.db.delete(site)
         await self.db.commit()
         return True
+
+    async def get_crawl_password(self, site_id: str) -> str | None:
+        site = await self.db.get(Site, site_id)
+        return site.crawl_login_password if site else None
 
 
 # --- Knowledge ---
@@ -724,5 +740,133 @@ class SQLiteLLMKeyRepo(BaseLLMKeyRepo):
         if not k:
             return False
         await self.db.delete(k)
+        await self.db.commit()
+        return True
+
+
+# --- Flow ---
+def _flow_to_dict(f: Flow) -> dict:
+    return {
+        "id": f.id, "site_id": f.site_id, "name": f.name,
+        "description": f.description or "", "requires_login": f.requires_login,
+        "is_enabled": f.is_enabled,
+        "created_at": f.created_at.isoformat() if f.created_at else None,
+        "updated_at": f.updated_at.isoformat() if f.updated_at else None,
+    }
+
+
+def _step_to_dict(s: FlowStep) -> dict:
+    return {
+        "id": s.id, "flow_id": s.flow_id, "step_order": s.step_order,
+        "title": s.title, "description": s.description or "",
+        "url": s.url, "screenshot_url": s.screenshot_url,
+        "created_at": s.created_at.isoformat() if s.created_at else None,
+    }
+
+
+class SQLiteFlowRepo(BaseFlowRepo):
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def create(self, data: dict) -> dict:
+        flow = Flow(**data)
+        self.db.add(flow)
+        await self.db.commit()
+        await self.db.refresh(flow)
+        return _flow_to_dict(flow)
+
+    async def get_by_id(self, flow_id: str) -> dict | None:
+        flow = await self.db.get(Flow, flow_id)
+        return _flow_to_dict(flow) if flow else None
+
+    async def list_by_site(self, site_id: str) -> list[dict]:
+        result = await self.db.execute(
+            select(Flow).where(Flow.site_id == site_id).order_by(Flow.created_at.desc())
+        )
+        return [_flow_to_dict(f) for f in result.scalars().all()]
+
+    async def update(self, flow_id: str, data: dict) -> dict | None:
+        flow = await self.db.get(Flow, flow_id)
+        if not flow:
+            return None
+        for k, v in data.items():
+            if v is not None:
+                setattr(flow, k, v)
+        await self.db.commit()
+        await self.db.refresh(flow)
+        return _flow_to_dict(flow)
+
+    async def delete(self, flow_id: str) -> bool:
+        flow = await self.db.get(Flow, flow_id)
+        if not flow:
+            return False
+        await self.db.delete(flow)
+        await self.db.commit()
+        return True
+
+    async def delete_by_site(self, site_id: str) -> int:
+        result = await self.db.execute(select(Flow).where(Flow.site_id == site_id))
+        flows = result.scalars().all()
+        count = len(flows)
+        for f in flows:
+            await self.db.delete(f)
+        await self.db.commit()
+        return count
+
+
+class SQLiteFlowStepRepo(BaseFlowStepRepo):
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def create(self, data: dict) -> dict:
+        step = FlowStep(**data)
+        self.db.add(step)
+        await self.db.commit()
+        await self.db.refresh(step)
+        return _step_to_dict(step)
+
+    async def get_by_id(self, step_id: str) -> dict | None:
+        step = await self.db.get(FlowStep, step_id)
+        return _step_to_dict(step) if step else None
+
+    async def list_by_flow(self, flow_id: str) -> list[dict]:
+        result = await self.db.execute(
+            select(FlowStep).where(FlowStep.flow_id == flow_id).order_by(FlowStep.step_order)
+        )
+        return [_step_to_dict(s) for s in result.scalars().all()]
+
+    async def update(self, step_id: str, data: dict) -> dict | None:
+        step = await self.db.get(FlowStep, step_id)
+        if not step:
+            return None
+        for k, v in data.items():
+            if v is not None:
+                setattr(step, k, v)
+        await self.db.commit()
+        await self.db.refresh(step)
+        return _step_to_dict(step)
+
+    async def delete(self, step_id: str) -> bool:
+        step = await self.db.get(FlowStep, step_id)
+        if not step:
+            return False
+        await self.db.delete(step)
+        await self.db.commit()
+        return True
+
+    async def delete_by_flow(self, flow_id: str) -> int:
+        result = await self.db.execute(select(FlowStep).where(FlowStep.flow_id == flow_id))
+        steps = result.scalars().all()
+        count = len(steps)
+        for s in steps:
+            await self.db.delete(s)
+        await self.db.commit()
+        return count
+
+    async def reorder(self, flow_id: str, step_ids: list[str]) -> bool:
+        for idx, step_id in enumerate(step_ids):
+            step = await self.db.get(FlowStep, step_id)
+            if step and step.flow_id == flow_id:
+                step.step_order = idx + 1
         await self.db.commit()
         return True

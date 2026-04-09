@@ -311,6 +311,9 @@ async def add_manual_chunk(
     }
 
 
+SUPPORTED_UPLOAD_EXTENSIONS = (".txt", ".md", ".pdf", ".docx", ".csv")
+
+
 @router.post("/upload")
 async def upload_file(
     site_id: str,
@@ -318,48 +321,69 @@ async def upload_file(
     repos: Repositories = Depends(get_repos),
     _user: TokenData = Depends(get_current_user),
 ):
+    from knowledge.chunker import SemanticChunker
+    from knowledge.file_processor import extract_text
+
+    # Validate extension
+    filename = file.filename or "unknown.txt"
+    if not any(filename.lower().endswith(ext) for ext in SUPPORTED_UPLOAD_EXTENSIONS):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Supported formats: {', '.join(SUPPORTED_UPLOAD_EXTENSIONS)}",
+        )
+
     # Validate file size
     content = await file.read()
     if len(content) > MAX_UPLOAD_SIZE:
         raise HTTPException(status_code=400, detail=f"File too large. Maximum size: {MAX_UPLOAD_SIZE // (1024*1024)}MB")
 
-    text = ""
-    if file.filename and (file.filename.endswith(".txt") or file.filename.endswith(".md")):
-        text = content.decode("utf-8", errors="ignore")
-    else:
-        raise HTTPException(status_code=400, detail="Supported formats: .txt, .md")
+    # Extract text
+    try:
+        text = extract_text(content, filename)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     if not text.strip():
-        raise HTTPException(status_code=400, detail="File is empty")
+        raise HTTPException(status_code=400, detail="File is empty or no text could be extracted")
 
-    chunk_id = str(uuid.uuid4())
-    truncated_text = text[:10000]
+    # Chunk the text properly
+    chunker = SemanticChunker()
+    source_url = f"upload://{filename}"
+    chunks = chunker.chunk_plain_text(text, filename, source_url, site_id)
 
-    await repos.knowledge.create({
-        "id": chunk_id,
-        "site_id": site_id,
-        "source_type": "upload",
-        "title": file.filename,
-        "content": truncated_text,
-        "embedding_id": chunk_id,
-    })
+    if not chunks:
+        raise HTTPException(status_code=400, detail="No content could be extracted from file")
 
+    # Embed and store all chunks
     embedding_ok = False
     try:
         embed_provider = get_llm_provider(settings.embedding_provider, settings.embedding_model)
-        embeddings = await embed_provider.embed([truncated_text])
-        await rag_engine.add_chunks(
-            site_id,
-            [{"id": chunk_id, "content": truncated_text, "source_url": "", "title": file.filename, "chunk_index": 0}],
-            embeddings,
-        )
+        contents = [c["content"] for c in chunks]
+        embeddings = await embed_provider.embed(contents)
+        await rag_engine.add_chunks(site_id, chunks, embeddings)
         embedding_ok = True
     except Exception as e:
-        logger.warning("Failed to generate embeddings for uploaded file", error=str(e), filename=file.filename)
+        logger.warning("Failed to generate embeddings for uploaded file", error=str(e), filename=filename)
+
+    # Store in database (bulk)
+    db_chunks = []
+    for chunk in chunks:
+        db_chunks.append({
+            "id": chunk["id"],
+            "site_id": site_id,
+            "source_url": source_url,
+            "source_type": "upload",
+            "title": filename,
+            "content": chunk["content"],
+            "chunk_index": chunk.get("chunk_index", 0),
+            "content_hash": chunk.get("content_hash", ""),
+            "embedding_id": chunk["id"],
+        })
+    await repos.knowledge.create_many(db_chunks)
 
     return {
-        "id": chunk_id,
-        "filename": file.filename,
-        "message": "File uploaded",
+        "filename": filename,
+        "message": f"File uploaded — {len(chunks)} chunks created",
+        "chunks_created": len(chunks),
         "embedding": "ok" if embedding_ok else "failed — file saved but may not appear in search",
     }

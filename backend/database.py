@@ -43,6 +43,15 @@ async def _migrate_add_columns(conn):
         ("sites", "crawl_max_depth", "INTEGER DEFAULT 0"),
         ("sites", "crawl_exclude_patterns", "TEXT DEFAULT ''"),
         ("sites", "response_language", "VARCHAR(10) DEFAULT 'auto'"),
+        # Authenticated crawl (Playwright browser login)
+        ("sites", "crawl_use_browser", "BOOLEAN DEFAULT 0"),
+        ("sites", "crawl_login_url", "VARCHAR(2048)"),
+        ("sites", "crawl_login_username_selector", "VARCHAR(500) DEFAULT 'input[name=''email''], input[name=''username''], input[type=''email'']'"),
+        ("sites", "crawl_login_password_selector", "VARCHAR(500) DEFAULT 'input[name=''password''], input[type=''password'']'"),
+        ("sites", "crawl_login_submit_selector", "VARCHAR(500) DEFAULT 'button[type=''submit''], input[type=''submit'']'"),
+        ("sites", "crawl_login_username", "VARCHAR(500)"),
+        ("sites", "crawl_login_password", "VARCHAR(500)"),
+        ("sites", "crawl_login_success_url", "VARCHAR(2048)"),
     ]
     for table, column, col_type in migrations:
         with contextlib.suppress(Exception):  # Column may already exist

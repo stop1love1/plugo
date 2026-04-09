@@ -96,6 +96,9 @@ async def get_messages_per_day(
                         continue
                 else:
                     dt = ts
+                # Ensure dt is timezone-aware for comparison with cutoff
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=UTC)
                 if dt < cutoff:
                     continue
                 day = dt.strftime("%Y-%m-%d")

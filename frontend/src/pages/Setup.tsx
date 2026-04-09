@@ -696,6 +696,115 @@ export default function Setup() {
                 <span className="text-sm text-gray-700">{t("setup.forceRecrawl")}</span>
                 <span className="text-xs text-gray-400">{t("setup.forceRecrawlHint")}</span>
               </label>
+
+              {/* Browser Authentication */}
+              <div className="border-t border-gray-200 pt-4 mt-4">
+                <label className="flex items-center gap-2 cursor-pointer mb-3">
+                  <input
+                    type="checkbox"
+                    checked={crawlStatus?.crawl_use_browser || false}
+                    onChange={(e) => saveSettings({ crawl_use_browser: e.target.checked })}
+                    className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <Globe className="w-4 h-4 text-blue-500" />
+                  <span className="text-sm font-medium text-gray-700">Browser Authentication (Playwright)</span>
+                </label>
+                <p className="text-xs text-gray-400 mb-3">
+                  For websites that require login (Laravel, Django, Rails...). Bot will login via browser, extract cookies, then crawl.
+                </p>
+
+                {crawlStatus?.crawl_use_browser && (
+                  <div className="space-y-3 pl-6 border-l-2 border-blue-100">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Login URL *</label>
+                      <input
+                        defaultValue={crawlStatus?.crawl_login_url || ""}
+                        onBlur={(e) => saveSettings({ crawl_login_url: e.target.value })}
+                        placeholder="https://example.com/login"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Username/Email</label>
+                        <input
+                          defaultValue={crawlStatus?.crawl_login_username || ""}
+                          onBlur={(e) => saveSettings({ crawl_login_username: e.target.value })}
+                          placeholder="admin@example.com"
+                          className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Password</label>
+                        <input
+                          type="password"
+                          defaultValue={crawlStatus?.crawl_login_password || ""}
+                          onBlur={(e) => saveSettings({ crawl_login_password: e.target.value })}
+                          placeholder="********"
+                          className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Username Field Selector</label>
+                      <input
+                        defaultValue={crawlStatus?.crawl_login_username_selector || "input[name='email'], input[name='username'], input[type='email']"}
+                        onBlur={(e) => saveSettings({ crawl_login_username_selector: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary-500 font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Password Field Selector</label>
+                      <input
+                        defaultValue={crawlStatus?.crawl_login_password_selector || "input[name='password'], input[type='password']"}
+                        onBlur={(e) => saveSettings({ crawl_login_password_selector: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary-500 font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Submit Button Selector</label>
+                      <input
+                        defaultValue={crawlStatus?.crawl_login_submit_selector || "button[type='submit'], input[type='submit']"}
+                        onBlur={(e) => saveSettings({ crawl_login_submit_selector: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary-500 font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Success URL (optional)</label>
+                      <input
+                        defaultValue={crawlStatus?.crawl_login_success_url || ""}
+                        onBlur={(e) => saveSettings({ crawl_login_success_url: e.target.value })}
+                        placeholder="/dashboard or leave empty"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">URL pattern to verify login was successful</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const { testBrowserLogin } = await import("../lib/api");
+                          toast.loading("Testing login...", { id: "test-login" });
+                          const result = await testBrowserLogin(siteId!);
+                          toast.dismiss("test-login");
+                          if (result.success) {
+                            toast.success(result.message);
+                          } else {
+                            toast.error(result.message);
+                          }
+                        } catch {
+                          toast.dismiss("test-login");
+                          toast.error("Test login failed");
+                        }
+                      }}
+                      className="flex items-center gap-2 bg-blue-500 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-600"
+                    >
+                      <Play className="w-3.5 h-3.5" />
+                      Test Login
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

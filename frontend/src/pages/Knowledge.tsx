@@ -236,7 +236,7 @@ export default function Knowledge() {
         </button>
         <label className={`flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 cursor-pointer ${uploading ? "opacity-50 pointer-events-none" : ""}`}>
           <Upload className="w-4 h-4" /> {uploading ? t("knowledge.uploading") : t("knowledge.bulkUpload")}
-          <input type="file" accept=".txt,.md" multiple onChange={handleUpload} className="hidden" />
+          <input type="file" accept=".txt,.md,.pdf,.docx,.csv" multiple onChange={handleUpload} className="hidden" />
         </label>
         <button
           onClick={() => setShowAdd(true)}

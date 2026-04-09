@@ -55,5 +55,15 @@ class Site(Base):
     last_crawled_at = Column(DateTime, nullable=True)        # Last crawl timestamp
     knowledge_count = Column(Integer, default=0)             # Total knowledge chunks stored
 
+    # --- Authenticated crawl (Playwright browser login) ---
+    crawl_use_browser = Column(Boolean, default=False)                 # Enable browser-based auth crawl
+    crawl_login_url = Column(String(2048), nullable=True)              # Login page URL
+    crawl_login_username_selector = Column(String(500), default="input[name='email'], input[name='username'], input[type='email']")
+    crawl_login_password_selector = Column(String(500), default="input[name='password'], input[type='password']")
+    crawl_login_submit_selector = Column(String(500), default="button[type='submit'], input[type='submit']")
+    crawl_login_username = Column(String(500), nullable=True)          # Login username/email
+    crawl_login_password = Column(String(500), nullable=True)          # Login password
+    crawl_login_success_url = Column(String(2048), nullable=True)      # URL/pattern after successful login
+
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
