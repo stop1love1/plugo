@@ -360,7 +360,11 @@ async def update_crawl_settings(
         return {"message": "No settings to update"}
 
     await repos.sites.update(site_id, update_data)
-    return {"message": "Crawl settings updated", **update_data}
+    # Mask password in response to avoid echoing secrets
+    safe_response = {**update_data}
+    if "crawl_login_password" in safe_response and safe_response["crawl_login_password"]:
+        safe_response["crawl_login_password"] = "********"
+    return {"message": "Crawl settings updated", **safe_response}
 
 
 # ============================================================

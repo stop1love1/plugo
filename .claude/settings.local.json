@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(*)",
-      "mcp__plugin_playwright_playwright__*"
+      "mcp__plugin_playwright_playwright__*",
+      "Read(//c/Users/Admin/AppData/Local/Temp/claude/c--Users-Admin-claude-plugo/76260c94-ca37-49cd-83a1-b8fbbefa4067/tasks/**)",
+      "Bash(break)",
+      "Bash(curl -s http://localhost:8000/)"
     ]
   }
 }
