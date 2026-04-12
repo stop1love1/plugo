@@ -63,7 +63,8 @@ class WebCrawler:
         force_recrawl: bool = False,
         max_depth: int = 0,
         exclude_patterns: list[str] | None = None,
-        auth_cookies: dict[str, str] | None = None,
+        auth_cookies: list[dict] | None = None,
+        login_url: str | None = None,
     ):
         self.max_pages = max_pages
         self.delay = delay if delay is not None else settings.crawl_request_delay
@@ -85,6 +86,8 @@ class WebCrawler:
         self.exclude_patterns = exclude_patterns or []
         self.max_retries = settings.crawl_max_retries
         self.auth_cookies = auth_cookies
+        self.login_url = login_url
+        self._consecutive_auth_failures = 0
 
     def stop(self):
         """Signal the crawler to stop. Data already crawled will be persisted."""
@@ -217,11 +220,23 @@ class WebCrawler:
         url: str,
     ) -> tuple[int | None, str | None, str | None]:
         """Fetch a URL with retry logic. Returns (status_code, content_type, html).
-        status_code: None=timeout, -1=error (html contains error message)."""
+        status_code: None=timeout, -1=error (html contains error message).
+        Also detects redirect-to-login as a 401 auth failure."""
         last_error = None
         for attempt in range(1 + self.max_retries):
             try:
                 response = await client.get(url)
+                # Detect redirect to login URL (session expired)
+                if self.login_url and response.status_code == 200:
+                    final_url = str(response.url)
+                    if self.login_url in final_url and final_url != url:
+                        logger.warning(
+                            "Session may have expired — redirected to login page",
+                            url=url,
+                            redirected_to=final_url,
+                        )
+                        # Return 401 to trigger auth failure handling
+                        return (401, response.headers.get("content-type", ""), response.text)
                 return (response.status_code, response.headers.get("content-type", ""), response.text)
             except httpx.TimeoutException:
                 last_error = "timeout"
@@ -411,8 +426,11 @@ class WebCrawler:
                 "headers": {"User-Agent": "PlugoBot/1.0 (+https://github.com/stop1love1/plugo)"},
             }
             if self.auth_cookies:
-                client_kwargs["cookies"] = self.auth_cookies
-                self._log("", "success", action=f"using {len(self.auth_cookies)} auth cookies for authenticated crawl")
+                # Use simple dict for cookies — httpx.Cookies with domain can fail for localhost/IP
+                cookie_dict = {c["name"]: c["value"] for c in self.auth_cookies}
+                client_kwargs["cookies"] = cookie_dict
+                domains = list({c.get("domain", "") for c in self.auth_cookies})
+                self._log("", "success", action=f"using {len(self.auth_cookies)} auth cookies for authenticated crawl (domains: {domains})")
 
             async with httpx.AsyncClient(**client_kwargs) as client:
                 robot_parser = await self._check_robots_txt(client, start_url)
@@ -473,11 +491,43 @@ class WebCrawler:
                             await self._save_progress(job_id, repos)
                             continue
 
+                        # Detect auth failures: 401, 403, or redirect to login URL
+                        # (redirect-to-login is detected in _fetch_with_retry and returned as 401)
+                        is_auth_failure = status_code in (401, 403)
+
+                        if is_auth_failure:
+                            self._consecutive_auth_failures += 1
+                            logger.warning(
+                                "Session may have expired",
+                                status=status_code,
+                                url=url,
+                                consecutive_failures=self._consecutive_auth_failures,
+                            )
+                            if self._consecutive_auth_failures > 3:
+                                logger.error(
+                                    "Too many consecutive auth failures — stopping crawl",
+                                    consecutive_failures=self._consecutive_auth_failures,
+                                )
+                                self._log(url, "error", error=f"HTTP {status_code}", action="session expired — too many consecutive auth failures, stopping crawl")
+                                self.pages_failed += 1
+                                await self._save_progress(job_id, repos)
+                                self._stopped = True
+                                break
+                            self._log(url, "skipped", error=f"HTTP {status_code}", action=f"possible auth failure ({self._consecutive_auth_failures}/3 before stop)")
+                            self.pages_skipped += 1
+                            await self._save_progress(job_id, repos)
+                            continue
+
                         if status_code != 200:
+                            # Reset consecutive auth failure counter on non-auth errors
+                            self._consecutive_auth_failures = 0
                             self._log(url, "skipped", error=f"HTTP {status_code}", action="non-200 response")
                             self.pages_skipped += 1
                             await self._save_progress(job_id, repos)
                             continue
+
+                        # Successful page — reset consecutive auth failure counter
+                        self._consecutive_auth_failures = 0
 
                         if "text/html" not in (content_type or ""):
                             self._log(url, "skipped", action=f"non-HTML content: {(content_type or '').split(';')[0]}")

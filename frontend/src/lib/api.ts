@@ -332,7 +332,20 @@ export const getSiteCrawlJobs = (siteId: string) =>
   api.get<CrawlJob[]>(`/crawl/jobs/${siteId}`).then((r) => r.data);
 export const getCrawlLogs = (jobId: string) =>
   api.get<{ logs: unknown[]; status: string; pages_done: number }>(`/crawl/job/${jobId}/logs`).then((r) => r.data);
-export const updateCrawlSettings = (siteId: string, data: { max_pages?: number; max_depth?: number; auto_interval?: number; exclude_patterns?: string }) =>
+export const updateCrawlSettings = (siteId: string, data: {
+  max_pages?: number;
+  max_depth?: number;
+  auto_interval?: number;
+  exclude_patterns?: string;
+  crawl_use_browser?: boolean;
+  crawl_login_url?: string;
+  crawl_login_username?: string;
+  crawl_login_password?: string;
+  crawl_login_username_selector?: string;
+  crawl_login_password_selector?: string;
+  crawl_login_submit_selector?: string;
+  crawl_login_success_url?: string;
+}) =>
   api.put(`/crawl/settings/${siteId}`, data).then((r) => r.data);
 
 // Knowledge
@@ -436,6 +449,6 @@ export const deleteFlowStep = (stepId: string) =>
 export const reorderFlowSteps = (flowId: string, stepIds: string[]) =>
   api.post<{ message: string }>(`/flows/${flowId}/reorder`, { step_ids: stepIds }).then((r) => r.data);
 export const testBrowserLogin = (siteId: string) =>
-  api.post<{ success: boolean; message: string }>(`/crawl/test-login/${siteId}`).then((r) => r.data);
+  api.post<{ success: boolean; message: string; cookie_count?: number; cookie_names?: string[]; success_url_detected?: boolean; time_seconds?: number }>(`/crawl/test-login/${siteId}`).then((r) => r.data);
 
 export default api;

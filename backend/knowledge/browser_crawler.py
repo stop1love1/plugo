@@ -29,8 +29,8 @@ async def browser_login_and_extract_cookies(
     submit_selector: str = "button[type='submit'], input[type='submit']",
     success_url: str | None = None,
     timeout_ms: int = 30000,
-) -> dict[str, str]:
-    """Login via Playwright browser and return extracted cookies as a dict.
+) -> list[dict]:
+    """Login via Playwright browser and return extracted cookies with domain info.
 
     Args:
         login_url: The login page URL
@@ -43,7 +43,7 @@ async def browser_login_and_extract_cookies(
         timeout_ms: Max time to wait for login to complete
 
     Returns:
-        Dict of cookie name -> cookie value
+        List of dicts with name, value, domain, path for each cookie
     """
     if not PLAYWRIGHT_AVAILABLE:
         raise BrowserLoginError(
@@ -82,6 +82,51 @@ async def browser_login_and_extract_cookies(
                     f"Could not find username field. Tried selectors: {username_selector}"
                 )
 
+            # Check if password field is already visible (single-page login)
+            password_visible = False
+            for sel in password_selector.split(","):
+                sel = sel.strip()
+                if not sel:
+                    continue
+                try:
+                    locator = page.locator(sel).first
+                    if await locator.is_visible(timeout=1000):
+                        password_visible = True
+                        break
+                except Exception:
+                    continue
+
+            if not password_visible:
+                # Multi-step login: click Next/Continue to advance to the password page
+                logger.info("Browser crawl: password field not visible, trying multi-step login")
+                next_clicked = False
+                # Try the configured submit selector first, then common "Next"/"Continue" buttons
+                next_selectors = [s.strip() for s in submit_selector.split(",") if s.strip()]
+                next_selectors.extend([
+                    "button:has-text('Next')", "button:has-text('Continue')",
+                    "button:has-text('next')", "button:has-text('continue')",
+                    "input[type='submit']", "button[type='submit']",
+                ])
+                for sel in next_selectors:
+                    try:
+                        locator = page.locator(sel).first
+                        if await locator.is_visible(timeout=1000):
+                            await locator.click()
+                            next_clicked = True
+                            logger.info("Browser crawl: clicked next/continue for multi-step login", selector=sel)
+                            break
+                    except Exception:
+                        continue
+
+                if not next_clicked:
+                    raise BrowserLoginError(
+                        "Multi-step login: could not find Next/Continue button after username step"
+                    )
+
+                # Wait for the password field to appear
+                await asyncio.sleep(1)
+                await page.wait_for_load_state("networkidle", timeout=5000)
+
             # Fill password
             password_filled = False
             for sel in password_selector.split(","):
@@ -90,7 +135,7 @@ async def browser_login_and_extract_cookies(
                     continue
                 try:
                     locator = page.locator(sel).first
-                    if await locator.is_visible(timeout=2000):
+                    if await locator.is_visible(timeout=3000):
                         await locator.fill(password)
                         password_filled = True
                         logger.info("Browser crawl: filled password", selector=sel)
@@ -154,22 +199,27 @@ async def browser_login_and_extract_cookies(
             await asyncio.sleep(1)
             await page.wait_for_load_state("networkidle", timeout=5000)
 
-            # Extract cookies
-            cookies = await context.cookies()
-            cookie_dict = {}
-            for cookie in cookies:
-                cookie_dict[cookie["name"]] = cookie["value"]
+            # Extract cookies with domain info for multi-domain support
+            raw_cookies = await context.cookies()
+            cookie_list = []
+            for cookie in raw_cookies:
+                cookie_list.append({
+                    "name": cookie["name"],
+                    "value": cookie["value"],
+                    "domain": cookie.get("domain", ""),
+                    "path": cookie.get("path", "/"),
+                })
 
             logger.info(
                 "Browser crawl: extracted cookies",
-                count=len(cookie_dict),
-                domains=list({c.get("domain", "") for c in cookies}),
+                count=len(cookie_list),
+                domains=list({c["domain"] for c in cookie_list}),
             )
 
-            if not cookie_dict:
+            if not cookie_list:
                 raise BrowserLoginError("Login completed but no cookies were set")
 
-            return cookie_dict
+            return cookie_list
 
         except BrowserLoginError:
             raise
@@ -188,7 +238,10 @@ async def test_browser_login(
     submit_selector: str = "button[type='submit'], input[type='submit']",
     success_url: str | None = None,
 ) -> dict:
-    """Test login configuration and return result (success/failure + details)."""
+    """Test login configuration and return detailed result (success/failure + diagnostics)."""
+    import time
+
+    start_time = time.monotonic()
     try:
         cookies = await browser_login_and_extract_cookies(
             login_url=login_url,
@@ -199,18 +252,34 @@ async def test_browser_login(
             submit_selector=submit_selector,
             success_url=success_url,
         )
+        elapsed = round(time.monotonic() - start_time, 2)
+        cookie_names = [c["name"] for c in cookies]
+        # Check if any cookie domain matches the success_url pattern
+        success_url_detected = False
+        if success_url:
+            # The login function would have raised if it didn't navigate,
+            # so if we got here the redirect was successful
+            success_url_detected = True
         return {
             "success": True,
             "message": f"Login successful — {len(cookies)} cookies extracted",
             "cookie_count": len(cookies),
+            "cookie_names": cookie_names,
+            "success_url_detected": success_url_detected,
+            "time_seconds": elapsed,
         }
     except BrowserLoginError as e:
+        elapsed = round(time.monotonic() - start_time, 2)
         return {
             "success": False,
             "message": str(e),
+            "time_seconds": elapsed,
         }
     except Exception as e:
+        elapsed = round(time.monotonic() - start_time, 2)
+        logger.error("test_browser_login unexpected error", error=repr(e))
         return {
             "success": False,
-            "message": f"Unexpected error: {e!s}",
+            "message": f"Unexpected error: {type(e).__name__}: {e!s}" if str(e) else f"Unexpected error: {type(e).__name__}: {e!r}",
+            "time_seconds": elapsed,
         }

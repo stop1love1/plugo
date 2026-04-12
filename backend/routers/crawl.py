@@ -558,6 +558,7 @@ async def _run_crawl_with_tracking(
 
     # Browser login: extract cookies once before crawl loop
     auth_cookies = None
+    login_url = None
     if use_browser:
         try:
             from knowledge.browser_crawler import browser_login_and_extract_cookies
@@ -565,9 +566,10 @@ async def _run_crawl_with_tracking(
             try:
                 site = await repos_init.sites.get_by_id(site_id)
                 if site and site.get("crawl_login_url") and site.get("crawl_login_username"):
+                    login_url = site["crawl_login_url"]
                     raw_pw = await repos_init.sites.get_crawl_password(site_id)
                     auth_cookies = await browser_login_and_extract_cookies(
-                        login_url=site["crawl_login_url"],
+                        login_url=login_url,
                         username=site["crawl_login_username"],
                         password=raw_pw or "",
                         username_selector=site.get("crawl_login_username_selector", ""),
@@ -579,7 +581,20 @@ async def _run_crawl_with_tracking(
             finally:
                 await repos_init.close()
         except Exception as e:
-            logger.error("Browser login failed, crawling without auth", site_id=site_id, error=str(e))
+            # Auth failure: do NOT continue crawling without auth
+            error_msg = f"Browser login failed: {e!s}"
+            logger.error(error_msg, site_id=site_id)
+            repos_err = await create_repos()
+            try:
+                await repos_err.crawl_jobs.update(job_id, {
+                    "status": "error",
+                    "error_log": error_msg,
+                    "finished_at": datetime.now(UTC),
+                })
+                await repos_err.sites.update(site_id, {"crawl_status": "idle"})
+            finally:
+                await repos_err.close()
+            return
 
     while True:
         round_number += 1
@@ -590,6 +605,7 @@ async def _run_crawl_with_tracking(
             max_depth=max_depth,
             exclude_patterns=exclude_patterns,
             auth_cookies=auth_cookies,
+            login_url=login_url,
         )
         _active_crawlers[site_id] = crawler
 
