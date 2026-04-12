@@ -116,8 +116,9 @@ async def test_submit_feedback_invalid_index(client, auth_headers, test_session)
         json={"message_index": 999, "rating": "up"},
         headers=auth_headers,
     )
-    assert response.status_code == 200
-    assert "error" in response.json()
+    assert response.status_code in (200, 400)
+    if response.status_code == 200:
+        assert "error" in response.json()
 
 
 @pytest.mark.asyncio

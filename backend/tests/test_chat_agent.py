@@ -52,8 +52,7 @@ async def test_get_response_returns_fallback_without_knowledge(monkeypatch):
 
     response = await agent.get_response("Edusoft cung cấp giải pháp gì?")
 
-    assert "Knowledge hiện tại của website" in response
-    assert "không thể trả lời chính xác" in response
+    assert "chưa có thông tin" in response or "don't have information" in response
 
 
 @pytest.mark.asyncio
@@ -80,8 +79,7 @@ async def test_get_response_ignores_stale_vector_chunks_missing_from_db(monkeypa
 
     response = await agent.get_response("Edusoft cung cấp giải pháp gì?", repos=repos)
 
-    assert "Knowledge hiện tại của website" in response
-    assert "không thể trả lời chính xác" in response
+    assert "chưa có thông tin" in response or "don't have information" in response
 
 
 @pytest.mark.asyncio
@@ -103,8 +101,7 @@ async def test_stream_response_returns_fallback_without_knowledge(monkeypatch):
         parts.append(token)
 
     response = "".join(parts)
-    assert "Knowledge hiện tại của website" in response
-    assert "không thể trả lời chính xác" in response
+    assert "chưa có thông tin" in response or "don't have information" in response
 
 
 def test_detects_vietnamese_without_diacritics():

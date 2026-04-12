@@ -18,8 +18,8 @@ from logging_config import logger
 from routers import analytics, chat, crawl, flows, knowledge, memory, sessions, sites, tools
 from routers import audit as audit_router
 from routers import auth as auth_router
-from routers import llm_keys as llm_keys_router
 from routers import config as config_router
+from routers import llm_keys as llm_keys_router
 from routers import models as models_router
 
 # --- Rate limiter ---

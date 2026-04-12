@@ -45,6 +45,7 @@ def _site_to_dict(s: Site) -> dict:
         "system_prompt": s.system_prompt or "",
         "bot_rules": s.bot_rules or "",
         "suggestions": s.suggestions or [],
+        "response_language": s.response_language or "auto",
         "is_approved": s.is_approved,
         # Crawl management
         "crawl_enabled": s.crawl_enabled,

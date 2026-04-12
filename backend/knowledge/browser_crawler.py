@@ -135,7 +135,7 @@ async def browser_login_and_extract_cookies(
                     if current == login_url:
                         raise BrowserLoginError(
                             f"Login failed — still on login page. Expected redirect to: {success_url}"
-                        )
+                        ) from None
                     logger.info("Browser crawl: navigated away from login page", current_url=current)
             else:
                 # No success URL specified — wait for navigation away from login page
@@ -148,7 +148,7 @@ async def browser_login_and_extract_cookies(
                 except Exception:
                     raise BrowserLoginError(
                         "Login may have failed — page did not navigate away from login URL"
-                    )
+                    ) from None
 
             # Wait a bit for any post-login redirects/cookie setting
             await asyncio.sleep(1)

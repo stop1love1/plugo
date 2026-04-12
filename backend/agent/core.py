@@ -408,6 +408,7 @@ class ChatAgent:
 
             while result.get("tool_calls") and round_count < max_tool_rounds:
                 round_count += 1
+                tool_called = False
                 for tc in result["tool_calls"]:
                     tool_meta = next(
                         (t["_meta"] for t in tools if t["name"] == tc["name"]), None
@@ -421,6 +422,12 @@ class ChatAgent:
                         )
                         result_str = json.dumps(tool_result, ensure_ascii=False)
                         self._append_tool_messages(tc, result_str)
+                        tool_called = True
+                    else:
+                        logger.warning("LLM called unknown tool", tool_name=tc["name"])
+
+                if not tool_called:
+                    break  # No valid tools were called, stop the loop
 
                 # Check for more tool calls
                 result = await self.provider.chat(
@@ -476,6 +483,7 @@ class ChatAgent:
         round_count = 0
         while result.get("tool_calls") and round_count < max_tool_rounds:
             round_count += 1
+            tool_called = False
             for tc in result["tool_calls"]:
                 tool_meta = next(
                     (t["_meta"] for t in tools if t["name"] == tc["name"]), None
@@ -486,6 +494,12 @@ class ChatAgent:
                     )
                     result_str = json.dumps(tool_result, ensure_ascii=False)
                     self._append_tool_messages(tc, result_str)
+                    tool_called = True
+                else:
+                    logger.warning("LLM called unknown tool", tool_name=tc["name"])
+
+            if not tool_called:
+                break  # No valid tools were called, stop the loop
 
             result = await self.provider.chat(
                 messages=self.messages,

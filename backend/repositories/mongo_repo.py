@@ -79,7 +79,7 @@ class MongoSiteRepo(BaseSiteRepo):
             "bubble_size": data.get("bubble_size", "medium"),
             "allowed_domains": data.get("allowed_domains", ""),
             "suggestions": data.get("suggestions", []),
-            "is_approved": data.get("is_approved", True),
+            "is_approved": data.get("is_approved", False),
             "system_prompt": data.get("system_prompt", ""),
             "bot_rules": data.get("bot_rules", ""),
             "response_language": data.get("response_language", "auto"),

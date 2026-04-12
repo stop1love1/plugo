@@ -75,9 +75,9 @@ async def test_list_sites_without_auth(client):
 
 
 @pytest.mark.asyncio
-async def test_get_site_by_id(client, test_site):
+async def test_get_site_by_id(client, auth_headers, test_site):
     """GET /api/sites/{site_id} should return site details."""
-    response = await client.get(f"/api/sites/{test_site['id']}")
+    response = await client.get(f"/api/sites/{test_site['id']}", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()
@@ -86,9 +86,9 @@ async def test_get_site_by_id(client, test_site):
 
 
 @pytest.mark.asyncio
-async def test_get_site_not_found(client):
+async def test_get_site_not_found(client, auth_headers):
     """GET /api/sites/{site_id} with invalid id should return 404."""
-    response = await client.get("/api/sites/nonexistent-id")
+    response = await client.get("/api/sites/nonexistent-id", headers=auth_headers)
     assert response.status_code == 404
 
 
@@ -174,7 +174,7 @@ async def test_delete_site(client, auth_headers, db_repos):
     assert response.json()["message"] == "Site deleted"
 
     # Verify it's gone
-    response = await client.get(f"/api/sites/{site['id']}")
+    response = await client.get(f"/api/sites/{site['id']}", headers=auth_headers)
     assert response.status_code == 404
 
 
@@ -186,9 +186,9 @@ async def test_delete_site_not_found(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_list_providers(client):
-    """GET /api/sites/providers/list should return available providers (public)."""
-    response = await client.get("/api/sites/providers/list")
+async def test_list_providers(client, auth_headers):
+    """GET /api/sites/providers/list should return available providers."""
+    response = await client.get("/api/sites/providers/list", headers=auth_headers)
     assert response.status_code == 200
 
     data = response.json()

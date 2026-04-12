@@ -28,13 +28,13 @@ def extract_text(content: bytes, filename: str) -> str:
 def _extract_pdf(content: bytes) -> str:
     try:
         from pypdf import PdfReader
-    except ImportError:
-        raise ValueError("pypdf is not installed. Run: pip install pypdf")
+    except ImportError as err:
+        raise ValueError("pypdf is not installed. Run: pip install pypdf") from err
 
     try:
         reader = PdfReader(io.BytesIO(content))
     except Exception as e:
-        raise ValueError(f"Could not read PDF file: {e!s}")
+        raise ValueError(f"Could not read PDF file: {e!s}") from e
 
     parts = []
     for i, page in enumerate(reader.pages):
@@ -51,8 +51,8 @@ def _extract_pdf(content: bytes) -> str:
 def _extract_docx(content: bytes) -> str:
     try:
         import docx
-    except ImportError:
-        raise ValueError("python-docx is not installed. Run: pip install python-docx")
+    except ImportError as err:
+        raise ValueError("python-docx is not installed. Run: pip install python-docx") from err
 
     doc = docx.Document(io.BytesIO(content))
     parts = []

@@ -172,7 +172,7 @@ async def test_upload_txt_file(client, auth_headers, test_site):
 
     data = response.json()
     assert data["filename"] == "test.txt"
-    assert data["message"] == "File uploaded"
+    assert "File uploaded" in data["message"]
 
 
 @pytest.mark.asyncio

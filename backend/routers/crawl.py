@@ -374,7 +374,7 @@ async def update_crawl_settings(
     await repos.sites.update(site_id, update_data)
     # Mask password in response to avoid echoing secrets
     safe_response = {**update_data}
-    if "crawl_login_password" in safe_response and safe_response["crawl_login_password"]:
+    if safe_response.get("crawl_login_password"):
         safe_response["crawl_login_password"] = "********"
     return {"message": "Crawl settings updated", **safe_response}
 
@@ -506,7 +506,8 @@ async def test_browser_login(
     _user: TokenData = Depends(get_current_user),
 ):
     """Test the browser login configuration for a site."""
-    from knowledge.browser_crawler import PLAYWRIGHT_AVAILABLE, test_browser_login as _test_login
+    from knowledge.browser_crawler import PLAYWRIGHT_AVAILABLE
+    from knowledge.browser_crawler import test_browser_login as _test_login
 
     if not PLAYWRIGHT_AVAILABLE:
         raise HTTPException(status_code=400, detail="Playwright is not installed on the server")

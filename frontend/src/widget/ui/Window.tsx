@@ -82,38 +82,35 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
     textareaRef.current?.focus();
   }, []);
 
-  // Close on Escape key
+  // Close on Escape key + Focus trap: attach to shadow root for proper Shadow DOM support
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+    const root = windowRef.current?.getRootNode() as ShadowRoot | Document | undefined;
+    const target = root instanceof ShadowRoot ? root : document;
 
-  // Focus trap: keep Tab cycling within the widget window
-  useEffect(() => {
-    const handleTab = (e: KeyboardEvent) => {
-      if (e.key !== "Tab") return;
+    const handleKeyDown = (e: Event) => {
+      const ke = e as KeyboardEvent;
+      if (ke.key === "Escape") onClose();
+      if (ke.key !== "Tab") return;
+
       const focusable = windowRef.current?.querySelectorAll<HTMLElement>(
         'button, textarea, [tabindex]:not([tabindex="-1"])'
       );
       if (!focusable?.length) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      const shadowRoot = windowRef.current?.getRootNode() as ShadowRoot | undefined;
-      const activeEl = shadowRoot?.activeElement ?? document.activeElement;
-      if (e.shiftKey && activeEl === first) {
-        e.preventDefault();
+      const activeEl = root instanceof ShadowRoot ? root.activeElement : document.activeElement;
+      if (ke.shiftKey && activeEl === first) {
+        ke.preventDefault();
         last.focus();
-      } else if (!e.shiftKey && activeEl === last) {
-        e.preventDefault();
+      } else if (!ke.shiftKey && activeEl === last) {
+        ke.preventDefault();
         first.focus();
       }
     };
-    document.addEventListener("keydown", handleTab);
-    return () => document.removeEventListener("keydown", handleTab);
-  }, []);
+
+    target.addEventListener("keydown", handleKeyDown);
+    return () => target.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
 
   const handleSubmit = (e: Event) => {
     e.preventDefault();
