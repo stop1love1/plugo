@@ -153,9 +153,14 @@ async def update_site(
         raise HTTPException(status_code=404, detail="Site not found")
 
     update_payload = data.model_dump(exclude_none=True)
-    if "llm_provider" in update_payload or "llm_model" in update_payload:
-        provider = update_payload.get("llm_provider", existing_site["llm_provider"])
-        model = update_payload.get("llm_model", existing_site["llm_model"])
+    # Only verify model config when provider or model actually changed
+    new_provider = update_payload.get("llm_provider")
+    new_model = update_payload.get("llm_model")
+    provider_changed = new_provider and new_provider != existing_site.get("llm_provider")
+    model_changed = new_model and new_model != existing_site.get("llm_model")
+    if provider_changed or model_changed:
+        provider = new_provider or existing_site["llm_provider"]
+        model = new_model or existing_site["llm_model"]
         await verify_site_model_config(provider, model)
 
     site = await repos.sites.update(site_id, update_payload)

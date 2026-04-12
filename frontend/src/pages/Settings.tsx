@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useParams, useNavigate, useBlocker } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { getErrorMessage, getSite, updateSite, deleteSite, getModelsProviders, type UpdateSiteData } from "../lib/api";
@@ -165,8 +165,21 @@ export default function Settings() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [hasChanges]);
 
-  // Block in-app navigation when there are unsaved changes
-  const blocker = useBlocker(hasChanges);
+  // Block in-app navigation when there are unsaved changes (works with BrowserRouter)
+  useEffect(() => {
+    if (!hasChanges) return;
+
+    const handleBeforeNav = (e: PopStateEvent) => {
+      if (!window.confirm("You have unsaved changes. Are you sure you want to leave this page?")) {
+        e.preventDefault();
+        // Push the current URL back to cancel the navigation
+        window.history.pushState(null, "", window.location.href);
+      }
+    };
+
+    window.addEventListener("popstate", handleBeforeNav);
+    return () => window.removeEventListener("popstate", handleBeforeNav);
+  }, [hasChanges]);
 
   const deletesMutation = useMutation({
     mutationFn: () => deleteSite(siteId!),
@@ -196,17 +209,6 @@ export default function Settings() {
           {t("settings.unsavedChanges")}
         </div>
       )}
-
-      {/* Navigation blocker dialog */}
-      <ConfirmDialog
-        open={blocker.state === "blocked"}
-        title="Unsaved changes"
-        message="You have unsaved changes. Are you sure you want to leave this page?"
-        confirmLabel="Leave"
-        danger
-        onConfirm={() => blocker.proceed?.()}
-        onCancel={() => blocker.reset?.()}
-      />
 
       <form onSubmit={handleSave} className="space-y-6">
         {/* General */}
