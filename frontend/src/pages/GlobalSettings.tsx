@@ -209,7 +209,7 @@ export default function GlobalSettings() {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 py-6 pr-6 max-w-5xl space-y-8 overflow-y-auto">
+      <div className="flex-1 py-6 pr-6 space-y-8 overflow-y-auto">
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Global Settings</h1>
