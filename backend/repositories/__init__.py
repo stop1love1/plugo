@@ -107,6 +107,8 @@ async def create_repos() -> Repositories:
             MongoChatSessionRepo,
             MongoConversationSummaryRepo,
             MongoCrawlJobRepo,
+            MongoFlowRepo,
+            MongoFlowStepRepo,
             MongoKnowledgeRepo,
             MongoLLMKeyRepo,
             MongoSiteRepo,
@@ -124,6 +126,8 @@ async def create_repos() -> Repositories:
             conversation_summaries=MongoConversationSummaryRepo(db),
             audit_logs=MongoAuditLogRepo(db),
             llm_keys=MongoLLMKeyRepo(db),
+            flows=MongoFlowRepo(db),
+            flow_steps=MongoFlowStepRepo(db),
         )
     else:
         # Default: SQLite

@@ -10,6 +10,8 @@ from repositories.base import (
     BaseChatSessionRepo,
     BaseConversationSummaryRepo,
     BaseCrawlJobRepo,
+    BaseFlowRepo,
+    BaseFlowStepRepo,
     BaseKnowledgeRepo,
     BaseLLMKeyRepo,
     BaseSiteRepo,
@@ -44,12 +46,16 @@ async def ensure_indexes(db: AsyncIOMotorDatabase) -> None:
 
 def _clean_doc(doc: dict) -> dict:
     """Convert MongoDB _id to id and remove _id."""
+    doc = dict(doc)  # work on a copy to avoid mutating the caller's dict
     if doc and "_id" in doc:
         doc["id"] = str(doc.pop("_id"))
     # Convert datetime to ISO strings for consistency
     for key in ("created_at", "updated_at", "crawled_at", "started_at", "finished_at", "ended_at", "last_crawled_at"):
         if key in doc and isinstance(doc[key], datetime):
             doc[key] = doc[key].isoformat()
+    # Mask crawl_login_password the same way SQLite does
+    if "crawl_login_password" in doc:
+        doc["crawl_login_password"] = "********" if doc["crawl_login_password"] else ""
     return doc
 
 
@@ -67,7 +73,7 @@ class MongoSiteRepo(BaseSiteRepo):
             "llm_provider": data.get("llm_provider", "claude"),
             "llm_model": data.get("llm_model", "claude-sonnet-4-20250514"),
             "primary_color": data.get("primary_color", "#6366f1"),
-            "greeting": data.get("greeting", "Xin chào! Tôi có thể giúp gì cho bạn?"),
+            "greeting": data.get("greeting", "Hello! How can I help you?"),
             "position": data.get("position", "bottom-right"),
             "widget_title": data.get("widget_title", ""),
             "dark_mode": data.get("dark_mode", "auto"),
@@ -155,6 +161,7 @@ class MongoKnowledgeRepo(BaseKnowledgeRepo):
             "source_type": data.get("source_type", "crawl"),
             "title": data.get("title"),
             "content": data["content"],
+            "content_hash": data.get("content_hash", ""),
             "chunk_index": data.get("chunk_index", 0),
             "embedding_id": data.get("embedding_id"),
             "crawled_at": datetime.now(UTC),
@@ -263,7 +270,12 @@ class MongoKnowledgeRepo(BaseKnowledgeRepo):
                 "source_type": 1,
             }},
         ]
-        return [doc async for doc in self.col.aggregate(pipeline)]
+        results = []
+        async for doc in self.col.aggregate(pipeline):
+            if "last_crawled_at" in doc and isinstance(doc["last_crawled_at"], datetime):
+                doc["last_crawled_at"] = doc["last_crawled_at"].isoformat()
+            results.append(doc)
+        return results
 
     async def list_content_hashes(self, site_id: str) -> set[str]:
         """Return all content hashes for a site (for deduplication)."""
@@ -473,7 +485,8 @@ class MongoUserRepo(BaseUserRepo):
         cursor = self.col.find().sort("created_at", -1)
         users = []
         async for doc in cursor:
-            users.append({"id": doc["_id"], "username": doc["username"], "role": doc.get("role", "admin"), "created_at": str(doc.get("created_at", ""))})
+            created_at = doc.get("created_at")
+            users.append({"id": doc["_id"], "username": doc["username"], "role": doc.get("role", "admin"), "created_at": created_at.isoformat() if isinstance(created_at, datetime) else str(created_at) if created_at else None})
         return users
 
     async def update_role(self, user_id: str, role: str) -> dict | None:
@@ -482,7 +495,8 @@ class MongoUserRepo(BaseUserRepo):
         )
         if not result:
             return None
-        return {"id": result["_id"], "username": result["username"], "role": result.get("role", "admin"), "created_at": str(result.get("created_at", ""))}
+        created_at = result.get("created_at")
+        return {"id": result["_id"], "username": result["username"], "role": result.get("role", "admin"), "created_at": created_at.isoformat() if isinstance(created_at, datetime) else str(created_at) if created_at else None}
 
     async def delete(self, user_id: str) -> bool:
         result = await self.col.delete_one({"_id": user_id})
@@ -674,3 +688,102 @@ class MongoLLMKeyRepo(BaseLLMKeyRepo):
     async def delete_by_provider(self, provider: str) -> bool:
         result = await self.col.delete_one({"provider": provider})
         return result.deleted_count > 0
+
+
+# --- Flow ---
+class MongoFlowRepo(BaseFlowRepo):
+    def __init__(self, db: AsyncIOMotorDatabase):
+        self.col = db["flows"]
+
+    async def create(self, data: dict) -> dict:
+        doc = {
+            "_id": data.get("id", str(uuid.uuid4())),
+            "site_id": data["site_id"],
+            "name": data["name"],
+            "description": data.get("description", ""),
+            "requires_login": data.get("requires_login", False),
+            "is_enabled": data.get("is_enabled", True),
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
+        }
+        await self.col.insert_one(doc)
+        return _clean_doc(doc)
+
+    async def get_by_id(self, flow_id: str) -> dict | None:
+        doc = await self.col.find_one({"_id": flow_id})
+        return _clean_doc(doc) if doc else None
+
+    async def list_by_site(self, site_id: str) -> list[dict]:
+        cursor = self.col.find({"site_id": site_id}).sort("created_at", -1)
+        return [_clean_doc(doc) async for doc in cursor]
+
+    async def update(self, flow_id: str, data: dict) -> dict | None:
+        update_data = {k: v for k, v in data.items() if v is not None}
+        update_data["updated_at"] = datetime.now(UTC)
+        result = await self.col.find_one_and_update(
+            {"_id": flow_id},
+            {"$set": update_data},
+            return_document=True,
+        )
+        return _clean_doc(result) if result else None
+
+    async def delete(self, flow_id: str) -> bool:
+        result = await self.col.delete_one({"_id": flow_id})
+        return result.deleted_count > 0
+
+    async def delete_by_site(self, site_id: str) -> int:
+        result = await self.col.delete_many({"site_id": site_id})
+        return result.deleted_count
+
+
+# --- Flow Step ---
+class MongoFlowStepRepo(BaseFlowStepRepo):
+    def __init__(self, db: AsyncIOMotorDatabase):
+        self.col = db["flow_steps"]
+
+    async def create(self, data: dict) -> dict:
+        doc = {
+            "_id": data.get("id", str(uuid.uuid4())),
+            "flow_id": data["flow_id"],
+            "step_order": data.get("step_order", 1),
+            "title": data["title"],
+            "description": data.get("description", ""),
+            "url": data.get("url"),
+            "screenshot_url": data.get("screenshot_url"),
+            "created_at": datetime.now(UTC),
+        }
+        await self.col.insert_one(doc)
+        return _clean_doc(doc)
+
+    async def get_by_id(self, step_id: str) -> dict | None:
+        doc = await self.col.find_one({"_id": step_id})
+        return _clean_doc(doc) if doc else None
+
+    async def list_by_flow(self, flow_id: str) -> list[dict]:
+        cursor = self.col.find({"flow_id": flow_id}).sort("step_order", 1)
+        return [_clean_doc(doc) async for doc in cursor]
+
+    async def update(self, step_id: str, data: dict) -> dict | None:
+        update_data = {k: v for k, v in data.items() if v is not None}
+        result = await self.col.find_one_and_update(
+            {"_id": step_id},
+            {"$set": update_data},
+            return_document=True,
+        )
+        return _clean_doc(result) if result else None
+
+    async def delete(self, step_id: str) -> bool:
+        result = await self.col.delete_one({"_id": step_id})
+        return result.deleted_count > 0
+
+    async def delete_by_flow(self, flow_id: str) -> int:
+        result = await self.col.delete_many({"flow_id": flow_id})
+        return result.deleted_count
+
+    async def reorder(self, flow_id: str, step_ids: list[str]) -> bool:
+        for idx, step_id in enumerate(step_ids):
+            await self.col.update_one(
+                {"_id": step_id, "flow_id": flow_id},
+                {"$set": {"step_order": idx + 1}},
+            )
+        return True

@@ -220,6 +220,7 @@ class SQLiteKnowledgeRepo(BaseKnowledgeRepo):
             search_filter = (
                 KnowledgeChunk.title.ilike(search_pattern)
                 | KnowledgeChunk.content.ilike(search_pattern)
+                | KnowledgeChunk.source_url.ilike(search_pattern)
             )
             combined = base_filter & search_filter
         else:
@@ -523,7 +524,7 @@ class SQLiteUserRepo(BaseUserRepo):
 
     async def list_all(self) -> list[dict]:
         result = await self.db.execute(select(User).order_by(User.created_at.desc()))
-        return [{"id": u.id, "username": u.username, "role": u.role, "created_at": str(u.created_at)} for u in result.scalars().all()]
+        return [{"id": u.id, "username": u.username, "role": u.role, "created_at": u.created_at.isoformat() if u.created_at else None} for u in result.scalars().all()]
 
     async def update_role(self, user_id: str, role: str) -> dict | None:
         user = await self.db.get(User, user_id)
@@ -531,7 +532,7 @@ class SQLiteUserRepo(BaseUserRepo):
             return None
         user.role = role
         await self.db.commit()
-        return {"id": user.id, "username": user.username, "role": user.role, "created_at": str(user.created_at)}
+        return {"id": user.id, "username": user.username, "role": user.role, "created_at": user.created_at.isoformat() if user.created_at else None}
 
     async def delete(self, user_id: str) -> bool:
         user = await self.db.get(User, user_id)
@@ -679,7 +680,7 @@ class SQLiteAuditLogRepo(BaseAuditLogRepo):
         log = AuditLog(**data)
         self.db.add(log)
         await self.db.commit()
-        return {"id": log.id, "user_id": log.user_id, "username": log.username, "action": log.action, "resource_type": log.resource_type, "resource_id": log.resource_id, "details": log.details, "created_at": str(log.created_at)}
+        return {"id": log.id, "user_id": log.user_id, "username": log.username, "action": log.action, "resource_type": log.resource_type, "resource_id": log.resource_id, "details": log.details, "created_at": log.created_at.isoformat() if log.created_at else None}
 
     async def list_by_site(self, page: int = 1, per_page: int = 50) -> dict:
         offset = (page - 1) * per_page
@@ -695,7 +696,7 @@ class SQLiteAuditLogRepo(BaseAuditLogRepo):
                 "resource_type": row.resource_type,
                 "resource_id": row.resource_id,
                 "details": row.details,
-                "created_at": str(row.created_at),
+                "created_at": row.created_at.isoformat() if row.created_at else None,
             }
             for row in result.scalars().all()
         ]
@@ -711,8 +712,8 @@ def _llm_key_to_dict(k: LLMKey) -> dict:
         "provider": k.provider,
         "api_key": k.api_key,
         "label": k.label,
-        "created_at": str(k.created_at) if k.created_at else None,
-        "updated_at": str(k.updated_at) if k.updated_at else None,
+        "created_at": k.created_at.isoformat() if k.created_at else None,
+        "updated_at": k.updated_at.isoformat() if k.updated_at else None,
     }
 
 
