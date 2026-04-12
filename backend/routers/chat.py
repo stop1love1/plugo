@@ -40,8 +40,17 @@ class WSRateLimiter:
 
     def is_allowed(self, session_id: str) -> bool:
         now = time()
+
+        # Lazy eviction: remove stale sessions whose timestamps are all expired
+        stale_keys = [
+            key for key, ts_list in self._timestamps.items()
+            if key != session_id and all(now - t >= WS_RATE_LIMIT_WINDOW for t in ts_list)
+        ]
+        for key in stale_keys:
+            del self._timestamps[key]
+
         timestamps = self._timestamps.get(session_id, [])
-        # Remove expired timestamps
+        # Remove expired timestamps for current session
         timestamps = [t for t in timestamps if now - t < WS_RATE_LIMIT_WINDOW]
         if len(timestamps) >= WS_RATE_LIMIT_MAX:
             self._timestamps[session_id] = timestamps
@@ -267,6 +276,19 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
             if not message:
                 continue
 
+            # Validate message size limits
+            if len(message) > 10000:
+                await websocket.send_json({
+                    "type": "error",
+                    "message": "Message too long. Please keep it under 10,000 characters.",
+                })
+                continue
+
+            if page_context and isinstance(page_context, dict):
+                page_text = page_context.get("text", "")
+                if isinstance(page_text, str) and len(page_text) > 5000:
+                    page_context["text"] = page_text[:5000]
+
             # Rate limit WebSocket messages
             if not _ws_rate_limiter.is_allowed(session_id):
                 await websocket.send_json({
@@ -274,6 +296,15 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
                     "message": "Too many messages. Please slow down.",
                 })
                 continue
+
+            # Re-fetch conversation summary periodically (after summarization may have run)
+            if len(messages) > 0 and len(messages) % 20 == 0:
+                try:
+                    existing_summary = await repos.conversation_summaries.get_by_session(session_id)
+                    if existing_summary:
+                        conversation_summary = existing_summary["summary_text"]
+                except Exception:
+                    pass
 
             await _handle_message(
                 websocket, agent, repos, session_id, messages,

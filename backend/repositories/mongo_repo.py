@@ -19,6 +19,29 @@ from repositories.base import (
 )
 
 
+async def ensure_indexes(db: AsyncIOMotorDatabase) -> None:
+    """Create indexes on frequently queried fields to avoid full collection scans."""
+    # sites: unique on token, index on domain
+    await db["sites"].create_index("token", unique=True)
+    await db["sites"].create_index("domain")
+
+    # knowledge_chunks: index on site_id
+    await db["knowledge_chunks"].create_index("site_id")
+
+    # tools: index on site_id
+    await db["tools"].create_index("site_id")
+
+    # chat_sessions: index on site_id, compound on (visitor_id, site_id)
+    await db["chat_sessions"].create_index("site_id")
+    await db["chat_sessions"].create_index([("visitor_id", 1), ("site_id", 1)])
+
+    # visitor_memories: compound on (visitor_id, site_id)
+    await db["visitor_memories"].create_index([("visitor_id", 1), ("site_id", 1)])
+
+    # crawl_jobs: index on site_id
+    await db["crawl_jobs"].create_index("site_id")
+
+
 def _clean_doc(doc: dict) -> dict:
     """Convert MongoDB _id to id and remove _id."""
     if doc and "_id" in doc:
@@ -56,6 +79,10 @@ class MongoSiteRepo(BaseSiteRepo):
             "bubble_size": data.get("bubble_size", "medium"),
             "allowed_domains": data.get("allowed_domains", ""),
             "suggestions": data.get("suggestions", []),
+            "is_approved": data.get("is_approved", True),
+            "system_prompt": data.get("system_prompt", ""),
+            "bot_rules": data.get("bot_rules", ""),
+            "response_language": data.get("response_language", "auto"),
             # Crawl management
             "crawl_enabled": data.get("crawl_enabled", False),
             "crawl_auto_interval": data.get("crawl_auto_interval", 0),
@@ -65,6 +92,15 @@ class MongoSiteRepo(BaseSiteRepo):
             "crawl_status": data.get("crawl_status", "idle"),
             "last_crawled_at": None,
             "knowledge_count": 0,
+            # Authenticated crawl
+            "crawl_use_browser": data.get("crawl_use_browser", False),
+            "crawl_login_url": data.get("crawl_login_url", ""),
+            "crawl_login_username_selector": data.get("crawl_login_username_selector", ""),
+            "crawl_login_password_selector": data.get("crawl_login_password_selector", ""),
+            "crawl_login_submit_selector": data.get("crawl_login_submit_selector", ""),
+            "crawl_login_username": data.get("crawl_login_username", ""),
+            "crawl_login_password": data.get("crawl_login_password", ""),
+            "crawl_login_success_url": data.get("crawl_login_success_url", ""),
             # Timestamps
             "created_at": datetime.now(UTC),
             "updated_at": datetime.now(UTC),
@@ -97,6 +133,13 @@ class MongoSiteRepo(BaseSiteRepo):
     async def delete(self, site_id: str) -> bool:
         result = await self.col.delete_one({"_id": site_id})
         return result.deleted_count > 0
+
+    async def get_crawl_password(self, site_id: str) -> str | None:
+        doc = await self.col.find_one({"_id": site_id}, {"crawl_login_password": 1})
+        if not doc or not doc.get("crawl_login_password"):
+            return None
+        from utils.crypto import decrypt_value
+        return decrypt_value(doc["crawl_login_password"])
 
 
 # --- Knowledge ---
@@ -238,6 +281,10 @@ class MongoKnowledgeRepo(BaseKnowledgeRepo):
 
     async def delete_by_url(self, site_id: str, source_url: str) -> int:
         result = await self.col.delete_many({"site_id": site_id, "source_url": source_url})
+        return result.deleted_count
+
+    async def delete_all_by_site(self, site_id: str) -> int:
+        result = await self.col.delete_many({"site_id": site_id})
         return result.deleted_count
 
 

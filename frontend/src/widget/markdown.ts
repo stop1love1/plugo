@@ -23,6 +23,11 @@ function getYouTubeId(url: string): string | null {
   return m ? m[1] : null;
 }
 
+/** Escape a string for safe use inside an HTML attribute */
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 /** Sanitize URL — only allow http(s) and relative paths */
 function sanitizeUrl(url: string): string {
   if (/^https?:\/\//i.test(url) || url.startsWith("/")) return url;
@@ -62,7 +67,7 @@ const marked = new Marked({
         return `<div class="plugo-video"><video src="${url}" controls preload="metadata"></video></div>`;
       }
       // Regular image
-      return `<div class="plugo-image"><img src="${url}" alt="${alt}" loading="lazy" /></div>`;
+      return `<div class="plugo-image"><img src="${url}" alt="${escapeAttr(alt)}" loading="lazy" /></div>`;
     },
     // Links — detect "button" title to render as button
     link(token) {
@@ -98,6 +103,7 @@ const GALLERY_PLACEHOLDER = "PLUGOGALLERY";
 
 function extractGalleries(text: string): { text: string; galleries: string[] } {
   const galleries: string[] = [];
+  GALLERY_RE.lastIndex = 0;
   const replaced = text.replace(GALLERY_RE, (_match, content: string) => {
     const idx = galleries.length;
     galleries.push(content.trim());
@@ -136,10 +142,10 @@ function buildSlideshowHtml(markdownImages: string): string {
   }
   if (images.length === 0) return "";
   if (images.length === 1) {
-    return `<div class="plugo-image"><img src="${images[0].url}" alt="${images[0].alt}" loading="lazy" /></div>`;
+    return `<div class="plugo-image"><img src="${images[0].url}" alt="${escapeAttr(images[0].alt)}" loading="lazy" /></div>`;
   }
   const htmlArr = images.map(
-    (img) => `<div class="plugo-image"><img src="${img.url}" alt="${img.alt}" loading="lazy" /></div>`,
+    (img) => `<div class="plugo-image"><img src="${img.url}" alt="${escapeAttr(img.alt)}" loading="lazy" /></div>`,
   );
   return renderSlideshow(htmlArr);
 }

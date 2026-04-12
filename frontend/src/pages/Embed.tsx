@@ -78,7 +78,7 @@ ${buildConfigStr(site, false)}
 <style>body{margin:0;font-family:system-ui,sans-serif;background:#f9fafb;display:flex;align-items:center;justify-content:center;height:100vh;color:#6b7280;}
 p{text-align:center;font-size:14px;}</style></head>
 <body><p>Widget preview — click the chat bubble to test</p>
-<script>window.PlugoConfig={token:"${site.token}",serverUrl:"${backendUrl.replace(/^http/, "ws")}",primaryColor:"${previewColor}",greeting:"${previewGreeting}",position:"${previewPosition}",darkMode:${previewDarkMode}};</script>
+<script>window.PlugoConfig={token:${JSON.stringify(site.token)},serverUrl:${JSON.stringify(backendUrl.replace(/^http/, "ws"))},primaryColor:${JSON.stringify(previewColor)},greeting:${JSON.stringify(previewGreeting)},position:${JSON.stringify(previewPosition)},darkMode:${JSON.stringify(previewDarkMode)}};</script>
 <script src="${backendUrl}/static/widget.js" async></script>
 </body></html>`
     : "";

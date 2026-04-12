@@ -82,12 +82,16 @@ function getAudioContext(): AudioContext | null {
 function playNotificationSound() {
   const ctx = getAudioContext();
   if (!ctx) return;
+  if (ctx.state === "suspended") {
+    ctx.resume();
+  }
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.connect(gain);
   gain.connect(ctx.destination);
   osc.frequency.value = 800;
   gain.gain.value = 0.1;
+  osc.onended = () => osc.disconnect();
   osc.start();
   osc.stop(ctx.currentTime + 0.1);
 }
@@ -165,20 +169,25 @@ export function App({
         setIsTyping(true);
         setSuggestions([]);
         setMessages((prev) => {
+          // Guard against double onStart: don't push if last message is already an empty bot message
+          const last = prev[prev.length - 1];
+          if (last && last.role === "bot" && last.content === "") {
+            return prev;
+          }
           const updated = [...prev, { role: "bot" as const, content: "", timestamp: Date.now() }];
           return updated.length > MAX_MESSAGES ? updated.slice(-MAX_MESSAGES) : updated;
         });
       },
       onToken: (token) => {
         setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          // Only append if the last message is a bot message
+          if (!last || last.role !== "bot") return prev;
           const updated = [...prev];
-          const last = updated[updated.length - 1];
-          if (last && last.role === "bot") {
-            updated[updated.length - 1] = {
-              ...last,
-              content: last.content + token,
-            };
-          }
+          updated[updated.length - 1] = {
+            ...last,
+            content: last.content + token,
+          };
           return updated;
         });
       },
@@ -328,7 +337,7 @@ export function App({
         isOpen={isOpen}
         unreadCount={unreadCount}
         bubbleSize={bubbleSize}
-        onClick={isOpen ? handleClose : handleOpen}
+        onClick={isOpen ? handleMinimize : handleOpen}
       />
     </div>
   );

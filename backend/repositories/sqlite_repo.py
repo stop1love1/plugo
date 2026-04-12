@@ -190,7 +190,10 @@ class SQLiteSiteRepo(BaseSiteRepo):
 
     async def get_crawl_password(self, site_id: str) -> str | None:
         site = await self.db.get(Site, site_id)
-        return site.crawl_login_password if site else None
+        if not site or not site.crawl_login_password:
+            return None
+        from utils.crypto import decrypt_value
+        return decrypt_value(site.crawl_login_password)
 
 
 # --- Knowledge ---
@@ -280,14 +283,12 @@ class SQLiteKnowledgeRepo(BaseKnowledgeRepo):
     async def delete_many(self, chunk_ids: list[str]) -> int:
         if not chunk_ids:
             return 0
+        from sqlalchemy import delete as sa_delete
         result = await self.db.execute(
-            select(KnowledgeChunk).where(KnowledgeChunk.id.in_(chunk_ids))
+            sa_delete(KnowledgeChunk).where(KnowledgeChunk.id.in_(chunk_ids))
         )
-        chunks = result.scalars().all()
-        for chunk in chunks:
-            await self.db.delete(chunk)
         await self.db.commit()
-        return len(chunks)
+        return result.rowcount
 
     async def get_many(self, chunk_ids: list[str]) -> list[dict]:
         if not chunk_ids:
@@ -339,15 +340,21 @@ class SQLiteKnowledgeRepo(BaseKnowledgeRepo):
         return [_chunk_to_dict(c) for c in result.scalars().all()]
 
     async def delete_by_url(self, site_id: str, source_url: str) -> int:
+        from sqlalchemy import delete as sa_delete
         result = await self.db.execute(
-            select(KnowledgeChunk)
+            sa_delete(KnowledgeChunk)
             .where(KnowledgeChunk.site_id == site_id, KnowledgeChunk.source_url == source_url)
         )
-        chunks = result.scalars().all()
-        for c in chunks:
-            await self.db.delete(c)
         await self.db.commit()
-        return len(chunks)
+        return result.rowcount
+
+    async def delete_all_by_site(self, site_id: str) -> int:
+        from sqlalchemy import delete as sa_delete
+        result = await self.db.execute(
+            sa_delete(KnowledgeChunk).where(KnowledgeChunk.site_id == site_id)
+        )
+        await self.db.commit()
+        return result.rowcount
 
 
 # --- Tool ---

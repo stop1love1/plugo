@@ -37,6 +37,10 @@ async def lifespan(app: FastAPI):
         await init_db()
         logger.info("Database initialized", provider="sqlite", url=settings.database_url)
     else:
+        from repositories import _get_mongo_db
+        from repositories.mongo_repo import ensure_indexes
+        db = _get_mongo_db()
+        await ensure_indexes(db)
         logger.info("Database initialized", provider="mongodb", url=f"{settings.mongodb_url}/{settings.mongodb_database}")
 
     logger.info(

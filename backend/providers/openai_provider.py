@@ -86,7 +86,11 @@ class OpenAIProvider(BaseLLMProvider):
 
     def _parse_response(self, response) -> dict:
         choice = response.choices[0]
-        result = {"content": choice.message.content or "", "tool_calls": []}
+        content = choice.message.content
+        # When model returns only tool_calls (no text), keep content as None
+        if not content and choice.message.tool_calls:
+            content = None
+        result = {"content": content, "tool_calls": []}
         if choice.message.tool_calls:
             for tc in choice.message.tool_calls:
                 result["tool_calls"].append({

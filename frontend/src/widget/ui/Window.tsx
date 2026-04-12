@@ -40,19 +40,23 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
 
   const isOffline = connectionState === "disconnected" || connectionState === "reconnecting";
   const prevMsgCountRef = useRef(messages.length);
+  const prevIsTypingRef = useRef(isTyping);
 
-  // Smart auto-scroll: only scroll if user is near bottom
+  // Smart auto-scroll: only scroll on new message or when streaming ends
   useEffect(() => {
     const msgCountChanged = messages.length !== prevMsgCountRef.current;
+    const streamingEnded = prevIsTypingRef.current && !isTyping;
     prevMsgCountRef.current = messages.length;
+    prevIsTypingRef.current = isTyping;
 
-    if (!userScrolledUp) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    } else if (msgCountChanged && messages.length > 0) {
-      // Only count genuinely new messages, not token updates
-      setNewMessageCount((c) => c + 1);
+    if (msgCountChanged || streamingEnded) {
+      if (!userScrolledUp) {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      } else if (msgCountChanged && messages.length > 0) {
+        setNewMessageCount((c) => c + 1);
+      }
     }
-  }, [messages, isTyping, userScrolledUp]);
+  }, [messages.length, isTyping, userScrolledUp]);
 
   // Detect manual scroll
   const handleScroll = useCallback(() => {
@@ -97,10 +101,12 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
       if (!focusable?.length) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
+      const shadowRoot = windowRef.current?.getRootNode() as ShadowRoot | undefined;
+      const activeEl = shadowRoot?.activeElement ?? document.activeElement;
+      if (e.shiftKey && activeEl === first) {
         e.preventDefault();
         last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
+      } else if (!e.shiftKey && activeEl === last) {
         e.preventDefault();
         first.focus();
       }
@@ -146,7 +152,7 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
   };
 
   return (
-    <div class={`plugo-window ${position}`} ref={windowRef} role="dialog" aria-modal="true">
+    <div class={`plugo-window ${position}`} ref={windowRef} role="dialog" aria-modal="true" aria-label={widgetTitle || "Chat"}>
       <div class="plugo-header">
         <div class="plugo-header-left">
           <div class="plugo-header-avatar">{botAvatar || "\u{1F4AC}"}</div>
@@ -207,7 +213,7 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
               isStreaming={isTyping && i === messages.length - 1 && msg.role === "bot" && !msgIsError}
               isLastInGroup={isLastInGroup(i)}
               onFeedback={msg.role === "bot" && msg.content && !msgIsError && !isTyping ? onFeedback : undefined}
-              onRetry={msg.role === "bot" && msg.content && onRetry && !isTyping ? () => onRetry(i) : undefined}
+              onRetry={msgIsError && onRetry && !isTyping ? () => onRetry(i) : undefined}
             />
           );
         })}

@@ -40,7 +40,7 @@
     "password": "pluginme"
   },
   "crawl": {
-    "verify_ssl": false,
+    "verify_ssl": true,
     "request_delay": 1.0,
     "request_timeout": 30,
     "max_concurrent_fetches": 5,

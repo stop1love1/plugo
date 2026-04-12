@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 
@@ -14,6 +15,9 @@ router = APIRouter(prefix="/api/crawl", tags=["crawl"])
 
 # Track running crawlers so we can stop/pause them
 _active_crawlers: dict[str, WebCrawler] = {}
+
+# Per-site locks to prevent duplicate crawl starts
+_crawl_locks: dict[str, asyncio.Lock] = {}
 
 
 async def cleanup_stale_crawls_on_startup():
@@ -203,23 +207,27 @@ async def start_crawl(
     if not site:
         raise HTTPException(status_code=404, detail="Site not found")
 
-    await _cleanup_stale_crawls(repos, data.site_id)
-    site = await repos.sites.get_by_id(data.site_id)
+    # Acquire per-site lock to prevent duplicate crawl starts
+    if data.site_id not in _crawl_locks:
+        _crawl_locks[data.site_id] = asyncio.Lock()
+    async with _crawl_locks[data.site_id]:
+        await _cleanup_stale_crawls(repos, data.site_id)
+        site = await repos.sites.get_by_id(data.site_id)
 
-    if site.get("crawl_status") == "running":
-        raise HTTPException(status_code=409, detail="Crawl already running. Stop it before starting a new one.")
+        if site.get("crawl_status") == "running":
+            raise HTTPException(status_code=409, detail="Crawl already running. Stop it before starting a new one.")
 
-    crawl_url = data.url or site["url"]
-    max_pages = data.max_pages or site.get("crawl_max_pages", 50)
-    max_depth = data.max_depth if data.max_depth is not None else site.get("crawl_max_depth", 0)
-    exclude_raw = data.exclude_patterns if data.exclude_patterns is not None else site.get("crawl_exclude_patterns", "")
+        crawl_url = data.url or site["url"]
+        max_pages = data.max_pages or site.get("crawl_max_pages", 50)
+        max_depth = data.max_depth if data.max_depth is not None else site.get("crawl_max_depth", 0)
+        exclude_raw = data.exclude_patterns if data.exclude_patterns is not None else site.get("crawl_exclude_patterns", "")
 
-    await repos.sites.update(data.site_id, {"crawl_status": "running"})
+        await repos.sites.update(data.site_id, {"crawl_status": "running"})
 
-    job = await repos.crawl_jobs.create({
-        "site_id": data.site_id,
-        "start_url": crawl_url,
-    })
+        job = await repos.crawl_jobs.create({
+            "site_id": data.site_id,
+            "start_url": crawl_url,
+        })
 
     background_tasks.add_task(
         _run_crawl_with_tracking,
@@ -354,6 +362,10 @@ async def update_crawl_settings(
             # Don't overwrite password with the masked placeholder
             if field == "crawl_login_password" and val == "********":
                 continue
+            # Encrypt the password before storing
+            if field == "crawl_login_password":
+                from utils.crypto import encrypt_value
+                val = encrypt_value(val)
             update_data[field] = val
 
     if not update_data:
@@ -473,10 +485,7 @@ async def clear_knowledge(
 
     await rag_engine.delete_site(site_id)
 
-    data = await repos.knowledge.list_by_site(site_id, page=1, per_page=10000)
-    chunk_ids = [chunk["id"] for chunk in data.get("chunks", [])]
-    if chunk_ids:
-        await repos.knowledge.delete_many(chunk_ids)
+    await repos.knowledge.delete_all_by_site(site_id)
 
     await repos.sites.update(site_id, {"knowledge_count": 0})
 

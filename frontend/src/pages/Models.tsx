@@ -35,7 +35,7 @@ export default function Models() {
     setNewModel({ provider: "", model_id: "", model_name: "", description: "" });
   };
 
-  const { data: providers = [] } = useQuery({
+  const { data: providers = [], isLoading } = useQuery({
     queryKey: ["models-providers"],
     queryFn: getModelsProviders,
   });
@@ -303,7 +303,7 @@ export default function Models() {
 
         {providers.length === 0 && (
           <div className="px-6 py-8 text-center text-gray-400 text-sm">
-            {t("common.loading")}
+            {isLoading ? t("common.loading") : "No providers configured"}
           </div>
         )}
       </div>

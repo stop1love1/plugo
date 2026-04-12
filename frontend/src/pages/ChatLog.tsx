@@ -136,7 +136,7 @@ export default function ChatLog() {
               <p className="text-sm text-gray-500">{searchQuery ? t("common.noResults") : t("chatLog.noSessions")}</p>
             </div>
           ) : (
-            <div className="space-y-2 max-h-[600px] overflow-y-auto">
+            <div className="space-y-2 max-h-[calc(100dvh-200px)] overflow-y-auto">
               {filteredSessions.map((s: ChatSession) => (
                 <button
                   key={s.id}
@@ -227,7 +227,7 @@ export default function ChatLog() {
                 </div>
               )}
 
-              <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4 max-h-[600px] overflow-y-auto">
+              <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4 max-h-[calc(100dvh-200px)] overflow-y-auto">
                 {sessionDetail.messages.map((msg: { role: string; content: string; timestamp?: string }, i: number) => (
                   <div key={`${msg.role}-${msg.timestamp ?? i}`} className="flex gap-3">
                     <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${

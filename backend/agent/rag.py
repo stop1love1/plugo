@@ -9,7 +9,14 @@ class RAGEngine:
     """Vector search engine using ChromaDB."""
 
     def __init__(self):
-        self.client = chromadb.PersistentClient(path=settings.chroma_path)
+        self._client = None
+
+    @property
+    def client(self):
+        """Lazy-initialize ChromaDB client on first use."""
+        if self._client is None:
+            self._client = chromadb.PersistentClient(path=settings.chroma_path)
+        return self._client
 
     def get_collection(self, site_id: str) -> chromadb.Collection:
         return self.client.get_or_create_collection(

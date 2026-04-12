@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useParams, useNavigate, useBlocker } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { getErrorMessage, getSite, updateSite, deleteSite, getModelsProviders, type UpdateSiteData } from "../lib/api";
 import { Save, Trash2, AlertTriangle } from "lucide-react";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useLocale } from "../lib/useLocale";
 
 export default function Settings() {
@@ -130,26 +131,29 @@ export default function Settings() {
     onError: (error) => toast.error(getErrorMessage(error)),
   });
 
+  const doSave = useCallback(() => {
+    if (Object.keys(errors).length > 0) return;
+    const { suggestions: suggestionsStr, ...rest } = form;
+    const suggestions = suggestionsStr
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    mutation.mutate({ ...rest, suggestions });
+  }, [form, errors, mutation]);
+
   // Ctrl+S / Cmd+S keyboard shortcut to save
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        if (hasChanges && Object.keys(errors).length === 0) {
-          const { suggestions: suggestionsStr, ...rest } = form;
-          const suggestions = suggestionsStr
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean);
-          mutation.mutate({ ...rest, suggestions });
-        }
+        if (hasChanges) doSave();
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [hasChanges, form, errors, mutation]);
+  }, [hasChanges, doSave]);
 
-  // Prevent navigate-away with unsaved changes
+  // Prevent navigate-away with unsaved changes (browser close/reload)
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (hasChanges) {
@@ -160,6 +164,9 @@ export default function Settings() {
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [hasChanges]);
+
+  // Block in-app navigation when there are unsaved changes
+  const blocker = useBlocker(hasChanges);
 
   const deletesMutation = useMutation({
     mutationFn: () => deleteSite(siteId!),
@@ -173,13 +180,7 @@ export default function Settings() {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (Object.keys(errors).length > 0) return;
-    const { suggestions: suggestionsStr, ...rest } = form;
-    const suggestions = suggestionsStr
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    mutation.mutate({ ...rest, suggestions });
+    doSave();
   };
 
   const currentProvider = providers.find((p) => p.id === form.llm_provider);
@@ -195,6 +196,17 @@ export default function Settings() {
           {t("settings.unsavedChanges")}
         </div>
       )}
+
+      {/* Navigation blocker dialog */}
+      <ConfirmDialog
+        open={blocker.state === "blocked"}
+        title="Unsaved changes"
+        message="You have unsaved changes. Are you sure you want to leave this page?"
+        confirmLabel="Leave"
+        danger
+        onConfirm={() => blocker.proceed?.()}
+        onCancel={() => blocker.reset?.()}
+      />
 
       <form onSubmit={handleSave} className="space-y-6">
         {/* General */}
@@ -405,7 +417,10 @@ export default function Settings() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Auto Open (seconds)</label>
                 <input type="number" min={0} max={120} value={form.auto_open_delay}
-                  onChange={(e) => setForm({ ...form, auto_open_delay: parseInt(e.target.value) || 0 })}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value);
+                    setForm({ ...form, auto_open_delay: Number.isNaN(val) ? form.auto_open_delay : val });
+                  }}
                   className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
                 <p className="text-xs text-gray-400 mt-1">0 = tắt. Tự mở widget sau N giây khi user vào trang</p>
               </div>

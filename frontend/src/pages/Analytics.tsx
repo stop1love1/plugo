@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { TrendingUp, MessageSquare, Clock, Users, Download, Calendar, type LucideIcon } from "lucide-react";
+import { TrendingUp, MessageSquare, Clock, Users, Download, Calendar, Info, type LucideIcon } from "lucide-react";
 import api from "../lib/api";
 import { useLocale } from "../lib/useLocale";
 import { SkeletonCard, SkeletonChart } from "../components/Skeleton";
@@ -131,36 +131,42 @@ export default function Analytics() {
                   : "text-gray-500 hover:bg-gray-50"
               }`}
             >
-              Custom
+              Last N days
             </button>
           </div>
           {showCustomRange && (
             <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={customFrom}
-                onChange={(e) => {
-                  setCustomFrom(e.target.value);
-                  if (e.target.value && customTo) {
-                    const diff = Math.ceil((new Date(customTo).getTime() - new Date(e.target.value).getTime()) / 86400000);
-                    if (diff > 0) setDays(diff);
-                  }
-                }}
-                className="border border-gray-200 rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-primary-500"
-              />
-              <span className="text-xs text-gray-400">to</span>
-              <input
-                type="date"
-                value={customTo}
-                onChange={(e) => {
-                  setCustomTo(e.target.value);
-                  if (customFrom && e.target.value) {
-                    const diff = Math.ceil((new Date(e.target.value).getTime() - new Date(customFrom).getTime()) / 86400000);
-                    if (diff > 0) setDays(diff);
-                  }
-                }}
-                className="border border-gray-200 rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-primary-500"
-              />
+              <div className="flex items-center gap-1">
+                <input
+                  type="date"
+                  value={customFrom}
+                  onChange={(e) => {
+                    setCustomFrom(e.target.value);
+                    if (e.target.value && customTo) {
+                      const diff = Math.ceil((new Date(customTo).getTime() - new Date(e.target.value).getTime()) / 86400000);
+                      if (diff > 0) setDays(diff);
+                    }
+                  }}
+                  className="border border-gray-200 rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <span className="text-xs text-gray-400">to</span>
+                <input
+                  type="date"
+                  value={customTo}
+                  onChange={(e) => {
+                    setCustomTo(e.target.value);
+                    if (customFrom && e.target.value) {
+                      const diff = Math.ceil((new Date(e.target.value).getTime() - new Date(customFrom).getTime()) / 86400000);
+                      if (diff > 0) setDays(diff);
+                    }
+                  }}
+                  className="border border-gray-200 rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              <div className="flex items-center gap-1 text-xs text-gray-400" title="The API returns a rolling window of N days from today. The selected dates are used to calculate N.">
+                <Info className="w-3.5 h-3.5" />
+                <span>= last {days} days from today</span>
+              </div>
             </div>
           )}
           <button

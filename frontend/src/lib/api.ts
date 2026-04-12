@@ -262,8 +262,15 @@ export function getErrorMessage(error: unknown): string {
   return "An unexpected error occurred";
 }
 
+// Resolve API base URL at runtime:
+// - VITE_API_URL (build-time env) if set
+// - Otherwise use relative "/api" (works with reverse proxy or dev proxy)
+const resolvedBaseURL = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : "/api";
+
 const api = axios.create({
-  baseURL: "/api",
+  baseURL: resolvedBaseURL,
   headers: { "Content-Type": "application/json" },
 });
 

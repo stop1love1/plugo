@@ -146,3 +146,10 @@ def validate_settings():
             "SECRET_KEY is shorter than 16 characters. Use a longer key for better security.",
             stacklevel=2,
         )
+
+    if settings.admin_password == "pluginme":
+        warnings.warn(
+            "WARNING: Admin password is still the default 'pluginme'. "
+            "Set a strong PASSWORD in .env before deploying.",
+            stacklevel=2,
+        )

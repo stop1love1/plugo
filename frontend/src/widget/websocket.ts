@@ -37,6 +37,7 @@ export class PlugoWebSocket {
   private visitorId: string | null = null;
   private pingInterval: ReturnType<typeof setInterval> | null = null;
   private _connectionState: ConnectionState = "disconnected";
+  private intentionalClose = false;
 
   constructor(url: string, handlers: MessageHandler, sessionId?: string | null, visitorId?: string | null) {
     this.url = url;
@@ -52,6 +53,7 @@ export class PlugoWebSocket {
 
   connect() {
     try {
+      this.intentionalClose = false;
       this.setConnectionState(this.reconnectAttempts > 0 ? "reconnecting" : "connecting");
       this.ws = new WebSocket(this.url);
 
@@ -103,6 +105,10 @@ export class PlugoWebSocket {
 
       this.ws.onclose = () => {
         this.stopPing();
+        if (this.intentionalClose) {
+          this.setConnectionState("disconnected");
+          return;
+        }
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
           this.reconnectAttempts++;
           this.setConnectionState("reconnecting");
@@ -136,7 +142,8 @@ export class PlugoWebSocket {
   }
 
   disconnect() {
-    this.maxReconnectAttempts = 0; // Prevent reconnection
+    if (this.intentionalClose) return; // Already disconnecting, prevent double disconnect
+    this.intentionalClose = true;
     this.stopPing();
     this.ws?.close();
     this.setConnectionState("disconnected");

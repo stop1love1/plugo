@@ -108,6 +108,7 @@ async def _scheduler_loop():
                             site_id, crawl_url, job["id"], max_pages,
                             max_depth=max_depth,
                             exclude_patterns=exclude_patterns,
+                            use_browser=site.get("crawl_use_browser", False),
                         )
                     )
                     _auto_crawl_tasks.add(crawl_task)

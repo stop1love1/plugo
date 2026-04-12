@@ -110,6 +110,9 @@ class WebCrawler:
             "timestamp": datetime.now(UTC).isoformat(),
         }
         self.logs.append(entry)
+        # Cap logs to prevent unbounded growth on large crawls
+        if len(self.logs) > 500:
+            self.logs.pop(0)
         if status == "error":
             logger.warning("Crawl page error", url=url, error=error)
         return entry
@@ -780,15 +783,26 @@ class WebCrawler:
             async with semaphore:
                 return await embed_provider.embed(batch)
 
-        batches = [contents[i : i + 100] for i in range(0, len(contents), 100)]
-        if len(batches) <= 1:
-            all_embeddings = await embed_provider.embed(contents) if contents else []
-        else:
-            results = await asyncio.gather(*[_embed_batch(b) for b in batches])
-            all_embeddings = [e for batch_result in results for e in batch_result]
+        # Embed first — if this fails, nothing is stored
+        try:
+            batches = [contents[i : i + 100] for i in range(0, len(contents), 100)]
+            if len(batches) <= 1:
+                all_embeddings = await embed_provider.embed(contents) if contents else []
+            else:
+                results = await asyncio.gather(*[_embed_batch(b) for b in batches])
+                all_embeddings = [e for batch_result in results for e in batch_result]
+        except Exception as e:
+            logger.error("Embedding failed, skipping chunk storage", site_id=site_id, chunk_count=len(chunks), error=str(e))
+            return
 
-        await rag_engine.add_chunks(site_id, chunks, all_embeddings)
+        # Store vectors in ChromaDB
+        try:
+            await rag_engine.add_chunks(site_id, chunks, all_embeddings)
+        except Exception as e:
+            logger.error("Vector store failed, skipping DB storage", site_id=site_id, chunk_count=len(chunks), error=str(e))
+            return
 
+        # Store chunk metadata in DB — if this fails, clean up the vectors
         valid_fields = {"id", "site_id", "source_url", "source_type", "title", "content", "chunk_index", "content_hash", "embedding_id"}
         db_chunks = []
         for chunk in chunks:
@@ -796,4 +810,12 @@ class WebCrawler:
             db_chunk["embedding_id"] = chunk["id"]
             db_chunk["source_type"] = "crawl"
             db_chunks.append(db_chunk)
-        await repos.knowledge.create_many(db_chunks)
+        try:
+            await repos.knowledge.create_many(db_chunks)
+        except Exception as e:
+            logger.error("DB storage failed after embedding, rolling back vectors", site_id=site_id, error=str(e))
+            try:
+                chunk_ids = [c["id"] for c in chunks]
+                await rag_engine.delete_chunks(site_id, chunk_ids)
+            except Exception as rollback_err:
+                logger.error("Vector rollback also failed", site_id=site_id, error=str(rollback_err))

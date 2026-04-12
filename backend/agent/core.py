@@ -121,6 +121,41 @@ class ChatAgent:
         self.messages: list[dict] = []
         self.supports_tools = llm_provider not in self._NO_TOOL_PROVIDERS
 
+    def _append_tool_messages(self, tc: dict, result_str: str):
+        """Append tool call assistant message and tool result in the correct format for the active provider."""
+        if self.llm_provider_name in ("claude",):
+            # Anthropic format: tool_use content block + tool_result content block
+            self.messages.append({
+                "role": "assistant",
+                "content": [{"type": "tool_use", "id": tc["id"], "name": tc["name"], "input": tc["arguments"]}],
+            })
+            self.messages.append({
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": tc["id"], "content": result_str}],
+            })
+        elif self.llm_provider_name in ("gemini",):
+            # Gemini doesn't support tool calling in this codebase yet; use text-based fallback
+            self.messages.append({
+                "role": "assistant",
+                "content": f"Executing: {tc['name']}({json.dumps(tc['arguments'], ensure_ascii=False)})",
+            })
+            self.messages.append({
+                "role": "user",
+                "content": f"Tool result {tc['name']}: {result_str}",
+            })
+        else:
+            # OpenAI, Ollama, LMStudio — OpenAI-compatible format
+            self.messages.append({
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{"id": tc["id"], "type": "function", "function": {"name": tc["name"], "arguments": json.dumps(tc["arguments"], ensure_ascii=False)}}],
+            })
+            self.messages.append({
+                "role": "tool",
+                "tool_call_id": tc["id"],
+                "content": result_str,
+            })
+
     # Patterns that indicate casual/chitchat — no knowledge lookup needed
     _CASUAL_PATTERNS: ClassVar[list[str]] = [
         # Greetings
@@ -384,14 +419,8 @@ class ChatAgent:
                         tool_result = await tool_executor.execute_tool(
                             tool_meta, tc["arguments"]
                         )
-                        self.messages.append({
-                            "role": "assistant",
-                            "content": f"Executing: {tc['name']}({json.dumps(tc['arguments'], ensure_ascii=False)})",
-                        })
-                        self.messages.append({
-                            "role": "user",
-                            "content": f"Tool result {tc['name']}: {json.dumps(tool_result, ensure_ascii=False)}",
-                        })
+                        result_str = json.dumps(tool_result, ensure_ascii=False)
+                        self._append_tool_messages(tc, result_str)
 
                 # Check for more tool calls
                 result = await self.provider.chat(
@@ -455,14 +484,8 @@ class ChatAgent:
                     tool_result = await tool_executor.execute_tool(
                         tool_meta, tc["arguments"]
                     )
-                    self.messages.append({
-                        "role": "assistant",
-                        "content": f"Executing: {tc['name']}({json.dumps(tc['arguments'], ensure_ascii=False)})",
-                    })
-                    self.messages.append({
-                        "role": "user",
-                        "content": f"Tool result {tc['name']}: {json.dumps(tool_result, ensure_ascii=False)}",
-                    })
+                    result_str = json.dumps(tool_result, ensure_ascii=False)
+                    self._append_tool_messages(tc, result_str)
 
             result = await self.provider.chat(
                 messages=self.messages,

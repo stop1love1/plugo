@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import {
@@ -126,7 +126,7 @@ export default function GlobalSettings() {
     onError: (error) => toast.error(getErrorMessage(error)),
   });
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     if (!config) return;
     const changes: Record<string, SectionConfig> = {};
     for (const [section, values] of Object.entries(form)) {
@@ -136,7 +136,7 @@ export default function GlobalSettings() {
     }
     if (Object.keys(changes).length === 0) { toast("No changes"); return; }
     mutation.mutate(changes);
-  };
+  }, [config, form, mutation]);
 
   const handleReset = () => {
     if (config) { setForm(structuredClone(config)); setHasChanges(false); }
@@ -157,7 +157,7 @@ export default function GlobalSettings() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  });
+  }, [hasChanges, handleSave]);
 
   if (isLoading) {
     return (

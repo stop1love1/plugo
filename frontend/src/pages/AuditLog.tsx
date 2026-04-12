@@ -1,7 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getAuditLogs, type AuditLogEntry } from "../lib/api";
-import { FileText, Search } from "lucide-react";
+import { FileText, Search, Info } from "lucide-react";
 import { EmptyState } from "../components/EmptyState";
 import { useLocale } from "../lib/useLocale";
 
@@ -16,6 +16,11 @@ export default function AuditLog() {
   const [page, setPage] = useState(1);
   const [searchFilter, setSearchFilter] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [searchFilter, actionFilter]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["audit-logs", page],
@@ -68,6 +73,14 @@ export default function AuditLog() {
           <option value="delete">Delete</option>
         </select>
       </div>
+
+      {/* Filter scope notice */}
+      {(searchFilter || actionFilter !== "all") && (
+        <div className="flex items-center gap-2 mb-3 text-xs text-gray-400">
+          <Info className="w-3.5 h-3.5" />
+          <span>Filters apply to the current page only.</span>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="text-gray-400">{t("common.loading")}</div>

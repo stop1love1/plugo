@@ -10,6 +10,7 @@ Public endpoints (no auth required):
 - GET /static/* (widget JS)
 """
 
+import hmac
 from datetime import UTC, datetime, timedelta
 
 from fastapi import Depends, HTTPException, status
@@ -35,7 +36,7 @@ class TokenData(BaseModel):
 
 def verify_credentials(username: str, password: str) -> bool:
     """Verify credentials against config."""
-    return username == settings.admin_username and password == settings.admin_password
+    return hmac.compare_digest(username, settings.admin_username) and hmac.compare_digest(password, settings.admin_password)
 
 
 def create_access_token(subject: str, role: str = "admin", expires_delta: timedelta | None = None) -> str:
@@ -61,7 +62,9 @@ def decode_access_token(token: str) -> TokenData:
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> TokenData:
-    """Dependency: requires a valid JWT token."""
+    """Dependency: requires a valid JWT token. Bypassed when auth is disabled."""
+    if not settings.auth_enabled:
+        return TokenData(sub=settings.admin_username, role="admin")
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

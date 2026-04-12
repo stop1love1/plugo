@@ -8,9 +8,13 @@ Usage:
     logger.error("Failed to embed", error=str(e), chunk_id="xyz")
 """
 
+import os
 import sys
 
 from loguru import logger as _logger
+
+# Ensure data directory exists before configuring file handler
+os.makedirs("data", exist_ok=True)
 
 # Remove default handler
 _logger.remove()

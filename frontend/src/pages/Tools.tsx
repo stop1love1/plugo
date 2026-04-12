@@ -15,6 +15,7 @@ import { Wrench, Plus, Trash2, Play, CheckCircle, Pencil, X, ToggleLeft, ToggleR
 import { PageHeader } from "../components/PageHeader";
 import { FormField } from "../components/FormField";
 import { EmptyState } from "../components/EmptyState";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useLocale } from "../lib/useLocale";
 
 type ParamRow = { name: string; type: string; description: string; required: boolean };
@@ -41,6 +42,7 @@ export default function Tools() {
   const [useBuilder, setUseBuilder] = useState(false);
   const [params, setParams] = useState<ParamRow[]>([]);
   const [testParamsJson, setTestParamsJson] = useState<Record<string, string>>({});
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   const { data: tools = [], isLoading } = useQuery({
     queryKey: ["tools", siteId],
@@ -347,6 +349,24 @@ export default function Tools() {
 
       {isFormOpen && renderForm()}
 
+      {/* Single-item delete confirmation */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={t("common.delete")}
+        message={t("tools.deleteConfirm") === "tools.deleteConfirm" ? "Are you sure you want to delete this tool? This action cannot be undone." : t("tools.deleteConfirm")}
+        confirmLabel={t("common.delete")}
+        danger
+        loading={deleteMutation.isPending}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteMutation.mutate(deleteTarget, {
+              onSettled: () => setDeleteTarget(null),
+            });
+          }
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
+
       {isLoading ? (
         <div className="text-gray-400">{t("common.loading")}</div>
       ) : tools.length === 0 ? (
@@ -372,7 +392,7 @@ export default function Tools() {
                   <button onClick={() => startEdit(tool)} className="text-gray-400 hover:text-primary-600 p-1" title={t("common.edit")}>
                     <Pencil className="w-4 h-4" />
                   </button>
-                  <button onClick={() => deleteMutation.mutate(tool.id)} className="text-gray-400 hover:text-red-500 p-1" title={t("common.delete")}>
+                  <button onClick={() => setDeleteTarget(tool.id)} className="text-gray-400 hover:text-red-500 p-1" title={t("common.delete")}>
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>

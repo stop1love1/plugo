@@ -21,9 +21,17 @@ declare global {
   }
 }
 
+let _cachedPageContext: Record<string, unknown> | null = null;
+let _cachedPageUrl: string | null = null;
+
 function getPageContext() {
-  return {
-    url: window.location.href,
+  const currentUrl = window.location.href;
+  if (_cachedPageContext && _cachedPageUrl === currentUrl) {
+    return _cachedPageContext;
+  }
+  _cachedPageUrl = currentUrl;
+  _cachedPageContext = {
+    url: currentUrl,
     title: document.title,
     meta:
       document
@@ -31,6 +39,7 @@ function getPageContext() {
         ?.getAttribute("content") || "",
     pageText: (document.body?.innerText || "").substring(0, 2000),
   };
+  return _cachedPageContext;
 }
 
 function init() {
@@ -598,12 +607,12 @@ function getWidgetStyles(primaryColor: string): string {
     .plugo-dark .plugo-msg.bot { background: #2d2d44; color: #e0e0e0; }
     .plugo-dark .plugo-msg.user { color: #fff; }
     .plugo-dark .plugo-input-area { background: #1a1a2e; border-top-color: #2d2d44; }
-    .plugo-dark .plugo-input-area input {
+    .plugo-dark .plugo-input-area textarea {
       background: #2d2d44; color: #e0e0e0;
       border-color: #3d3d5c;
     }
-    .plugo-dark .plugo-input-area input::placeholder { color: #888; }
-    .plugo-dark .plugo-input-area input:focus {
+    .plugo-dark .plugo-input-area textarea::placeholder { color: #888; }
+    .plugo-dark .plugo-input-area textarea:focus {
       border-color: var(--plugo-primary);
       box-shadow: 0 0 0 2px ${primaryColor}20;
     }

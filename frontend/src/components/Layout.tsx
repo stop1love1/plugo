@@ -210,6 +210,7 @@ export default function Layout() {
                     <Link
                       key={to}
                       to={to}
+                      onClick={handleNavClick}
                       className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
                         isActive
                           ? "bg-primary-50 text-primary-700 font-medium border-l-2 border-primary-600 pl-[10px]"
@@ -287,6 +288,7 @@ export default function Layout() {
                   <Link
                     key={to}
                     to={to}
+                    onClick={handleNavClick}
                     className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
                       location.pathname === to
                         ? "bg-primary-50 text-primary-700 font-medium border-l-2 border-primary-600 pl-[10px]"

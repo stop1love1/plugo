@@ -1,7 +1,8 @@
 import json
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from agent.rag import rag_engine
@@ -9,7 +10,7 @@ from auth import TokenData, get_current_user
 from config import settings
 from logging_config import logger
 from providers.factory import get_llm_provider
-from repositories import Repositories, get_repos
+from repositories import Repositories, create_repos, get_repos
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
 
@@ -214,15 +215,32 @@ class RecrawlUrlRequest(BaseModel):
     source_url: str
 
 
-@router.post("/url/recrawl")
+async def _run_recrawl(site_id: str, source_url: str, job_id: str):
+    """Background task: re-crawl a single URL and update knowledge count."""
+    from knowledge.crawler import WebCrawler
+
+    repos = await create_repos()
+    try:
+        crawler = WebCrawler(max_pages=1, delay=0)
+        await crawler.crawl_site(site_id, source_url, job_id, repos)
+
+        # Update site knowledge count
+        knowledge_data = await repos.knowledge.list_by_site(site_id, page=1, per_page=1)
+        await repos.sites.update(site_id, {"knowledge_count": knowledge_data.get("total", 0)})
+    except Exception as e:
+        logger.error("Recrawl failed", url=source_url, error=str(e))
+    finally:
+        await repos.close()
+
+
+@router.post("/url/recrawl", status_code=202)
 async def recrawl_url(
     data: RecrawlUrlRequest,
+    background_tasks: BackgroundTasks,
     repos: Repositories = Depends(get_repos),
     _user: TokenData = Depends(get_current_user),
 ):
-    """Delete existing chunks for a URL, then re-crawl that single page."""
-    from knowledge.crawler import WebCrawler
-
+    """Delete existing chunks for a URL, then re-crawl that single page in the background."""
     # Delete old chunks for this URL first
     old_chunks = await repos.knowledge.list_by_url(data.site_id, data.source_url)
     if old_chunks:
@@ -230,30 +248,21 @@ async def recrawl_url(
         await rag_engine.delete_chunks(data.site_id, embedding_ids)
         await repos.knowledge.delete_by_url(data.site_id, data.source_url)
 
-    # Crawl single page
-    crawler = WebCrawler(max_pages=1, delay=0)
     job = await repos.crawl_jobs.create({
         "site_id": data.site_id,
         "start_url": data.source_url,
     })
 
-    try:
-        await crawler.crawl_site(data.site_id, data.source_url, job["id"], repos)
+    background_tasks.add_task(_run_recrawl, data.site_id, data.source_url, job["id"])
 
-        # Update site knowledge count
-        knowledge_data = await repos.knowledge.list_by_site(data.site_id, page=1, per_page=1)
-        await repos.sites.update(data.site_id, {"knowledge_count": knowledge_data.get("total", 0)})
-
-        new_chunks = await repos.knowledge.list_by_url(data.site_id, data.source_url)
-        return {
-            "message": f"Re-crawled {data.source_url}",
+    return JSONResponse(
+        status_code=202,
+        content={
+            "message": f"Re-crawl started for {data.source_url}",
             "old_chunks": len(old_chunks),
-            "new_chunks": len(new_chunks),
             "job_id": job["id"],
-        }
-    except Exception as e:
-        logger.error("Recrawl failed", url=data.source_url, error=str(e))
-        raise HTTPException(status_code=500, detail=f"Recrawl failed: {e!s}") from e
+        },
+    )
 
 
 class ManualChunkCreate(BaseModel):

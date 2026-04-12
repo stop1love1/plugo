@@ -1,15 +1,13 @@
 """Analytics router — aggregate stats from chat sessions."""
 
-import logging
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
 
 from auth import TokenData, get_current_user
+from logging_config import logger
 from repositories import Repositories, get_repos
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
@@ -66,7 +64,7 @@ async def get_overview(
             "avg_session_duration_seconds": round(avg_duration),
         }
     except Exception as e:
-        logger.error("Analytics overview error: %s", e, exc_info=True)
+        logger.error("Analytics overview error", error=str(e))
         return empty_overview
 
 
@@ -112,7 +110,7 @@ async def get_messages_per_day(
 
         return result
     except Exception as e:
-        logger.error("Analytics messages-per-day error: %s", e, exc_info=True)
+        logger.error("Analytics messages-per-day error", error=str(e))
         # Return empty chart with all days zeroed
         result = []
         for i in range(days):
@@ -148,7 +146,7 @@ async def get_popular_questions(
         counter = Counter(questions)
         return [{"question": q, "count": c} for q, c in counter.most_common(limit)]
     except Exception as e:
-        logger.error("Analytics popular-questions error: %s", e, exc_info=True)
+        logger.error("Analytics popular-questions error", error=str(e))
         return []
 
 
@@ -190,7 +188,7 @@ async def get_knowledge_gaps(
         counter = Counter(gaps)
         return [{"question": q, "count": c} for q, c in counter.most_common(limit)]
     except Exception as e:
-        logger.error("Analytics knowledge-gaps error: %s", e, exc_info=True)
+        logger.error("Analytics knowledge-gaps error", error=str(e))
         return []
 
 
@@ -233,5 +231,5 @@ async def get_tool_usage(
             })
         return result
     except Exception as e:
-        logger.error("Analytics tool-usage error: %s", e, exc_info=True)
+        logger.error("Analytics tool-usage error", error=str(e))
         return []

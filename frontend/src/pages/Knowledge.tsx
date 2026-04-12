@@ -6,6 +6,7 @@ import { getKnowledge, getChunk, updateChunk, deleteChunk, addManualChunk, uploa
 import { Trash2, Plus, Upload, FileText, Search, Pencil, X, ExternalLink, Download, RefreshCw, Link as LinkIcon, AlertTriangle } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { EmptyState } from "../components/EmptyState";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useLocale } from "../lib/useLocale";
 
 export default function Knowledge() {
@@ -20,6 +21,7 @@ export default function Knowledge() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [showClearAll, setShowClearAll] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   // Preview/expand state (list API truncates content >200 chars; fetch full on expand)
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -232,7 +234,7 @@ export default function Knowledge() {
           disabled={!data?.chunks?.length}
           className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 disabled:opacity-50"
         >
-          <Download className="w-4 h-4" /> Export JSON
+          <Download className="w-4 h-4" /> Export Page (JSON)
         </button>
         <label className={`flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 cursor-pointer ${uploading ? "opacity-50 pointer-events-none" : ""}`}>
           <Upload className="w-4 h-4" /> {uploading ? t("knowledge.uploading") : t("knowledge.bulkUpload")}
@@ -476,6 +478,24 @@ export default function Knowledge() {
         </div>
       )}
 
+      {/* Single-item delete confirmation */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={t("common.delete")}
+        message={t("knowledge.confirmDelete")}
+        confirmLabel={t("common.delete")}
+        danger
+        loading={deleteMutation.isPending}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteMutation.mutate(deleteTarget, {
+              onSettled: () => setDeleteTarget(null),
+            });
+          }
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
+
       {isLoading ? (
         <div className="text-gray-400">{t("common.loading")}</div>
       ) : !data?.chunks?.length ? (
@@ -549,7 +569,7 @@ export default function Knowledge() {
                     <Pencil className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => deleteMutation.mutate(chunk.id)}
+                    onClick={() => setDeleteTarget(chunk.id)}
                     className="text-gray-400 hover:text-red-500 p-1"
                     title={t("common.delete")}
                   >

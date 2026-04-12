@@ -5,7 +5,7 @@ Global configuration API — read and update config.json from the dashboard.
 import json
 from pathlib import Path
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from auth import TokenData, get_current_user
 from logging_config import logger
@@ -45,6 +45,12 @@ def _write_config(data: dict) -> None:
 # Keys that should never be returned or modified via API
 _SECRET_KEYS = {"auth"}
 
+# Whitelist of allowed top-level config sections
+_ALLOWED_SECTIONS = {
+    "llm", "ollama", "embedding", "database", "vector_store",
+    "rag", "server", "rate_limit", "crawl", "agent",
+}
+
 
 @router.get("")
 async def get_config(_user: TokenData = Depends(get_current_user)):
@@ -62,6 +68,14 @@ async def update_config(body: dict, _user: TokenData = Depends(get_current_user)
     # Prevent overwriting secret sections
     for key in _SECRET_KEYS:
         body.pop(key, None)
+
+    # Reject keys not in the allowed whitelist
+    invalid_keys = set(body.keys()) - _ALLOWED_SECTIONS
+    if invalid_keys:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid config sections: {', '.join(sorted(invalid_keys))}. Allowed: {', '.join(sorted(_ALLOWED_SECTIONS))}",
+        )
 
     # Deep merge: update section by section
     for section, values in body.items():

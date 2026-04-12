@@ -89,7 +89,6 @@ services:
     ports:
       - "${DASHBOARD_PORT:-3000}:3000"
     environment:
-      - VITE_API_URL=http://localhost:${BACKEND_PORT:-8000}
       - VITE_BACKEND_URL=http://backend:8000
     depends_on:
       backend:
@@ -100,6 +99,11 @@ services:
         limits:
           cpus: "0.5"
           memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"const http = require('http'); http.get('http://localhost:3000/', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
 volumes:
   mongo_data:
