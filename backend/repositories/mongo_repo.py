@@ -694,6 +694,7 @@ class MongoLLMKeyRepo(BaseLLMKeyRepo):
 class MongoFlowRepo(BaseFlowRepo):
     def __init__(self, db: AsyncIOMotorDatabase):
         self.col = db["flows"]
+        self._steps_col = db["flow_steps"]
 
     async def create(self, data: dict) -> dict:
         doc = {
@@ -718,7 +719,7 @@ class MongoFlowRepo(BaseFlowRepo):
         return [_clean_doc(doc) async for doc in cursor]
 
     async def update(self, flow_id: str, data: dict) -> dict | None:
-        update_data = {k: v for k, v in data.items() if v is not None}
+        update_data = dict(data)
         update_data["updated_at"] = datetime.now(UTC)
         result = await self.col.find_one_and_update(
             {"_id": flow_id},
@@ -728,10 +729,17 @@ class MongoFlowRepo(BaseFlowRepo):
         return _clean_doc(result) if result else None
 
     async def delete(self, flow_id: str) -> bool:
+        # Cascade delete associated flow steps
+        await self._steps_col.delete_many({"flow_id": flow_id})
         result = await self.col.delete_one({"_id": flow_id})
         return result.deleted_count > 0
 
     async def delete_by_site(self, site_id: str) -> int:
+        # Cascade delete flow steps for all flows in this site
+        cursor = self.col.find({"site_id": site_id}, {"_id": 1})
+        flow_ids = [doc["_id"] async for doc in cursor]
+        if flow_ids:
+            await self._steps_col.delete_many({"flow_id": {"$in": flow_ids}})
         result = await self.col.delete_many({"site_id": site_id})
         return result.deleted_count
 
@@ -764,7 +772,7 @@ class MongoFlowStepRepo(BaseFlowStepRepo):
         return [_clean_doc(doc) async for doc in cursor]
 
     async def update(self, step_id: str, data: dict) -> dict | None:
-        update_data = {k: v for k, v in data.items() if v is not None}
+        update_data = dict(data)
         result = await self.col.find_one_and_update(
             {"_id": step_id},
             {"$set": update_data},

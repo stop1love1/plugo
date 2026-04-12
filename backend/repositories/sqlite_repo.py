@@ -799,8 +799,7 @@ class SQLiteFlowRepo(BaseFlowRepo):
         if not flow:
             return None
         for k, v in data.items():
-            if v is not None:
-                setattr(flow, k, v)
+            setattr(flow, k, v)
         await self.db.commit()
         await self.db.refresh(flow)
         return _flow_to_dict(flow)
@@ -849,8 +848,7 @@ class SQLiteFlowStepRepo(BaseFlowStepRepo):
         if not step:
             return None
         for k, v in data.items():
-            if v is not None:
-                setattr(step, k, v)
+            setattr(step, k, v)
         await self.db.commit()
         await self.db.refresh(step)
         return _step_to_dict(step)

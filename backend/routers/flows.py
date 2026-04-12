@@ -16,6 +16,8 @@ from repositories import Repositories, get_repos
 router = APIRouter(prefix="/api/flows", tags=["flows"])
 
 SCREENSHOT_DIR = "data/screenshots"
+ALLOWED_SCREENSHOT_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+ALLOWED_SCREENSHOT_CONTENT_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 
 
 # ============================================================
@@ -30,7 +32,7 @@ class FlowCreate(BaseModel):
 
 
 class FlowUpdate(BaseModel):
-    name: str | None = None
+    name: str | None = Field(None, min_length=1, max_length=255)
     description: str | None = None
     requires_login: bool | None = None
     is_enabled: bool | None = None
@@ -203,6 +205,17 @@ async def delete_step(
         raise HTTPException(status_code=404, detail="Step not found")
 
     flow_id = step["flow_id"]
+
+    # Clean up screenshot file from disk if it exists
+    if step.get("screenshot_url"):
+        ext = os.path.splitext(step["screenshot_url"])[1]
+        screenshot_path = os.path.join(SCREENSHOT_DIR, step["flow_id"], f"{step_id}{ext}")
+        if os.path.isfile(screenshot_path):
+            try:
+                os.remove(screenshot_path)
+            except OSError:
+                logger.warning("Failed to remove screenshot file", path=screenshot_path)
+
     await repos.flow_steps.delete(step_id)
 
     # Re-order remaining steps
@@ -240,6 +253,13 @@ async def reorder_steps(
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
 
+    # Validate that all step_ids belong to this flow
+    existing_steps = await repos.flow_steps.list_by_flow(flow_id)
+    existing_ids = {s["id"] for s in existing_steps}
+    submitted_ids = set(data.step_ids)
+    if submitted_ids != existing_ids:
+        raise HTTPException(status_code=400, detail="step_ids must match exactly the steps belonging to this flow")
+
     await repos.flow_steps.reorder(flow_id, data.step_ids)
 
     # Auto-sync to RAG
@@ -265,6 +285,13 @@ async def upload_screenshot(
     if not step:
         raise HTTPException(status_code=404, detail="Step not found")
 
+    # Validate file format
+    ext = os.path.splitext(file.filename or "image.png")[1].lower() or ".png"
+    if ext not in ALLOWED_SCREENSHOT_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Invalid file type. Allowed: {', '.join(sorted(ALLOWED_SCREENSHOT_EXTENSIONS))}")
+    if file.content_type and file.content_type not in ALLOWED_SCREENSHOT_CONTENT_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid content type. Allowed: {', '.join(sorted(ALLOWED_SCREENSHOT_CONTENT_TYPES))}")
+
     content = await file.read()
     if len(content) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Screenshot too large (max 5MB)")
@@ -272,8 +299,6 @@ async def upload_screenshot(
     # Save to data/screenshots/{flow_id}/
     flow_dir = os.path.join(SCREENSHOT_DIR, step["flow_id"])
     os.makedirs(flow_dir, exist_ok=True)
-
-    ext = os.path.splitext(file.filename or "image.png")[1] or ".png"
     filename = f"{step_id}{ext}"
     filepath = os.path.join(flow_dir, filename)
 
@@ -287,7 +312,11 @@ async def upload_screenshot(
 
 
 @router.get("/screenshots/{flow_id}/{filename}")
-async def serve_screenshot(flow_id: str, filename: str):
+async def serve_screenshot(
+    flow_id: str,
+    filename: str,
+    _user: TokenData = Depends(get_current_user),
+):
     """Serve uploaded screenshot files."""
     from fastapi.responses import FileResponse
     # Sanitize inputs to prevent path traversal
@@ -353,14 +382,7 @@ async def _sync_flow_to_rag(flow: dict, steps: list[dict], repos: Repositories):
 
     content = "\n".join(lines).strip()
 
-    # Delete old flow chunk if exists
-    old_chunks = await repos.knowledge.list_by_url(site_id, source_url)
-    if old_chunks:
-        embedding_ids = [c.get("embedding_id") or c["id"] for c in old_chunks]
-        await rag_engine.delete_chunks(site_id, embedding_ids)
-        await repos.knowledge.delete_by_url(site_id, source_url)
-
-    # Create new chunk — only save to DB if embedding succeeds
+    # Embed new chunk first — only delete old data on success to avoid RAG desync
     chunk_id = str(uuid.uuid4())
     try:
         embed_provider = get_llm_provider(settings.embedding_provider, settings.embedding_model)
@@ -372,15 +394,24 @@ async def _sync_flow_to_rag(flow: dict, steps: list[dict], repos: Repositories):
             "title": f"Flow: {flow['name']}",
             "chunk_index": 0,
         }], embeddings)
-
-        await repos.knowledge.create({
-            "id": chunk_id,
-            "site_id": site_id,
-            "source_url": source_url,
-            "source_type": "flow",
-            "title": f"Flow: {flow['name']}",
-            "content": content,
-            "embedding_id": chunk_id,
-        })
     except Exception as e:
         logger.warning("Failed to embed flow", flow_id=flow["id"], error=str(e))
+        return
+
+    # Embedding succeeded — now safe to delete old chunks
+    old_chunks = await repos.knowledge.list_by_url(site_id, source_url)
+    if old_chunks:
+        embedding_ids = [c.get("embedding_id") or c["id"] for c in old_chunks]
+        await rag_engine.delete_chunks(site_id, embedding_ids)
+        await repos.knowledge.delete_by_url(site_id, source_url)
+
+    # Persist new knowledge record
+    await repos.knowledge.create({
+        "id": chunk_id,
+        "site_id": site_id,
+        "source_url": source_url,
+        "source_type": "flow",
+        "title": f"Flow: {flow['name']}",
+        "content": content,
+        "embedding_id": chunk_id,
+    })
