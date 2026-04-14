@@ -33,6 +33,8 @@ def _save_custom_models(models: list[dict]):
 
 
 class CustomModelCreate(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
     provider: str = Field(min_length=1, max_length=50)
     model_id: str = Field(min_length=1, max_length=200)
     model_name: str = Field(min_length=1, max_length=200)
@@ -40,6 +42,8 @@ class CustomModelCreate(BaseModel):
 
 
 class CustomModelDelete(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
     provider: str
     model_id: str
 

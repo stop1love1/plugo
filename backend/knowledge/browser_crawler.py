@@ -5,6 +5,7 @@ and passes them to the standard httpx WebCrawler for actual crawling.
 """
 
 import asyncio
+import sys
 
 from logging_config import logger
 
@@ -21,6 +22,43 @@ class BrowserLoginError(Exception):
 
 
 async def browser_login_and_extract_cookies(
+    login_url: str,
+    username: str,
+    password: str,
+    username_selector: str = "input[name='email'], input[name='username'], input[type='email']",
+    password_selector: str = "input[name='password'], input[type='password']",
+    submit_selector: str = "button[type='submit'], input[type='submit']",
+    success_url: str | None = None,
+    timeout_ms: int = 30000,
+) -> list[dict]:
+    """Public wrapper — on Windows runs Playwright in a thread with a ProactorEventLoop.
+
+    Uvicorn's --reload installs WindowsSelectorEventLoopPolicy, which can't spawn
+    subprocesses. Playwright needs subprocess support, so we run it in an isolated
+    thread with a fresh ProactorEventLoop.
+    """
+    kwargs = dict(
+        login_url=login_url,
+        username=username,
+        password=password,
+        username_selector=username_selector,
+        password_selector=password_selector,
+        submit_selector=submit_selector,
+        success_url=success_url,
+        timeout_ms=timeout_ms,
+    )
+    if sys.platform == "win32":
+        def _runner():
+            loop = asyncio.ProactorEventLoop()
+            try:
+                return loop.run_until_complete(_browser_login_impl(**kwargs))
+            finally:
+                loop.close()
+        return await asyncio.to_thread(_runner)
+    return await _browser_login_impl(**kwargs)
+
+
+async def _browser_login_impl(
     login_url: str,
     username: str,
     password: str,
