@@ -1,11 +1,11 @@
 import asyncio
 import json
 
+from auth import TokenData, get_current_user
 from fastapi import APIRouter, Depends, HTTPException
+from logging_config import logger
 from pydantic import BaseModel, Field
 
-from auth import TokenData, get_current_user
-from logging_config import logger
 from providers.factory import get_all_providers, get_llm_provider
 from repositories import Repositories, get_repos
 from routers.chat import invalidate_site_cache
@@ -178,6 +178,29 @@ async def update_site(
         })
     except Exception as e:
         logger.warning("Failed to create audit log", error=str(e))
+
+    # Dedicated audit entry when the SSRF escape hatch is toggled on — operators
+    # should be able to answer "who enabled private-URL crawls for this site?" fast.
+    if (
+        update_payload.get("allow_private_urls") is True
+        and existing_site.get("allow_private_urls") is not True
+    ):
+        try:
+            await repos.audit_logs.create({
+                "user_id": user.sub,
+                "username": user.sub,
+                "action": "site.allow_private_urls.enabled",
+                "resource_type": "site",
+                "resource_id": site_id,
+                "details": json.dumps({"site_id": site_id}),
+            })
+        except Exception as e:
+            logger.warning("Failed to create audit log for allow_private_urls", error=str(e))
+        logger.warning(
+            "SECURITY: site.allow_private_urls enabled",
+            site_id=site_id,
+            user=user.sub,
+        )
     return site
 
 

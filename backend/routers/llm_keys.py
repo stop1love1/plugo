@@ -2,13 +2,13 @@
 
 import json
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
-
 from auth import TokenData, get_current_user
+from fastapi import APIRouter, Depends, HTTPException
 from logging_config import logger
-from repositories import Repositories, get_repos
+from pydantic import BaseModel, Field
 from utils.crypto import decrypt_value, encrypt_value
+
+from repositories import Repositories, get_repos
 
 router = APIRouter(prefix="/api/llm-keys", tags=["llm-keys"])
 
@@ -54,11 +54,17 @@ def _mask_key(key: str) -> str:
 
 
 def _decrypt_key_safe(encrypted_key: str) -> str:
-    """Decrypt a key, falling back to raw value for legacy unencrypted data."""
+    """Decrypt a key; return empty string if decryption fails.
+
+    We no longer silently return the raw ciphertext — that would either leak
+    undecryptable gibberish into an outbound LLM request or cause a 401 at the
+    provider with no context. Callers see "" and must treat it as missing.
+    """
     try:
         return decrypt_value(encrypted_key)
-    except Exception:
-        return encrypted_key
+    except ValueError as e:
+        logger.warning("LLM key decryption failed", error=str(e))
+        return ""
 
 
 @router.get("")

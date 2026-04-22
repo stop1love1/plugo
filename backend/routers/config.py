@@ -5,9 +5,8 @@ Global configuration API — read and update config.json from the dashboard.
 import json
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
-
 from auth import TokenData, get_current_user
+from fastapi import APIRouter, Depends, HTTPException
 from logging_config import logger
 
 router = APIRouter(prefix="/api/config", tags=["config"])

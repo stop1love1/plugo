@@ -1,8 +1,8 @@
 import httpx
-
-from knowledge.crawler import _is_safe_public_url
 from logging_config import logger
 from utils.crypto import decrypt_value
+
+from knowledge.crawler import _is_safe_public_url
 
 
 class ToolExecutor:
@@ -46,13 +46,18 @@ class ToolExecutor:
 
     @staticmethod
     def _decrypt_auth(auth_value: str | None) -> str | None:
-        """Decrypt an encrypted auth_value, falling back to raw value for legacy data."""
+        """Decrypt an encrypted auth_value; None if decryption fails (key rotation / corrupted).
+
+        Returning None rather than the raw ciphertext stops us from silently sending
+        an undecryptable value as a bearer token in an outbound HTTP call.
+        """
         if not auth_value:
             return auth_value
         try:
             return decrypt_value(auth_value)
-        except Exception:
-            return auth_value  # Legacy plaintext value
+        except ValueError as e:
+            logger.warning("Tool auth_value decryption failed", error=str(e))
+            return None
 
     async def execute_tool(
         self,

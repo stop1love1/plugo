@@ -52,16 +52,68 @@ function saveSessionId(token: string, sessionId: string) {
   }
 }
 
+// Sliding 30-day window. Visitor ids expire so a browser that stops visiting
+// can't be silently linked to the site forever.
+const VISITOR_TTL_MS = 30 * 86400 * 1000;
+
+function _newVisitorId(): string {
+  return crypto.randomUUID ? crypto.randomUUID() : generateFallbackId();
+}
+
 function getOrCreateVisitorId(token: string): string {
+  const storageKey = VISITOR_KEY + token;
   try {
-    const existing = localStorage.getItem(VISITOR_KEY + token);
-    if (existing) return existing;
-    const id = crypto.randomUUID ? crypto.randomUUID() : generateFallbackId();
-    localStorage.setItem(VISITOR_KEY + token, id);
+    const existing = localStorage.getItem(storageKey);
+    if (existing) {
+      try {
+        const parsed = JSON.parse(existing) as { id?: string; exp?: number };
+        if (
+          parsed &&
+          typeof parsed.id === "string" &&
+          typeof parsed.exp === "number" &&
+          parsed.exp > Date.now()
+        ) {
+          // Sliding window — bump expiry on each use.
+          const refreshed = { id: parsed.id, exp: Date.now() + VISITOR_TTL_MS };
+          localStorage.setItem(storageKey, JSON.stringify(refreshed));
+          return parsed.id;
+        }
+      } catch {
+        // Legacy plain-string id; migrate into the wrapped format below.
+        if (typeof existing === "string" && existing && !existing.startsWith("{")) {
+          const wrapped = { id: existing, exp: Date.now() + VISITOR_TTL_MS };
+          localStorage.setItem(storageKey, JSON.stringify(wrapped));
+          return existing;
+        }
+      }
+    }
+    const id = _newVisitorId();
+    localStorage.setItem(storageKey, JSON.stringify({ id, exp: Date.now() + VISITOR_TTL_MS }));
     return id;
   } catch {
     return generateFallbackId();
   }
+}
+
+/** Expose a global helper so cookie-consent integrations can revoke the visitor id. */
+declare global {
+  interface Window {
+    plugoClearVisitorId?: () => void;
+  }
+}
+if (typeof window !== "undefined") {
+  window.plugoClearVisitorId = () => {
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(VISITOR_KEY)) {
+          localStorage.removeItem(key);
+        }
+      }
+    } catch {
+      // storage unavailable — nothing to do
+    }
+  };
 }
 
 let _audioCtx: AudioContext | null = null;
@@ -139,12 +191,13 @@ export function App({
   const initWebSocket = useCallback(() => {
     const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const baseUrl = serverUrl || `${wsProtocol}//${window.location.host}`;
-    const wsUrl = `${baseUrl.replace(/^http/, "ws")}/ws/chat/${token}`;
+    // site_token is now sent in the init message, not embedded in the URL.
+    const wsUrl = `${baseUrl.replace(/^http/, "ws")}/ws/chat`;
 
     const savedSessionId = getSavedSessionId(token);
     const visitorId = getOrCreateVisitorId(token);
 
-    const socket = new PlugoWebSocket(wsUrl, {
+    const socket = new PlugoWebSocket(wsUrl, token, {
       onConnected: (data) => {
         if (data.session_id) {
           saveSessionId(token, data.session_id);
@@ -271,9 +324,14 @@ export function App({
       if (!sid) return;
       const baseUrl = serverUrl || `${window.location.protocol}//${window.location.host}`;
       const httpUrl = baseUrl.replace(/^ws/, "http");
-      fetch(`${httpUrl}/api/sessions/${sid}/feedback?site_token=${encodeURIComponent(token)}`, {
+      // Site token goes in Authorization so it doesn't leak into server/CDN
+      // access logs or Referer headers the way query strings do.
+      fetch(`${httpUrl}/api/sessions/${sid}/feedback`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ message_index: messageIndex, rating }),
       }).catch(() => {});
     },

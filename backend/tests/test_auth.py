@@ -8,7 +8,7 @@ async def test_login_success(client):
     """POST /api/auth/login with valid env credentials should return a token."""
     response = await client.post("/api/auth/login", json={
         "username": "plugo",
-        "password": "pluginme",
+        "password": "test-admin-password",
     })
     assert response.status_code == 200
 
@@ -21,7 +21,7 @@ async def test_login_success(client):
 
 @pytest.mark.parametrize("username, password", [
     ("plugo", "wrongpassword"),        # correct user, wrong password
-    ("nonexistentuser", "pluginme"),   # wrong user, correct password
+    ("nonexistentuser", "test-admin-password"),   # wrong user, correct password
 ])
 @pytest.mark.asyncio
 async def test_login_rejects_bad_credentials(client, username, password):
@@ -72,9 +72,8 @@ async def test_expired_token_rejected():
     """Expired token should raise 401."""
     from datetime import timedelta
 
-    from fastapi import HTTPException
-
     from auth import create_access_token, decode_access_token
+    from fastapi import HTTPException
 
     token = create_access_token(
         subject="admin",
@@ -92,9 +91,9 @@ async def test_verify_credentials():
     """verify_credentials should match env vars."""
     from auth import verify_credentials
 
-    assert verify_credentials("plugo", "pluginme") is True
+    assert verify_credentials("plugo", "test-admin-password") is True
     assert verify_credentials("plugo", "wrong") is False
-    assert verify_credentials("wrong", "pluginme") is False
+    assert verify_credentials("wrong", "test-admin-password") is False
 
 
 # --- LLM key audit trail (C-5) ---

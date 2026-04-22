@@ -42,12 +42,21 @@ export class PlugoWebSocket {
   private maxReconnectAttempts = 5;
   private sessionId: string | null = null;
   private visitorId: string | null = null;
+  private siteToken: string;
   private pingInterval: ReturnType<typeof setInterval> | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private _connectionState: ConnectionState = "disconnected";
   private intentionalClose = false;
 
-  constructor(url: string, handlers: MessageHandler, sessionId?: string | null, visitorId?: string | null) {
+  constructor(
+    url: string,
+    siteToken: string,
+    handlers: MessageHandler,
+    sessionId?: string | null,
+    visitorId?: string | null,
+  ) {
     this.url = url;
+    this.siteToken = siteToken;
     this.handlers = handlers;
     this.sessionId = sessionId || null;
     this.visitorId = visitorId || null;
@@ -59,8 +68,11 @@ export class PlugoWebSocket {
   }
 
   connect() {
+    // If disconnect() ran before this retry fired, honor it and bail out.
+    if (this.intentionalClose) {
+      return;
+    }
     try {
-      this.intentionalClose = false;
       this.setConnectionState(this.reconnectAttempts > 0 ? "reconnecting" : "connecting");
       this.ws = new WebSocket(this.url);
 
@@ -68,10 +80,12 @@ export class PlugoWebSocket {
         this.reconnectAttempts = 0;
         this.setConnectionState("connected");
         this.startPing();
-        // Send init message with session_id and visitor_id
+        // site_token goes in the init payload rather than the URL so it doesn't
+        // get captured in proxy/CDN access logs.
         this.ws?.send(
           JSON.stringify({
             type: "init",
+            site_token: this.siteToken,
             session_id: this.sessionId,
             visitor_id: this.visitorId,
           })
@@ -125,7 +139,12 @@ export class PlugoWebSocket {
           this.reconnectAttempts++;
           this.setConnectionState("reconnecting");
           const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000);
-          setTimeout(() => this.connect(), delay);
+          // Track the timer id so disconnect() can cancel a pending reconnect
+          // — otherwise the retry fires after the widget is gone.
+          this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null;
+            this.connect();
+          }, delay);
         } else {
           this.setConnectionState("disconnected");
         }
@@ -156,6 +175,10 @@ export class PlugoWebSocket {
   disconnect() {
     if (this.intentionalClose) return; // Already disconnecting, prevent double disconnect
     this.intentionalClose = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.stopPing();
     this.ws?.close();
     this.setConnectionState("disconnected");

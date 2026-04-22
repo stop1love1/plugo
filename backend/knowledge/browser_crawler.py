@@ -85,7 +85,9 @@ async def _browser_login_impl(
     """
     if not PLAYWRIGHT_AVAILABLE:
         raise BrowserLoginError(
-            "Playwright is not installed. Run: pip install playwright && playwright install chromium"
+            "Playwright is not installed. Run `make setup-browser` "
+            "(or `pip install -r requirements-browser.txt && playwright install chromium`) "
+            "to enable browser-based authenticated crawling."
         )
 
     async with async_playwright() as p:

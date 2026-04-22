@@ -2,6 +2,7 @@
   "name": "plugo-frontend",
   "version": "1.0.0",
   "type": "module",
+  "packageManager": "pnpm@9.15.0",
   "scripts": {
     "dev": "pnpm build:widget && vite",
     "build": "pnpm build:widget && tsc -b && vite build",

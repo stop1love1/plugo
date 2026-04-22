@@ -150,9 +150,13 @@ def validate_settings():
             stacklevel=2,
         )
 
-    if settings.admin_password == "pluginme":
-        warnings.warn(
-            "WARNING: Admin password is still the default 'pluginme'. "
-            "Set a strong PASSWORD in .env before deploying.",
-            stacklevel=2,
+    if settings.auth_enabled and (
+        not settings.admin_username
+        or not settings.admin_password
+        or settings.admin_password == "pluginme"
+    ):
+        raise RuntimeError(
+            "FATAL: admin credentials are missing or use the legacy default. "
+            "Set USERNAME and PASSWORD in .env — the default admin credentials "
+            "must be changed before starting."
         )

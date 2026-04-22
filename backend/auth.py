@@ -13,12 +13,11 @@ Public endpoints (no auth required):
 import hmac
 from datetime import UTC, datetime, timedelta
 
+from config import settings
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel
-
-from config import settings
 
 # --- JWT config ---
 ALGORITHM = "HS256"

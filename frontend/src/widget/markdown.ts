@@ -153,10 +153,10 @@ function buildSlideshowHtml(markdownImages: string): string {
   }
   if (images.length === 0) return "";
   if (images.length === 1) {
-    return `<div class="plugo-image"><img src="${images[0].url}" alt="${escapeAttr(images[0].alt)}" loading="lazy" /></div>`;
+    return `<div class="plugo-image"><img src="${escapeAttr(images[0].url)}" alt="${escapeAttr(images[0].alt)}" loading="lazy" /></div>`;
   }
   const htmlArr = images.map(
-    (img) => `<div class="plugo-image"><img src="${img.url}" alt="${escapeAttr(img.alt)}" loading="lazy" /></div>`,
+    (img) => `<div class="plugo-image"><img src="${escapeAttr(img.url)}" alt="${escapeAttr(img.alt)}" loading="lazy" /></div>`,
   );
   return renderSlideshow(htmlArr);
 }

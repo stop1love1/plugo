@@ -6,15 +6,15 @@ from datetime import UTC, datetime
 from time import time
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-
-from agent.core import ChatAgent
-from agent.memory import ConversationSummarizer, MemoryExtractor
 from logging_config import logger
-from providers.factory import get_llm_provider
-from repositories import create_repos
 from utils.cors import validate_site_origin
 from utils.pricing import estimate_cost
 from utils.rate_limit import SiteTokenWSRateLimiter
+
+from agent.core import ChatAgent
+from agent.memory import ConversationSummarizer, MemoryExtractor
+from providers.factory import get_llm_provider
+from repositories import create_repos
 
 router = APIRouter()
 
@@ -91,14 +91,54 @@ def invalidate_site_cache(site_token: str | None = None):
         _site_cache.clear()
 
 
+@router.websocket("/ws/chat")
+async def websocket_chat_init(websocket: WebSocket):
+    """WebSocket chat endpoint — site_token is read from the first `init` message.
+
+    Prefer this endpoint over the legacy path-based variant; it keeps the token out
+    of URL access logs and proxies. Flow:
+        1. Client connects.
+        2. Client sends `{ "type": "init", "site_token": "...", ... }` as first message.
+        3. Server validates the token and replies with the usual `connected` frame.
+    """
+    await websocket.accept()
+    repos = await create_repos()
+
+    try:
+        first_data = await websocket.receive_json()
+    except Exception:
+        await websocket.close(code=4401, reason="Missing init message")
+        await repos.close()
+        return
+
+    site_token = first_data.get("site_token") if isinstance(first_data, dict) else None
+    if not site_token or not isinstance(site_token, str):
+        await websocket.close(code=4401, reason="Missing site_token in init")
+        await repos.close()
+        return
+
+    site = await get_cached_site(repos, site_token)
+    if not site:
+        await websocket.send_json({"type": "error", "message": "Invalid site token"})
+        await websocket.close(code=4401, reason="Invalid site token")
+        await repos.close()
+        return
+
+    await _run_websocket_chat(websocket, repos, site, site_token, first_data=first_data)
+
+
 @router.websocket("/ws/chat/{site_token}")
 async def websocket_chat(websocket: WebSocket, site_token: str):
-    """WebSocket endpoint for real-time chat streaming.
+    """DEPRECATED WebSocket endpoint — site_token in URL path.
 
-    Supports session resumption: if the client sends a `session_id` in
-    the first message, the server restores the previous conversation
-    from the database instead of creating a new session.
+    Prefer `/ws/chat` (token in init message). This route stays live for one
+    release cycle to avoid breaking pinned widget bundles; each connection logs
+    a deprecation warning.
     """
+    logger.warning(
+        "Deprecated WS route /ws/chat/{site_token} used — prefer init-message auth",
+        origin=websocket.headers.get("origin", "<none>"),
+    )
     await websocket.accept()
 
     repos = await create_repos()
@@ -110,6 +150,17 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
         await websocket.close()
         return
 
+    await _run_websocket_chat(websocket, repos, site, site_token, first_data=None)
+
+
+async def _run_websocket_chat(
+    websocket: WebSocket,
+    repos,
+    site: dict,
+    site_token: str,
+    first_data: dict | None,
+) -> None:
+    """Shared WS chat body used by both the legacy path-based and the new init-message routes."""
     # Validate WebSocket origin against site's allowed_domains.
     # Per-site tenant isolation — the global CORS middleware is a site-agnostic
     # allowlist and can't enforce this; see utils/cors.py for contract.
@@ -132,9 +183,11 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
         await websocket.close()
         return
 
-    # Wait for the first message to check for session resumption
-    # The client sends {"type": "init", "session_id": "...", "visitor_id": "..."} or just starts chatting
-    first_data = await websocket.receive_json()
+    # Wait for the first message to check for session resumption unless the caller
+    # already consumed it (the /ws/chat init-message route reads it to extract
+    # the site_token and passes it down).
+    if first_data is None:
+        first_data = await websocket.receive_json()
 
     session_id = None
     messages = []
@@ -249,9 +302,14 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
 
     # If the first message was a chat message (not init), process it
     if first_data.get("type") != "init" and first_data.get("message"):
+        first_message = first_data.get("message", "")
+        # Mirror the turn-loop size guard so a huge first message can't bypass it.
+        if len(first_message) > 10000:
+            await websocket.close(code=1008, reason="Message too long")
+            return
         await _handle_message(
             websocket, agent, repos, session_id, messages,
-            first_data["message"], first_data.get("pageContext"),
+            first_message, first_data.get("pageContext"),
             visitor_id, conversation_summary,
         )
 

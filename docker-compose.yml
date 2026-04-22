@@ -17,8 +17,11 @@ services:
   mongodb:
     image: mongo:7
     container_name: plugo-mongodb
-    ports:
-      - "27017:27017"
+    # Port is NOT exposed to the host by default — other services reach Mongo
+    # on the compose network at `mongodb:27017`. Uncomment for local debugging
+    # only; exposing 27017 on a production host is a common data-exfil vector.
+    # ports:
+    #   - "27017:27017"
     volumes:
       - mongo_data:/data/db
     environment:

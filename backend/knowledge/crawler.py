@@ -15,11 +15,11 @@ from urllib.robotparser import RobotFileParser
 
 import httpx
 from bs4 import BeautifulSoup
+from config import settings
+from logging_config import logger
 
 from agent.rag import rag_engine
-from config import settings
 from knowledge.chunker import SemanticChunker
-from logging_config import logger
 from providers.factory import get_llm_provider
 
 # Hostnames used by cloud metadata services — always block to avoid credential exfil via SSRF.

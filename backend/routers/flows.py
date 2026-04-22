@@ -3,13 +3,13 @@
 import os
 import uuid
 
+from auth import TokenData, get_current_user
+from config import settings
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from logging_config import logger
 from pydantic import BaseModel, Field
 
 from agent.rag import rag_engine
-from auth import TokenData, get_current_user
-from config import settings
-from logging_config import logger
 from providers.factory import get_llm_provider
 from repositories import Repositories, get_repos
 

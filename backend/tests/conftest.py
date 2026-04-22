@@ -15,8 +15,13 @@ os.environ["DATABASE_PROVIDER"] = "sqlite"
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./data/test.db"
 os.environ["SECRET_KEY"] = "test-secret-key-for-testing-only"
 os.environ["CHROMA_PATH"] = "./data/test_chroma"
-# Admin credentials loaded from config.json (auth.username/auth.password)
-# No env override needed in tests — config.json defaults apply
+# Admin credentials: config.json ships with empty values and the backend refuses
+# to start with empty or legacy-default ("pluginme") credentials. Patch the
+# loaded settings with a dedicated test credential after import.
+from config import settings as _settings
+
+_settings.admin_username = "plugo"
+_settings.admin_password = "test-admin-password"
 
 # Ensure data dir exists
 os.makedirs(os.path.join(os.path.dirname(__file__), "..", "data"), exist_ok=True)
@@ -28,8 +33,9 @@ async def _ensure_db():
     global _db_initialized
     if not _db_initialized:
         # Import all models so Base.metadata knows about all tables
-        import models  # noqa: F401
         from database import Base, engine
+
+        import models  # noqa: F401
 
         # Drop and recreate all tables to ensure schema is up-to-date
         async with engine.begin() as conn:

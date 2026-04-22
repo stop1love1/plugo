@@ -2,11 +2,12 @@ import json
 from collections.abc import AsyncGenerator
 from typing import ClassVar
 
+from config import settings
+from logging_config import logger
+
 from agent.rag import rag_engine
 from agent.tools import tool_executor
-from config import settings
 from knowledge.embed_cache import embed_cache
-from logging_config import logger
 from providers.base import BaseLLMProvider
 from providers.factory import get_llm_provider
 
@@ -250,8 +251,10 @@ class ChatAgent:
         "You can check the website directly or contact our support team for help! 😊"
     )
 
-    def _no_knowledge_response(self) -> str:
-        if self._is_likely_vietnamese(self.messages[-1]["content"] if self.messages else ""):
+    def _no_knowledge_response(self, message: str) -> str:
+        # Use the original user text — after a tool round `self.messages[-1]["content"]`
+        # can be a list of content blocks, which breaks str-only detection.
+        if self._is_likely_vietnamese(message or ""):
             return settings.agent_no_knowledge_vi.strip() or self._DEFAULT_NO_KNOWLEDGE_VI
         return settings.agent_no_knowledge_en.strip() or self._DEFAULT_NO_KNOWLEDGE_EN
 
@@ -309,15 +312,13 @@ class ChatAgent:
         if page_context:
             safe_url = _neutralize_fence_markers(str(page_context.get("url", "N/A")))
             safe_title = _neutralize_fence_markers(str(page_context.get("title", "N/A")))
-            safe_page_text = _fence_untrusted(
-                "PAGE_TEXT", page_context.get("pageText", "")[:1500]
-            )
-            context_section = (
-                "## Current Page\n"
+            safe_page_text = _neutralize_fence_markers(page_context.get("pageText", "")[:1500])
+            context_body = (
                 f"- URL: {safe_url}\n"
                 f"- Title: {safe_title}\n"
                 f"- Page content:\n{safe_page_text}"
             )
+            context_section = "## Current Page\n" + _fence_untrusted("PAGE_CONTEXT", context_body)
 
         # --- Knowledge (from crawl) ---
         knowledge_section = ""
@@ -463,7 +464,7 @@ class ChatAgent:
 
         # Casual messages (greetings, thanks, etc.) bypass knowledge check — let the LLM respond naturally
         if not has_knowledge_match and not self._is_casual_message(message):
-            fallback = self._no_knowledge_response()
+            fallback = self._no_knowledge_response(message)
             self.messages.append({"role": "assistant", "content": fallback})
             for token in fallback:
                 yield token
@@ -547,7 +548,7 @@ class ChatAgent:
         )
 
         if not has_knowledge_match and not self._is_casual_message(message):
-            fallback = self._no_knowledge_response()
+            fallback = self._no_knowledge_response(message)
             self.messages.append({"role": "assistant", "content": fallback})
             return fallback
 

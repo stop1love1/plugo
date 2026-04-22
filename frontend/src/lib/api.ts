@@ -276,8 +276,9 @@ const api = axios.create({
 });
 
 // Auth interceptor — attach JWT token to all requests
+// TODO(security): migrate to httpOnly cookie and drop this header wiring.
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("plugo_token");
+  const token = sessionStorage.getItem("plugo_token");
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -289,7 +290,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401 && !error.config.url?.includes("/auth/")) {
-      localStorage.removeItem("plugo_token");
+      sessionStorage.removeItem("plugo_token");
       localStorage.removeItem("plugo_user");
       window.location.href = "/login";
     }

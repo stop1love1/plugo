@@ -46,7 +46,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements-dev.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 
@@ -54,7 +54,7 @@ jobs:
         run: |
           cd backend
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
       - name: Check syntax errors
         run: |
@@ -76,7 +76,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: latest
+          version: 9.15.0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -115,18 +115,18 @@ jobs:
         run: pip install bandit pip-audit
 
       - name: Bandit (Python SAST)
-        run: bandit -r backend/ -ll -ii --exclude backend/tests -f json -o bandit-report.json || true
+        run: bandit -r backend/ -ll -ii --exclude backend/tests -f json -o bandit-report.json
 
       - name: Bandit summary
-        run: bandit -r backend/ -ll -ii --exclude backend/tests || true
+        run: bandit -r backend/ -ll -ii --exclude backend/tests
 
       - name: pip-audit (dependency CVEs)
-        run: pip-audit -r backend/requirements.txt || true
+        run: pip-audit -r backend/requirements.txt
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: latest
+          version: 9.15.0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -134,7 +134,7 @@ jobs:
           node-version: 20
 
       - name: Frontend dependency audit
-        run: cd frontend && pnpm install --frozen-lockfile && pnpm audit || true
+        run: cd frontend && pnpm install --frozen-lockfile && pnpm audit
 
   docker:
     name: Docker Build

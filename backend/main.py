@@ -12,9 +12,10 @@ from slowapi.util import get_remote_address
 
 load_dotenv()
 
-import models  # noqa: F401 — ensure all models registered for Base.metadata.create_all
 from config import settings, validate_settings
 from logging_config import logger
+
+import models  # noqa: F401 — ensure all models registered for Base.metadata.create_all
 from routers import analytics, chat, crawl, flows, knowledge, memory, sessions, sites, tools
 from routers import audit as audit_router
 from routers import auth as auth_router

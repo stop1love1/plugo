@@ -1,9 +1,8 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text
-
 from database import Base
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 
 
 class KnowledgeChunk(Base):
@@ -29,7 +28,9 @@ class KnowledgeChunk(Base):
     # Composite indexes for the hot paths:
     #   list_crawled_urls / list_by_url  → (site_id, source_url)
     #   create_many dedup / list_content_hashes → (site_id, content_hash)
+    # UniqueConstraint on (site_id, content_hash) makes the DB authoritative for
+    # dedup, so a race between two concurrent crawls cannot double-insert.
     __table_args__ = (
         Index("ix_knowledge_chunks_site_url", "site_id", "source_url"),
-        Index("ix_knowledge_chunks_site_hash", "site_id", "content_hash"),
+        UniqueConstraint("site_id", "content_hash", name="uq_knowledge_chunks_site_hash"),
     )

@@ -22,14 +22,17 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     }
   }, [isError, user, logout]);
 
+  // Order: redirect on auth failure → show spinner while re-validating → render.
+  // Previously, a slow /me round-trip rendered children immediately, so the
+  // first data fetch could fire with a stale-or-missing token before logout.
   if (isError || !user) {
     return <Navigate to="/login" replace />;
   }
 
-  if (isLoading) {
+  if (user && isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-gray-400">Loading...</div>
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary-600 border-t-transparent" />
       </div>
     );
   }

@@ -50,7 +50,6 @@ export default function Models() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["models-providers"] });
       queryClient.invalidateQueries({ queryKey: ["custom-models"] });
-      queryClient.invalidateQueries({ queryKey: ["providers"] });
       resetAddForm();
       toast.success(t("models.modelAdded"));
     },
@@ -66,7 +65,6 @@ export default function Models() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["models-providers"] });
       queryClient.invalidateQueries({ queryKey: ["custom-models"] });
-      queryClient.invalidateQueries({ queryKey: ["providers"] });
       toast.success(t("models.modelRemoved"));
     },
   });

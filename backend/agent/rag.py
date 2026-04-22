@@ -1,7 +1,6 @@
 import contextlib
 
 import chromadb
-
 from config import settings
 
 

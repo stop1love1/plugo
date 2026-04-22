@@ -2,12 +2,12 @@ import asyncio
 import json
 import os
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
-
 from auth import TokenData, get_current_user
 from config import settings
+from fastapi import APIRouter, Depends, HTTPException
 from logging_config import logger
+from pydantic import BaseModel, Field
+
 from providers.factory import get_all_providers, get_embedding_providers, get_llm_provider, load_provider_key
 from routers.llm_keys import get_key_for_provider
 

@@ -33,6 +33,7 @@ async def analytics_site(db_repos):
 async def _seed_session(db_repos, site_id: str, messages: list[dict], started_at: datetime | None = None):
     """Insert a session with a known message list and (optionally) backdated start."""
     from database import async_session
+
     from models.chat import ChatSession
 
     # We need to force `started_at` to a backdated value for the

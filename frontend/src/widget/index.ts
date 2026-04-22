@@ -17,8 +17,22 @@ declare global {
       inputPlaceholder?: string;
       autoOpenDelay?: number;
       bubbleSize?: string;
+      /**
+       * When `true`, the widget stops sending page URL, title, and innerText
+       * to the backend. Useful for privacy-sensitive hosts and consent-gated
+       * deployments that can't share page content until the visitor opts in.
+       */
+      disablePageContext?: boolean;
     };
   }
+}
+
+const DEFAULT_PRIMARY_COLOR = "#6366f1";
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+/** Reject any primaryColor that isn't a strict 6-digit hex; host-page config is untrusted CSS input. */
+function safePrimaryColor(value: string | undefined): string {
+  return typeof value === "string" && HEX_COLOR_RE.test(value) ? value : DEFAULT_PRIMARY_COLOR;
 }
 
 let _cachedPageContext: Record<string, unknown> | null = null;
@@ -65,9 +79,13 @@ function init() {
 
   const shadow = host.attachShadow({ mode: "open" });
 
+  // Host-page-supplied primaryColor is untrusted CSS input — validate before
+  // interpolating into <style> to block CSS-injection payloads like "red;}*{display:none".
+  const primaryColor = safePrimaryColor(config.primaryColor);
+
   // Inject styles into shadow DOM
   const style = document.createElement("style");
-  style.textContent = getWidgetStyles(config.primaryColor || "#6366f1");
+  style.textContent = getWidgetStyles(primaryColor);
   shadow.appendChild(style);
 
   // Render app into shadow DOM
@@ -92,7 +110,7 @@ function init() {
     h(App, {
       token: config.token,
       serverUrl: config.serverUrl || "",
-      primaryColor: config.primaryColor || "#6366f1",
+      primaryColor: primaryColor,
       greeting: config.greeting || "",
       position: config.position || "bottom-right",
       widgetTitle: config.widgetTitle || "",
@@ -101,7 +119,9 @@ function init() {
       inputPlaceholder: config.inputPlaceholder || "",
       autoOpenDelay: config.autoOpenDelay || 0,
       bubbleSize: config.bubbleSize || "medium",
-      getPageContext,
+      // When the host opts out of page context, return an empty object so the
+      // backend sees no URL/title/pageText for this visitor.
+      getPageContext: config.disablePageContext ? () => ({}) : getPageContext,
     }),
     container
   );

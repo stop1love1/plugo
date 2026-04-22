@@ -2,13 +2,13 @@ import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from pydantic import BaseModel
-
 from auth import TokenData, get_current_user
 from config import settings
-from knowledge.crawler import WebCrawler
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from logging_config import logger
+from pydantic import BaseModel
+
+from knowledge.crawler import WebCrawler
 from repositories import Repositories, create_repos, get_repos
 
 router = APIRouter(prefix="/api/crawl", tags=["crawl"])
@@ -567,6 +567,15 @@ async def _run_crawl_with_tracking(
             await _repos_flag.close()
     except Exception:
         allow_private = False
+
+    # Loud log line every time the private-IP guard is bypassed. Operators audit this.
+    if allow_private:
+        logger.warning(
+            "SECURITY: crawl bypassing private-IP guard",
+            site_id=site_id,
+            job_id=job_id,
+            start_url=url,
+        )
 
     # Browser login: extract cookies once before crawl loop
     auth_cookies = None

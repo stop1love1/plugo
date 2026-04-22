@@ -6,12 +6,12 @@ Credentials are set via USERNAME / PASSWORD in .env
 
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
-
 from auth import TokenData, create_access_token, get_current_user, verify_credentials
 from config import settings
+from fastapi import APIRouter, Depends, HTTPException, status
 from logging_config import logger
+from pydantic import BaseModel, Field
+
 from repositories import Repositories, get_repos
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])

@@ -12,27 +12,33 @@ type Store = {
   logout: () => void;
 };
 
-// Restore user from localStorage on load
+// Restore user from storage on load. Token lives in sessionStorage so it dies
+// on tab close (smaller blast radius for XSS theft); user profile stays in
+// localStorage so the dashboard UI can render before the first re-auth.
+// TODO(security): migrate token to an httpOnly cookie and drop client-side storage entirely.
 let initialUser = null;
 try {
   const savedUser = localStorage.getItem("plugo_user");
-  initialUser = savedUser ? JSON.parse(savedUser) : null;
+  const savedToken = sessionStorage.getItem("plugo_token");
+  // Only restore a user if we still have a live token for this tab.
+  initialUser = savedUser && savedToken ? JSON.parse(savedUser) : null;
 } catch {
   localStorage.removeItem("plugo_user");
-  localStorage.removeItem("plugo_token");
+  sessionStorage.removeItem("plugo_token");
 }
 
 export const useStore = create<Store>((set) => ({
   user: initialUser,
   setUser: (user) => {
     if (user) {
-      localStorage.setItem("plugo_token", user.token);
+      // TODO(security): migrate to httpOnly cookie
+      sessionStorage.setItem("plugo_token", user.token);
       localStorage.setItem("plugo_user", JSON.stringify(user));
     }
     set({ user });
   },
   logout: () => {
-    localStorage.removeItem("plugo_token");
+    sessionStorage.removeItem("plugo_token");
     localStorage.removeItem("plugo_user");
     set({ user: null });
   },

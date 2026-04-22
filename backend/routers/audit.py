@@ -1,6 +1,6 @@
+from auth import TokenData, get_current_user
 from fastapi import APIRouter, Depends
 
-from auth import TokenData, get_current_user
 from repositories import Repositories, get_repos
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])

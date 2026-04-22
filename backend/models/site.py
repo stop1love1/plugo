@@ -1,9 +1,8 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, String, Text
-
 from database import Base
+from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, String, Text
 
 
 class Site(Base):

@@ -36,8 +36,8 @@
   },
   "auth": {
     "enabled": true,
-    "username": "plugo",
-    "password": "pluginme"
+    "username": "",
+    "password": ""
   },
   "crawl": {
     "verify_ssl": true,

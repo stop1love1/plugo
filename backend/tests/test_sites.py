@@ -1,7 +1,6 @@
 """Tests for Sites CRUD flow and the per-site origin validator."""
 
 import pytest
-
 from utils.cors import validate_site_origin
 
 

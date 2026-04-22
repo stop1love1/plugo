@@ -3,10 +3,9 @@
 from pathlib import Path
 
 import pytest
+from database import _migrate_add_columns
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
-
-from database import _migrate_add_columns
 
 
 @pytest.mark.asyncio

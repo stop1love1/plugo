@@ -1,9 +1,8 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text
-
 from database import Base
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text
 
 
 class VisitorMemory(Base):

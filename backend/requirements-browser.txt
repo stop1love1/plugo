@@ -1,0 +1,4 @@
+# Optional: browser-based authenticated crawler.
+# Install with `make setup-browser` (runs `playwright install chromium` after pip).
+-r requirements.txt
+playwright==1.47.0

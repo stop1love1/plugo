@@ -3,10 +3,10 @@
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, Query
-
 from auth import TokenData, get_current_user
+from fastapi import APIRouter, Depends, Query
 from logging_config import logger
+
 from repositories import Repositories, get_repos
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])

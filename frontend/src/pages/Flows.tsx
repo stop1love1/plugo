@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { EmptyState } from "../components/EmptyState";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useLocale } from "../lib/useLocale";
 
 export default function Flows() {
@@ -22,6 +23,7 @@ export default function Flows() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [editingFlowId, setEditingFlowId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Flow | null>(null);
 
   // Create form
   const [newName, setNewName] = useState("");
@@ -53,9 +55,13 @@ export default function Flows() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["flows", siteId] });
       if (editingFlowId) setEditingFlowId(null);
+      setDeleteTarget(null);
       toast.success(t("flows.deleted"));
     },
-    onError: () => toast.error(t("flows.deleteFailed")),
+    onError: () => {
+      setDeleteTarget(null);
+      toast.error(t("flows.deleteFailed"));
+    },
   });
 
   const handleCreate = (e: React.FormEvent) => {
@@ -187,9 +193,7 @@ export default function Flows() {
                     <Pencil className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => {
-                      if (confirm(t("flows.confirmDelete"))) deleteMutation.mutate(flow.id);
-                    }}
+                    onClick={() => setDeleteTarget(flow)}
                     className="text-gray-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-gray-50"
                     title={t("flows.deleteFlow")}
                   >
@@ -201,6 +205,16 @@ export default function Flows() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={t("flows.deleteFlow")}
+        message={t("flows.confirmDelete")}
+        danger
+        loading={deleteMutation.isPending}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

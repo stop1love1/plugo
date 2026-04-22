@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useBlocker } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { getErrorMessage, getSite, updateSite, deleteSite, getModelsProviders, type UpdateSiteData } from "../lib/api";
@@ -168,21 +168,15 @@ export default function Settings() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [hasChanges]);
 
-  // Block in-app navigation when there are unsaved changes (works with BrowserRouter)
-  useEffect(() => {
-    if (!hasChanges) return;
-
-    const handleBeforeNav = (e: PopStateEvent) => {
-      if (!window.confirm(t("settings.unsavedLeaveConfirm"))) {
-        e.preventDefault();
-        // Push the current URL back to cancel the navigation
-        window.history.pushState(null, "", window.location.href);
-      }
-    };
-
-    window.addEventListener("popstate", handleBeforeNav);
-    return () => window.removeEventListener("popstate", handleBeforeNav);
-  }, [hasChanges, t]);
+  // Block in-app route changes when there are unsaved edits. `useBlocker`
+  // only fires for navigations inside React Router; `beforeunload` above
+  // still covers browser close/refresh.
+  // NOTE: requires the app to use `createBrowserRouter` + `RouterProvider`
+  // (data router). With the plain `<BrowserRouter>` wrapper, useBlocker is
+  // a no-op — see main.tsx if you need the guard to fire.
+  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
+    hasChanges && currentLocation.pathname !== nextLocation.pathname,
+  );
 
   const deletesMutation = useMutation({
     mutationFn: () => deleteSite(siteId!),
@@ -496,6 +490,15 @@ export default function Settings() {
           </button>
         )}
       </div>
+
+      <ConfirmDialog
+        open={blocker.state === "blocked"}
+        title={t("settings.unsavedChanges")}
+        message={t("settings.unsavedLeaveConfirm")}
+        danger
+        onConfirm={() => blocker.proceed?.()}
+        onCancel={() => blocker.reset?.()}
+      />
     </div>
   );
 }

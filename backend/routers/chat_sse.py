@@ -20,18 +20,18 @@ import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
+from config import settings
 from fastapi import APIRouter, Depends, HTTPException, Request
+from logging_config import logger
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
-
-from agent.core import ChatAgent
-from config import settings
-from logging_config import logger
-from repositories import Repositories, get_repos
-from routers.chat import get_cached_site
 from utils.cors import validate_site_origin
 from utils.pricing import estimate_cost
 from utils.rate_limit import acquire_sse_slot, release_sse_slot, site_token_key
+
+from agent.core import ChatAgent
+from repositories import Repositories, get_repos
+from routers.chat import get_cached_site
 
 router = APIRouter()
 

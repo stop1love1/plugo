@@ -32,7 +32,16 @@ async def ensure_indexes(db: AsyncIOMotorDatabase) -> None:
     # dedup + list_content_hashes filter on site_id+content_hash).
     await db["knowledge_chunks"].create_index("site_id")
     await db["knowledge_chunks"].create_index([("site_id", 1), ("source_url", 1)])
-    await db["knowledge_chunks"].create_index([("site_id", 1), ("content_hash", 1)])
+    # UNIQUE on (site_id, content_hash) to make the DB authoritative for dedup.
+    # Partial filter skips docs without a content_hash so legacy/non-hash rows
+    # don't collide. MIGRATION: if an existing Mongo deployment already has the
+    # non-unique index, drop it first: `db.knowledge_chunks.dropIndex(
+    # "site_id_1_content_hash_1")` then redeploy.
+    await db["knowledge_chunks"].create_index(
+        [("site_id", 1), ("content_hash", 1)],
+        unique=True,
+        partialFilterExpression={"content_hash": {"$type": "string"}},
+    )
 
     # tools: index on site_id
     await db["tools"].create_index("site_id")
@@ -149,8 +158,13 @@ class MongoSiteRepo(BaseSiteRepo):
         doc = await self.col.find_one({"_id": site_id}, {"crawl_login_password": 1})
         if not doc or not doc.get("crawl_login_password"):
             return None
+        from logging_config import logger
         from utils.crypto import decrypt_value
-        return decrypt_value(doc["crawl_login_password"])
+        try:
+            return decrypt_value(doc["crawl_login_password"])
+        except ValueError as e:
+            logger.warning("Crawl password decryption failed", site_id=site_id, error=str(e))
+            return None
 
 
 # --- Knowledge ---
@@ -208,6 +222,8 @@ class MongoKnowledgeRepo(BaseKnowledgeRepo):
         if not chunks:
             return []
 
+        from pymongo.errors import BulkWriteError
+
         # Batch dedup: get all existing hashes for this site in one query
         hashes_to_check = [c.get("content_hash") for c in chunks if c.get("content_hash")]
         existing_hashes: set[str] = set()
@@ -220,10 +236,13 @@ class MongoKnowledgeRepo(BaseKnowledgeRepo):
 
         docs = []
         ids = []
+        seen_in_batch: set[str] = set()
         for data in chunks:
             content_hash = data.get("content_hash")
-            if content_hash and content_hash in existing_hashes:
-                continue  # Duplicate — skip
+            if content_hash:
+                if content_hash in existing_hashes or content_hash in seen_in_batch:
+                    continue  # Duplicate — skip
+                seen_in_batch.add(content_hash)
 
             doc_id = data.get("id", str(uuid.uuid4()))
             docs.append({
@@ -240,7 +259,14 @@ class MongoKnowledgeRepo(BaseKnowledgeRepo):
             })
             ids.append(doc_id)
         if docs:
-            await self.col.insert_many(docs)
+            import contextlib
+            # ordered=False so a race-condition duplicate-key on one doc doesn't
+            # prevent the rest of the batch from inserting. Suppressing
+            # BulkWriteError here is intentional — duplicates from a concurrent
+            # writer are expected once the UNIQUE index is in place; other
+            # failure classes (e.g. network) still surface via other calls.
+            with contextlib.suppress(BulkWriteError):
+                await self.col.insert_many(docs, ordered=False)
         return ids
 
     async def delete_many(self, chunk_ids: list[str]) -> int:

@@ -42,7 +42,12 @@ def encrypt_value(value: str) -> str:
 
 
 def decrypt_value(encrypted: str) -> str:
-    """Decrypt a Fernet-encrypted value. Supports both new (random salt) and legacy (fixed salt) formats."""
+    """Decrypt a Fernet-encrypted value. Supports both new (random salt) and legacy (fixed salt) formats.
+
+    Raises ``ValueError`` when both decryption paths fail. The old behavior — returning
+    the input verbatim — silently leaked raw ciphertext (or a broken key) to callers,
+    which could end up being used as a secret in a tool call or an API request.
+    """
     try:
         # Try new format: extract random salt from first 16 bytes
         raw = base64.urlsafe_b64decode(encrypted.encode())
@@ -56,5 +61,6 @@ def decrypt_value(encrypted: str) -> str:
         # Fallback: try legacy fixed salt
         return _legacy_fernet.decrypt(encrypted.encode()).decode()
     except Exception:
-        # Final fallback: return as-is for legacy plaintext values
-        return encrypted
+        raise ValueError(
+            "decrypt_value: cannot recover plaintext — SECRET_KEY rotation or corrupted ciphertext"
+        ) from None

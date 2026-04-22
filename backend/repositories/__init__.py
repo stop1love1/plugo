@@ -74,9 +74,8 @@ _mongo_db = None
 def _get_mongo_db():
     global _mongo_client, _mongo_db
     if _mongo_db is None:
-        from motor.motor_asyncio import AsyncIOMotorClient
-
         from config import settings
+        from motor.motor_asyncio import AsyncIOMotorClient
         _mongo_client = AsyncIOMotorClient(settings.mongodb_url)
         _mongo_db = _mongo_client[settings.mongodb_database]
     return _mongo_db

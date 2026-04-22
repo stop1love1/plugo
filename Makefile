@@ -14,7 +14,7 @@
 #
 # ============================================
 
-.PHONY: help setup install dev up down build clean logs lint format typecheck test check
+.PHONY: help setup setup-browser install install-dev dev up down build clean logs lint format typecheck test check
 
 # Detect OS for venv path
 ifeq ($(OS),Windows_NT)
@@ -62,6 +62,10 @@ install-dev: ## Install all dependencies including dev tools
 	$(PIP) install -r backend/requirements-dev.txt
 	cd frontend && pnpm install
 	$(VENV_BIN)/pre-commit install
+
+setup-browser: ## Install optional browser-crawl deps (Playwright + Chromium)
+	$(PIP) install -r backend/requirements-browser.txt
+	$(PYTHON) -m playwright install chromium
 
 # ============================================================
 # Development

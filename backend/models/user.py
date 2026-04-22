@@ -1,9 +1,8 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Column, DateTime, String
-
 from database import Base
+from sqlalchemy import Column, DateTime, String
 
 
 class User(Base):

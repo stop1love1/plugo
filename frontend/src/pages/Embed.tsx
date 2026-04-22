@@ -178,7 +178,7 @@ p{text-align:center;font-size:14px;}</style></head>
               title="Widget Preview"
               className="w-full border-0 rounded-b-xl"
               style={{ height: "500px" }}
-              sandbox="allow-scripts allow-same-origin"
+              sandbox="allow-scripts"
             />
           </div>
         )}

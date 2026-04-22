@@ -53,7 +53,7 @@ export function LLMKeysSection({ providers }: { providers: Provider[] }) {
     mutationFn: (data: { provider: string; api_key: string }) => saveLLMKey(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["llm-keys"] });
-      queryClient.invalidateQueries({ queryKey: ["providers"] });
+      queryClient.invalidateQueries({ queryKey: ["models-providers"] });
       setEditingProvider(null);
       setKeyInput("");
       toast.success(t("settings.keySaved"));
@@ -65,7 +65,7 @@ export function LLMKeysSection({ providers }: { providers: Provider[] }) {
     mutationFn: deleteLLMKey,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["llm-keys"] });
-      queryClient.invalidateQueries({ queryKey: ["providers"] });
+      queryClient.invalidateQueries({ queryKey: ["models-providers"] });
       toast.success(t("settings.keyDeleted"));
     },
   });

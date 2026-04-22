@@ -1,15 +1,14 @@
-import contextlib
 import json
 
+from auth import TokenData, get_current_user
 from fastapi import APIRouter, Depends, HTTPException
+from logging_config import logger
 from pydantic import BaseModel
+from utils.crypto import decrypt_value, encrypt_value
 
 from agent.tools import tool_executor
-from auth import TokenData, get_current_user
 from knowledge.crawler import _is_safe_public_url
-from logging_config import logger
 from repositories import Repositories, get_repos
-from utils.crypto import decrypt_value, encrypt_value
 
 router = APIRouter(prefix="/api/tools", tags=["tools"])
 
@@ -56,8 +55,16 @@ async def list_tools(site_id: str, repos: Repositories = Depends(get_repos), _us
     tools = await repos.tools.list_by_site(site_id)
     for tool in tools:
         if tool.get("auth_value"):
-            with contextlib.suppress(Exception):  # Value may not be encrypted (legacy data)
+            try:
                 tool["auth_value"] = decrypt_value(tool["auth_value"])
+            except ValueError as e:
+                # Dashboard listing — surface "" rather than unreadable ciphertext.
+                logger.warning(
+                    "Tool auth_value decryption failed in list_tools",
+                    tool_id=tool.get("id"),
+                    error=str(e),
+                )
+                tool["auth_value"] = ""
     return tools
 
 
@@ -147,8 +154,16 @@ async def test_tool(tool_id: str, data: ToolTestRequest, repos: Repositories = D
     # Decrypt auth_value before executing
     auth_value = tool.get("auth_value")
     if auth_value:
-        with contextlib.suppress(Exception):  # Value may not be encrypted (legacy data)
+        try:
             auth_value = decrypt_value(auth_value)
+        except ValueError as e:
+            logger.warning(
+                "Tool auth_value decryption failed during test", tool_id=tool_id, error=str(e)
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="Tool credential cannot be decrypted — re-enter the auth value.",
+            ) from e
 
     result = await tool_executor.execute_tool(
         tool_meta={

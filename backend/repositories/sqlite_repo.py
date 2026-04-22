@@ -197,8 +197,13 @@ class SQLiteSiteRepo(BaseSiteRepo):
         site = await self.db.get(Site, site_id)
         if not site or not site.crawl_login_password:
             return None
+        from logging_config import logger
         from utils.crypto import decrypt_value
-        return decrypt_value(site.crawl_login_password)
+        try:
+            return decrypt_value(site.crawl_login_password)
+        except ValueError as e:
+            logger.warning("Crawl password decryption failed", site_id=site_id, error=str(e))
+            return None
 
 
 # --- Knowledge ---
@@ -263,6 +268,8 @@ class SQLiteKnowledgeRepo(BaseKnowledgeRepo):
         if not chunks:
             return []
 
+        from sqlalchemy.exc import IntegrityError
+
         # Batch dedup: get all existing hashes for this site in one query
         hashes_to_check = [c.get("content_hash") for c in chunks if c.get("content_hash")]
         existing_hashes: set[str] = set()
@@ -275,13 +282,26 @@ class SQLiteKnowledgeRepo(BaseKnowledgeRepo):
             )
             existing_hashes = set(row[0] for row in existing_hashes_result.fetchall())
 
-        ids = []
+        # Dedup within this batch too — two rows with the same hash in one call
+        # would otherwise both pass the pre-check and then collide on insert.
+        seen_in_batch: set[str] = set()
+        ids: list[str] = []
         for data in chunks:
             content_hash = data.get("content_hash")
-            if content_hash and content_hash in existing_hashes:
-                continue  # Duplicate — skip
+            if content_hash:
+                if content_hash in existing_hashes or content_hash in seen_in_batch:
+                    continue  # Duplicate — skip
+                seen_in_batch.add(content_hash)
             chunk = KnowledgeChunk(**data)
             self.db.add(chunk)
+            try:
+                # Flush per-row so the UNIQUE constraint catches race-condition
+                # collisions from a concurrent crawler rather than failing the
+                # whole batch.
+                await self.db.flush()
+            except IntegrityError:
+                await self.db.rollback()
+                continue
             ids.append(data.get("id", chunk.id))
         await self.db.commit()
         return ids

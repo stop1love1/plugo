@@ -1,9 +1,8 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
-
 from database import Base
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 
 
 class Flow(Base):
