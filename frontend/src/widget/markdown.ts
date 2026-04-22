@@ -28,6 +28,16 @@ function escapeAttr(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/** Escape a string for safe use as HTML text content */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /** Sanitize URL — only allow http(s) and relative paths */
 export function sanitizeUrl(url: string): string {
   if (/^https?:\/\//i.test(url) || url.startsWith("/")) return url;
@@ -57,25 +67,26 @@ const marked = new Marked({
     image(token) {
       const url = sanitizeUrl(token.href);
       const alt = token.text || "";
-      // YouTube embed
+      // YouTube embed (ytId is regex-matched [\w-]{11}, safe to inline)
       const ytId = getYouTubeId(url);
       if (ytId || alt.toLowerCase() === "video") {
         if (ytId) {
           return `<div class="plugo-video"><iframe src="https://www.youtube.com/embed/${ytId}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
         }
         // Generic video
-        return `<div class="plugo-video"><video src="${url}" controls preload="metadata"></video></div>`;
+        return `<div class="plugo-video"><video src="${escapeAttr(url)}" controls preload="metadata"></video></div>`;
       }
       // Regular image
-      return `<div class="plugo-image"><img src="${url}" alt="${escapeAttr(alt)}" loading="lazy" /></div>`;
+      return `<div class="plugo-image"><img src="${escapeAttr(url)}" alt="${escapeAttr(alt)}" loading="lazy" /></div>`;
     },
     // Links — detect "button" title to render as button
     link(token) {
       const href = sanitizeUrl(token.href);
+      const text = escapeHtml(token.text || "");
       if (token.title === "button") {
-        return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="plugo-btn">${token.text}</a>`;
+        return `<a href="${escapeAttr(href)}" target="_blank" rel="noopener noreferrer" class="plugo-btn">${text}</a>`;
       }
-      return `<a href="${href}" target="_blank" rel="noopener noreferrer">${token.text}</a>`;
+      return `<a href="${escapeAttr(href)}" target="_blank" rel="noopener noreferrer">${text}</a>`;
     },
   },
 });

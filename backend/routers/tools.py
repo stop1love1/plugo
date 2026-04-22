@@ -1,13 +1,12 @@
 import contextlib
-import ipaddress
 import json
-from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from agent.tools import tool_executor
 from auth import TokenData, get_current_user
+from knowledge.crawler import _is_safe_public_url
 from logging_config import logger
 from repositories import Repositories, get_repos
 from utils.crypto import decrypt_value, encrypt_value
@@ -43,23 +42,13 @@ class ToolTestRequest(BaseModel):
     params: dict = {}
 
 
-def validate_tool_url(url: str) -> bool:
-    """Prevent SSRF by blocking internal/private IPs."""
-    parsed = urlparse(url)
-    hostname = parsed.hostname
-    if not hostname:
-        return False
-    # Block private/internal hostnames
-    blocked_hosts = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
-    if hostname in blocked_hosts:
-        return False
-    try:
-        ip = ipaddress.ip_address(hostname)
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
-            return False
-    except ValueError:
-        pass  # hostname is a domain, not an IP — OK
-    return True
+async def validate_tool_url(url: str) -> tuple[bool, str]:
+    """Prevent SSRF by blocking internal/private IPs and cloud metadata endpoints.
+
+    Uses the shared SSRF helper (with DNS resolution) to match the guard applied
+    at tool execution time. Tools never get the allow_private escape hatch.
+    """
+    return await _is_safe_public_url(url, allow_private=False)
 
 
 @router.get("")
@@ -74,8 +63,9 @@ async def list_tools(site_id: str, repos: Repositories = Depends(get_repos), _us
 
 @router.post("")
 async def create_tool(data: ToolCreate, repos: Repositories = Depends(get_repos), user: TokenData = Depends(get_current_user)):
-    if not validate_tool_url(data.url):
-        raise HTTPException(status_code=400, detail="URL targets internal network")
+    safe, reason = await validate_tool_url(data.url)
+    if not safe:
+        raise HTTPException(status_code=400, detail=f"URL rejected: {reason}")
     tool_data = data.model_dump()
     if tool_data.get("auth_value"):
         tool_data["auth_value"] = encrypt_value(tool_data["auth_value"])
@@ -96,8 +86,10 @@ async def create_tool(data: ToolCreate, repos: Repositories = Depends(get_repos)
 
 @router.put("/{tool_id}")
 async def update_tool(tool_id: str, data: ToolUpdate, repos: Repositories = Depends(get_repos), user: TokenData = Depends(get_current_user)):
-    if data.url is not None and not validate_tool_url(data.url):
-        raise HTTPException(status_code=400, detail="URL targets internal network")
+    if data.url is not None:
+        safe, reason = await validate_tool_url(data.url)
+        if not safe:
+            raise HTTPException(status_code=400, detail=f"URL rejected: {reason}")
     update_data = data.model_dump(exclude_none=True)
     if update_data.get("auth_value"):
         update_data["auth_value"] = encrypt_value(update_data["auth_value"])
@@ -147,10 +139,10 @@ async def test_tool(tool_id: str, data: ToolTestRequest, repos: Repositories = D
         raise HTTPException(status_code=404, detail="Tool not found")
 
     # Re-validate URL at execution time to prevent DNS rebinding attacks.
-    # Note: for production, consider using an HTTP proxy that blocks internal IPs
-    # at the network level, since DNS can resolve differently between checks.
-    if not validate_tool_url(tool["url"]):
-        raise HTTPException(status_code=400, detail="URL targets internal network")
+    # Note: the executor also re-runs this check; we raise here for a clear 400.
+    safe, reason = await validate_tool_url(tool["url"])
+    if not safe:
+        raise HTTPException(status_code=400, detail=f"URL rejected: {reason}")
 
     # Decrypt auth_value before executing
     auth_value = tool.get("auth_value")

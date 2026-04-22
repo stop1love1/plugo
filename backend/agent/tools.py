@@ -1,5 +1,7 @@
 import httpx
 
+from knowledge.crawler import _is_safe_public_url
+from logging_config import logger
 from utils.crypto import decrypt_value
 
 
@@ -62,6 +64,13 @@ class ToolExecutor:
         method = tool_meta["method"].upper()
         url = tool_meta["url"]
         headers = dict(tool_meta.get("headers", {}))
+
+        # SSRF guard: tool URLs are admin-configured but revalidated at execution time
+        # (DNS rebinding defense). Tools never get the allow_private escape hatch.
+        safe, reason = await _is_safe_public_url(url, allow_private=False)
+        if not safe:
+            logger.warning("Blocked tool execution due to unsafe URL", url=url, reason=reason)
+            return {"error": f"Blocked unsafe tool URL: {reason}", "success": False}
 
         if tool_meta.get("auth_type") == "bearer" and tool_meta.get("auth_value"):
             headers["Authorization"] = f"Bearer {tool_meta['auth_value']}"
