@@ -117,9 +117,26 @@ class ChatAgent:
         self.bot_rules = bot_rules
         self.response_language = response_language  # "auto" | "vi" | "en"
         self.llm_provider_name = llm_provider
+        self.llm_model = llm_model
         self.provider: BaseLLMProvider = get_llm_provider(llm_provider, llm_model)
         self.messages: list[dict] = []
         self.supports_tools = llm_provider not in self._NO_TOOL_PROVIDERS
+        # Accumulated across tool rounds and turns. None when the provider can't report.
+        self.total_usage: dict | None = None
+        # Structured citations from the most recent turn (deduped by URL, max score kept).
+        # Router reads this after streaming to emit a dedicated {"type":"citations"} event.
+        self.last_citations: list[dict] = []
+
+    def _accumulate_usage(self, usage: dict | None) -> None:
+        if not usage:
+            return
+        in_t = int(usage.get("input_tokens") or 0)
+        out_t = int(usage.get("output_tokens") or 0)
+        if self.total_usage is None:
+            self.total_usage = {"input_tokens": in_t, "output_tokens": out_t}
+        else:
+            self.total_usage["input_tokens"] += in_t
+            self.total_usage["output_tokens"] += out_t
 
     def _append_tool_messages(self, tc: dict, result_str: str):
         """Append tool call assistant message and tool result in the correct format for the active provider."""
@@ -226,7 +243,14 @@ class ChatAgent:
         visitor_id: str | None = None,
         conversation_summary: str | None = None,
     ) -> tuple[str, list[dict], bool]:
-        """Build system prompt and return (prompt, tools, has_knowledge_match)."""
+        """Build system prompt and return (prompt, tools, has_knowledge_match).
+
+        Also populates self.last_citations with deduplicated-by-URL chunks used
+        as context, so the transport layer (WS/SSE) can emit a structured
+        citations event. We no longer ask the LLM to format a "Sources:" tail.
+        """
+        # Reset citations — we collect them fresh per turn.
+        self.last_citations = []
 
         # --- Visitor memory ---
         memory_section = ""
@@ -299,19 +323,30 @@ class ChatAgent:
                 if chunks:
                     has_knowledge_match = True
                     knowledge_parts = []
+                    # Dedupe by URL keeping max score so the widget's Sources list is stable.
+                    citations_by_url: dict[str, dict] = {}
                     for i, chunk in enumerate(chunks):
                         source = chunk["metadata"].get("source_url", "")
                         title = chunk["metadata"].get("title", "")
-                        score = chunk.get("score", 0)
+                        score = float(chunk.get("score", 0) or 0)
                         knowledge_parts.append(
                             f"[{i+1}] {title} ({source}) [relevance: {score:.0%}]\n{chunk['content']}"
                         )
+                        if source:
+                            existing = citations_by_url.get(source)
+                            if existing is None or score > existing["score"]:
+                                citations_by_url[source] = {
+                                    "url": source,
+                                    "title": title or source,
+                                    "score": score,
+                                }
+                    # Sort by score desc for deterministic rendering.
+                    self.last_citations = sorted(
+                        citations_by_url.values(), key=lambda c: c["score"], reverse=True
+                    )
                     knowledge_section = (
                         "## Knowledge Base (crawled content)\n"
-                        "IMPORTANT: When answering from the knowledge base, you MUST cite your sources.\n"
-                        "At the end of your answer, add a '**Sources:**' section listing the URLs you used, e.g.:\n"
-                        "**Sources:**\n"
-                        "- [Page Title](https://example.com/page)\n\n"
+                        "Use the following context to answer the user. Do not fabricate URLs.\n\n"
                         + "\n\n---\n\n".join(knowledge_parts)
                     )
                 elif not knowledge_section:
@@ -383,6 +418,9 @@ class ChatAgent:
         """Process user message → stream response with tool calling support."""
         self.messages.append({"role": "user", "content": message})
 
+        # Reset at the start of each turn; accumulate across tool rounds + the final stream.
+        self.total_usage = None
+
         system_prompt, tools, has_knowledge_match = await self._build_system_prompt(
             message, page_context, repos, visitor_id, conversation_summary,
         )
@@ -405,6 +443,7 @@ class ChatAgent:
                 system_prompt=system_prompt,
                 tools=tools,
             )
+            self._accumulate_usage(result.get("usage"))
 
             while result.get("tool_calls") and round_count < max_tool_rounds:
                 round_count += 1
@@ -435,6 +474,7 @@ class ChatAgent:
                     system_prompt=system_prompt,
                     tools=tools,
                 )
+                self._accumulate_usage(result.get("usage"))
 
             # If the last non-streaming call had no tool calls but produced content,
             # we still want to stream the final response for a better UX.
@@ -450,6 +490,9 @@ class ChatAgent:
             full_response += token
             yield token
 
+        # Provider populated last_usage once the stream finished.
+        self._accumulate_usage(self.provider.last_usage)
+
         self.messages.append({"role": "assistant", "content": full_response})
 
     async def get_response(
@@ -462,6 +505,7 @@ class ChatAgent:
     ) -> str:
         """Process user message → full response with tool calling."""
         self.messages.append({"role": "user", "content": message})
+        self.total_usage = None
         system_prompt, tools, has_knowledge_match = await self._build_system_prompt(
             message, page_context, repos, visitor_id, conversation_summary,
         )
@@ -477,6 +521,7 @@ class ChatAgent:
             system_prompt=system_prompt,
             tools=effective_tools,
         )
+        self._accumulate_usage(result.get("usage"))
 
         # Handle tool calls (Action mode)
         max_tool_rounds = 3  # Prevent infinite loops
@@ -506,6 +551,7 @@ class ChatAgent:
                 system_prompt=system_prompt,
                 tools=effective_tools,
             )
+            self._accumulate_usage(result.get("usage"))
 
         self.messages.append({"role": "assistant", "content": result["content"]})
         return result["content"]

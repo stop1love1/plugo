@@ -29,7 +29,7 @@ function escapeAttr(s: string): string {
 }
 
 /** Sanitize URL — only allow http(s) and relative paths */
-function sanitizeUrl(url: string): string {
+export function sanitizeUrl(url: string): string {
   if (/^https?:\/\//i.test(url) || url.startsWith("/")) return url;
   return "#";
 }

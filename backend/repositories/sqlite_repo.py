@@ -65,6 +65,7 @@ def _site_to_dict(s: Site) -> dict:
         "crawl_login_username": s.crawl_login_username or "",
         "crawl_login_password": "********" if s.crawl_login_password else "",
         "crawl_login_success_url": s.crawl_login_success_url or "",
+        "allow_private_urls": bool(s.allow_private_urls) if s.allow_private_urls is not None else False,
         # Timestamps
         "created_at": s.created_at.isoformat() if s.created_at else None,
         "updated_at": s.updated_at.isoformat() if s.updated_at else None,
@@ -105,6 +106,9 @@ def _session_to_dict(s: ChatSession) -> dict:
         "first_message": first_msg,
         "started_at": s.started_at.isoformat() if s.started_at else None,
         "ended_at": s.ended_at.isoformat() if s.ended_at else None,
+        "tokens_input": s.tokens_input or 0,
+        "tokens_output": s.tokens_output or 0,
+        "cost_usd": float(s.cost_usd or 0.0),
     }
 
 
@@ -454,6 +458,92 @@ class SQLiteChatSessionRepo(BaseChatSessionRepo):
         session.ended_at = None if clear else datetime.now(UTC)
         await self.db.commit()
         return True
+
+    async def aggregate_overview(self, site_id: str, since: datetime) -> dict:
+        """DB-side aggregation. Prefers SQLite's json_array_length() so messages never
+        materialize into Python. Duration is averaged via julianday diff in seconds.
+
+        Fallback: json_array_length() requires SQLite 3.38+. On older builds it raises
+        OperationalError, so we compute total_messages in Python from the messages
+        column (still one query). Session count + avg duration come from separate
+        queries that never touch JSON functions."""
+        from sqlalchemy.exc import OperationalError
+
+        # Session count — no JSON needed.
+        sessions_row = await self.db.execute(
+            select(func.count(ChatSession.id)).where(
+                ChatSession.site_id == site_id,
+                ChatSession.started_at >= since,
+            )
+        )
+        total_sessions = sessions_row.scalar() or 0
+
+        # Average duration (seconds) only over sessions that have ended.
+        dur_row = await self.db.execute(
+            select(
+                func.avg(
+                    (func.julianday(ChatSession.ended_at) - func.julianday(ChatSession.started_at))
+                    * 86400.0
+                )
+            ).where(
+                ChatSession.site_id == site_id,
+                ChatSession.started_at >= since,
+                ChatSession.ended_at.isnot(None),
+            )
+        )
+        avg_duration = dur_row.scalar() or 0.0
+
+        # Total messages — try json_array_length first, fall back to Python summation.
+        try:
+            msg_row = await self.db.execute(
+                select(
+                    func.coalesce(
+                        func.sum(func.json_array_length(ChatSession.messages)), 0
+                    )
+                ).where(
+                    ChatSession.site_id == site_id,
+                    ChatSession.started_at >= since,
+                )
+            )
+            total_messages = int(msg_row.scalar() or 0)
+        except OperationalError:
+            # SQLite < 3.38 — no json_array_length. Load messages and count in Python.
+            # This session is dirty after the failed statement; roll back so later
+            # queries on the same session don't raise PendingRollbackError.
+            await self.db.rollback()
+            fallback_row = await self.db.execute(
+                select(ChatSession.messages).where(
+                    ChatSession.site_id == site_id,
+                    ChatSession.started_at >= since,
+                )
+            )
+            total_messages = sum(
+                len(msgs) if isinstance(msgs, list) else 0
+                for (msgs,) in fallback_row.all()
+            )
+
+        return {
+            "total_sessions": int(total_sessions or 0),
+            "total_messages": int(total_messages or 0),
+            "avg_session_duration_seconds": float(avg_duration or 0.0),
+        }
+
+    async def add_token_usage(
+        self, session_id: str, in_tokens: int, out_tokens: int, cost_usd: float
+    ) -> bool:
+        """Atomic increment via UPDATE ... SET col = col + :x — no read-modify-write."""
+        from sqlalchemy import update as sa_update
+        result = await self.db.execute(
+            sa_update(ChatSession)
+            .where(ChatSession.id == session_id)
+            .values(
+                tokens_input=func.coalesce(ChatSession.tokens_input, 0) + in_tokens,
+                tokens_output=func.coalesce(ChatSession.tokens_output, 0) + out_tokens,
+                cost_usd=func.coalesce(ChatSession.cost_usd, 0.0) + cost_usd,
+            )
+        )
+        await self.db.commit()
+        return result.rowcount > 0
 
 
 # --- Crawl Job ---

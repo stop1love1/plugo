@@ -25,6 +25,7 @@ class SiteCreate(BaseModel):
     dark_mode: str = Field(default="auto", pattern="^(auto|light|dark)$")
     show_branding: bool = True
     allowed_domains: str = ""
+    allow_private_urls: bool = False
 
 
 class SiteUpdate(BaseModel):
@@ -44,6 +45,7 @@ class SiteUpdate(BaseModel):
     system_prompt: str | None = None
     bot_rules: str | None = None
     response_language: str | None = None  # "auto" | "vi" | "en"
+    allow_private_urls: bool | None = None
 
 
 class ApprovalUpdate(BaseModel):

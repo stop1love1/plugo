@@ -1,4 +1,5 @@
 import json
+import time
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
@@ -16,6 +17,15 @@ router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
 
 MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5MB
 MAX_PER_PAGE = 100
+# Synchronous reindex is bounded by the HTTP request timeout. Above this
+# chunk count, the CLI (`backend/manage.py reindex <site_id>`) is the supported
+# path — it doesn't race the request/response deadline and prints progress.
+REINDEX_SYNC_MAX = 1000
+REINDEX_BATCH_SIZE = 100
+# Page size used when the reindex helper pulls every chunk for a site. Kept
+# well below `REINDEX_SYNC_MAX` so the CLI path (which has no upper bound)
+# can stream through arbitrarily large sites without huge single queries.
+REINDEX_FETCH_PAGE_SIZE = 200
 
 
 @router.get("")
@@ -263,6 +273,133 @@ async def recrawl_url(
             "job_id": job["id"],
         },
     )
+
+
+async def _reindex_site(
+    site_id: str,
+    repos: Repositories,
+    progress_cb=None,
+) -> dict:
+    """Rebuild ChromaDB embeddings for every chunk on `site_id`.
+
+    Shared by the HTTP endpoint and the `manage.py reindex` CLI. Deletes
+    the site's existing Chroma collection, then re-embeds each chunk in
+    batches using the CURRENT `settings.embedding_provider` — so this is
+    the correct recovery path after swapping embedding models.
+
+    `progress_cb(done, total)` lets the CLI print a progress bar; the HTTP
+    path passes None and just gets the summary dict back.
+
+    This helper itself has NO upper bound on chunk count — the HTTP caller
+    enforces `REINDEX_SYNC_MAX`, while the CLI relies on this pagination loop
+    to handle arbitrarily large sites.
+    """
+    start = time.monotonic()
+    # Paginate through every chunk — do NOT cap at REINDEX_SYNC_MAX here,
+    # or the CLI path will silently truncate large sites and wipe Chroma
+    # without restoring the missing chunks.
+    chunks: list[dict] = []
+    page_num = 1
+    while True:
+        page = await repos.knowledge.list_by_site(
+            site_id, page=page_num, per_page=REINDEX_FETCH_PAGE_SIZE
+        )
+        page_chunks = page.get("chunks", []) or []
+        if not page_chunks:
+            break
+        chunks.extend(page_chunks)
+        reported_total = int(page.get("total") or 0)
+        # Stop when we've pulled everything reported, or when the last page
+        # came back short (fallback if `total` is missing/unreliable).
+        if reported_total and len(chunks) >= reported_total:
+            break
+        if len(page_chunks) < REINDEX_FETCH_PAGE_SIZE:
+            break
+        page_num += 1
+    total = len(chunks)
+
+    # Wipe the whole collection rather than deleting ids one by one — matches
+    # what the admin intent is: "start fresh with the new embedding model".
+    await rag_engine.delete_site(site_id)
+
+    if total == 0:
+        return {"chunks_reindexed": 0, "elapsed_seconds": round(time.monotonic() - start, 3)}
+
+    embed_provider = get_llm_provider(settings.embedding_provider, settings.embedding_model)
+    done = 0
+    for i in range(0, total, REINDEX_BATCH_SIZE):
+        batch = chunks[i : i + REINDEX_BATCH_SIZE]
+        contents = [c["content"] for c in batch]
+        embeddings = await embed_provider.embed(contents)
+        vector_chunks = [
+            {
+                "id": c.get("embedding_id") or c["id"],
+                "content": c["content"],
+                "source_url": c.get("source_url") or "",
+                "title": c.get("title") or "",
+                "chunk_index": c.get("chunk_index", 0),
+            }
+            for c in batch
+        ]
+        await rag_engine.add_chunks(site_id, vector_chunks, embeddings)
+        done += len(batch)
+        if progress_cb:
+            progress_cb(done, total)
+
+    return {"chunks_reindexed": done, "elapsed_seconds": round(time.monotonic() - start, 3)}
+
+
+@router.post("/reindex")
+async def reindex_site(
+    site_id: str,
+    repos: Repositories = Depends(get_repos),
+    user: TokenData = Depends(get_current_user),
+):
+    """Rebuild ChromaDB embeddings for every chunk on a site.
+
+    Required after swapping `settings.embedding_provider`/model. Synchronous
+    for sites with ≤ REINDEX_SYNC_MAX chunks; larger sites must use the
+    `manage.py reindex <site_id>` CLI to avoid blocking the request.
+    """
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    site = await repos.sites.get_by_id(site_id)
+    if not site:
+        raise HTTPException(status_code=404, detail="Site not found")
+
+    # Cheap count — avoid loading every chunk twice.
+    count_page = await repos.knowledge.list_by_site(site_id, page=1, per_page=1)
+    total = int(count_page.get("total") or 0)
+    if total > REINDEX_SYNC_MAX:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Site has {total} chunks (> {REINDEX_SYNC_MAX}). "
+                f"Use `python backend/manage.py reindex {site_id}` from the CLI."
+            ),
+        )
+
+    result = await _reindex_site(site_id, repos)
+
+    try:
+        await repos.audit_logs.create({
+            "user_id": user.sub,
+            "username": user.sub,
+            "action": "reindex",
+            "resource_type": "knowledge",
+            "resource_id": site_id,
+            "details": json.dumps({
+                "site_id": site_id,
+                "chunks_reindexed": result["chunks_reindexed"],
+                "embedding_provider": settings.embedding_provider,
+                "embedding_model": settings.embedding_model,
+            }),
+        })
+    except Exception as e:
+        logger.warning("Failed to create reindex audit log", error=str(e))
+
+    return {"status": "ok", **result}
 
 
 class ManualChunkCreate(BaseModel):

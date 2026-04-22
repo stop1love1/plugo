@@ -9,6 +9,8 @@ class GeminiProvider(BaseLLMProvider):
     def __init__(self, api_key: str, model: str = "gemini-1.5-flash"):
         genai.configure(api_key=api_key)
         self.model_name = model
+        # Gemini doesn't expose reliable token counts through this SDK path.
+        self.last_usage: dict | None = None
 
     async def chat(
         self,

@@ -7,6 +7,16 @@ so the app doesn't care if the backend is SQLite or MongoDB.
 from abc import ABC, abstractmethod
 from datetime import datetime
 
+# Delete-method contract (applies across every repo in this module):
+#   * `delete(id)` for a single row → bool (True if row existed and was removed).
+#   * `delete_many(ids)` / `delete_by_*` bulk deletes → int (rows removed).
+# Update-method contract:
+#   * `update(id, data)` → returns the updated dict, or None if not found.
+#   * The router layer is responsible for stripping None/"unchanged" fields
+#     (e.g. `model_dump(exclude_none=True)`) before calling — repo implementations
+#     still defensively skip None on user-facing `Site` and `Tool` updates so
+#     partial-update PATCHes don't wipe existing columns.
+
 
 class BaseSiteRepo(ABC):
     @abstractmethod
@@ -72,6 +82,16 @@ class BaseToolRepo(ABC):
 
 
 class BaseChatSessionRepo(ABC):
+    """Chat-session repository contract.
+
+    Return-value rules (both SQLite and MongoDB implementations MUST agree):
+      - update_messages / set_ended / add_token_usage: `True` iff the session
+        EXISTS (regardless of whether the stored value actually changed).
+        Mongo implementations must use `matched_count`, not `modified_count`.
+      - create: returns the newly-persisted dict with ISO-string datetimes.
+      - get_by_id / list_*: serialized dicts with ISO-string datetimes.
+    """
+
     @abstractmethod
     async def create(self, data: dict) -> dict: ...
     @abstractmethod
@@ -84,6 +104,18 @@ class BaseChatSessionRepo(ABC):
     async def update_messages(self, session_id: str, messages: list[dict]) -> bool: ...
     @abstractmethod
     async def set_ended(self, session_id: str, clear: bool = False) -> bool: ...
+    @abstractmethod
+    async def aggregate_overview(self, site_id: str, since: datetime) -> dict:
+        """Return {"total_sessions", "total_messages", "avg_session_duration_seconds"}
+        aggregated at the DB layer (no per-session Python iteration)."""
+        ...
+    @abstractmethod
+    async def add_token_usage(
+        self, session_id: str, in_tokens: int, out_tokens: int, cost_usd: float
+    ) -> bool:
+        """Atomically increment tokens_input, tokens_output, and cost_usd on a session.
+        Returns True iff the session exists (matched), mirroring update_messages."""
+        ...
 
 
 class BaseCrawlJobRepo(ABC):

@@ -6,6 +6,7 @@ import {
   Bot, AlertTriangle, Cpu, Bug,
 } from "lucide-react";
 import { getGlobalConfig, updateGlobalConfig, getErrorMessage } from "../lib/api";
+import { useLocale } from "../lib/useLocale";
 
 type SectionConfig = Record<string, unknown>;
 
@@ -70,14 +71,14 @@ function SelectField({
 // ─── Tab definitions ──────────────────────────────────────────
 
 const tabs = [
-  { id: "ai", label: "AI & Prompts", icon: Bot },
-  { id: "llm", label: "LLM & Models", icon: Cpu },
-  { id: "embedding", label: "Embedding", icon: Zap },
-  { id: "database", label: "Database", icon: Database },
-  { id: "rag", label: "RAG Pipeline", icon: Brain },
-  { id: "server", label: "Server", icon: Globe },
-  { id: "crawl", label: "Crawl", icon: Bug },
-  { id: "rate_limit", label: "Rate Limits", icon: Shield },
+  { id: "ai", labelKey: "globalSettings.tabAi", icon: Bot },
+  { id: "llm", labelKey: "globalSettings.tabLlm", icon: Cpu },
+  { id: "embedding", labelKey: "globalSettings.tabEmbedding", icon: Zap },
+  { id: "database", labelKey: "globalSettings.tabDatabase", icon: Database },
+  { id: "rag", labelKey: "globalSettings.tabRag", icon: Brain },
+  { id: "server", labelKey: "globalSettings.tabServer", icon: Globe },
+  { id: "crawl", labelKey: "globalSettings.tabCrawl", icon: Bug },
+  { id: "rate_limit", labelKey: "globalSettings.tabRateLimit", icon: Shield },
 ] as const;
 
 type TabId = (typeof tabs)[number]["id"];
@@ -86,6 +87,7 @@ type TabId = (typeof tabs)[number]["id"];
 
 export default function GlobalSettings() {
   const queryClient = useQueryClient();
+  const { t } = useLocale();
   const [activeTab, setActiveTab] = useState<TabId>("ai");
 
   const { data: config, isLoading } = useQuery({
@@ -121,7 +123,7 @@ export default function GlobalSettings() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["global-config"] });
       setHasChanges(false);
-      toast.success(data.message || "Settings saved");
+      toast.success(data.message || t("globalSettings.saved"));
     },
     onError: (error) => toast.error(getErrorMessage(error)),
   });
@@ -134,9 +136,9 @@ export default function GlobalSettings() {
         changes[section] = values;
       }
     }
-    if (Object.keys(changes).length === 0) { toast("No changes"); return; }
+    if (Object.keys(changes).length === 0) { toast(t("globalSettings.noChanges")); return; }
     mutation.mutate(changes);
-  }, [config, form, mutation]);
+  }, [config, form, mutation, t]);
 
   const handleReset = () => {
     if (config) { setForm(structuredClone(config)); setHasChanges(false); }
@@ -171,9 +173,9 @@ export default function GlobalSettings() {
     <div className="flex gap-6 -m-4 lg:-m-8 min-h-screen">
       {/* Sidebar nav */}
       <div className="w-52 shrink-0 bg-white border-r border-gray-200 p-4 sticky top-0 h-screen overflow-y-auto">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3 px-2">Settings</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3 px-2">{t("globalSettings.sidebarHeading")}</h2>
         <nav className="space-y-0.5">
-          {tabs.map(({ id, label, icon: Icon }) => (
+          {tabs.map(({ id, labelKey, icon: Icon }) => (
             <button
               key={id}
               onClick={() => scrollToSection(id)}
@@ -184,7 +186,7 @@ export default function GlobalSettings() {
               }`}
             >
               <Icon className="w-4 h-4 shrink-0" />
-              {label}
+              {t(labelKey)}
             </button>
           ))}
         </nav>
@@ -197,12 +199,12 @@ export default function GlobalSettings() {
             className="flex items-center justify-center gap-2 w-full bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50 text-sm font-medium"
           >
             <Save className="w-4 h-4" />
-            {mutation.isPending ? "Saving..." : "Save"}
+            {mutation.isPending ? t("globalSettings.saving") : t("globalSettings.save")}
           </button>
           {hasChanges && (
             <button onClick={handleReset}
               className="flex items-center justify-center gap-2 w-full text-gray-500 hover:text-gray-700 px-4 py-2 text-sm">
-              <RotateCcw className="w-4 h-4" /> Discard
+              <RotateCcw className="w-4 h-4" /> {t("globalSettings.discard")}
             </button>
           )}
         </div>
@@ -212,14 +214,14 @@ export default function GlobalSettings() {
       <div className="flex-1 py-6 pr-6 space-y-8 overflow-y-auto">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Global Settings</h1>
-          <p className="text-gray-500 text-sm mt-1">System-wide configuration for all sites. Some changes require a server restart.</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t("globalSettings.title")}</h1>
+          <p className="text-gray-500 text-sm mt-1">{t("globalSettings.subtitle")}</p>
         </div>
 
         {hasChanges && (
           <div className="px-4 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700 flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 shrink-0" />
-            Unsaved changes — <kbd className="px-1.5 py-0.5 bg-amber-100 rounded text-xs font-mono">Ctrl+S</kbd> to save
+            {t("globalSettings.unsaved")} <kbd className="px-1.5 py-0.5 bg-amber-100 rounded text-xs font-mono">Ctrl+S</kbd> {t("globalSettings.ctrlSToSave")}
           </div>
         )}
 

@@ -27,8 +27,12 @@ async def ensure_indexes(db: AsyncIOMotorDatabase) -> None:
     await db["sites"].create_index("token", unique=True)
     await db["sites"].create_index("domain")
 
-    # knowledge_chunks: index on site_id
+    # knowledge_chunks: index on site_id + composites for hot paths
+    # (list_crawled_urls/list_by_url scan by site_id+source_url; create_many
+    # dedup + list_content_hashes filter on site_id+content_hash).
     await db["knowledge_chunks"].create_index("site_id")
+    await db["knowledge_chunks"].create_index([("site_id", 1), ("source_url", 1)])
+    await db["knowledge_chunks"].create_index([("site_id", 1), ("content_hash", 1)])
 
     # tools: index on site_id
     await db["tools"].create_index("site_id")
@@ -107,6 +111,7 @@ class MongoSiteRepo(BaseSiteRepo):
             "crawl_login_username": data.get("crawl_login_username", ""),
             "crawl_login_password": data.get("crawl_login_password", ""),
             "crawl_login_success_url": data.get("crawl_login_success_url", ""),
+            "allow_private_urls": bool(data.get("allow_private_urls", False)),
             # Timestamps
             "created_at": datetime.now(UTC),
             "updated_at": datetime.now(UTC),
@@ -361,6 +366,9 @@ class MongoChatSessionRepo(BaseChatSessionRepo):
             "messages": data.get("messages", []),
             "started_at": datetime.now(UTC),
             "ended_at": None,
+            "tokens_input": 0,
+            "tokens_output": 0,
+            "cost_usd": 0.0,
         }
         await self.col.insert_one(doc)
         return _clean_doc(doc)
@@ -375,6 +383,10 @@ class MongoChatSessionRepo(BaseChatSessionRepo):
                 first_msg = (msg.get("content") or "")[:200]
                 break
         doc["first_message"] = first_msg
+        # Ensure token/cost keys are present for older docs that pre-date the feature.
+        doc.setdefault("tokens_input", 0)
+        doc.setdefault("tokens_output", 0)
+        doc.setdefault("cost_usd", 0.0)
         return doc
 
     async def get_by_id(self, session_id: str) -> dict | None:
@@ -405,15 +417,63 @@ class MongoChatSessionRepo(BaseChatSessionRepo):
         return results
 
     async def update_messages(self, session_id: str, messages: list[dict]) -> bool:
+        # matched_count (not modified_count): True means session exists.
+        # modified_count would return False when the new messages equal the stored value,
+        # diverging from the SQLite path that always returns True on found session.
         result = await self.col.update_one(
             {"_id": session_id}, {"$set": {"messages": messages}}
         )
-        return result.modified_count > 0
+        return result.matched_count > 0
 
     async def set_ended(self, session_id: str, clear: bool = False) -> bool:
         update = {"$set": {"ended_at": None}} if clear else {"$set": {"ended_at": datetime.now(UTC)}}
         result = await self.col.update_one({"_id": session_id}, update)
-        return result.modified_count > 0
+        return result.matched_count > 0
+
+    async def aggregate_overview(self, site_id: str, since: datetime) -> dict:
+        """Single-pipeline aggregation — no per-session Python iteration."""
+        pipeline = [
+            {"$match": {"site_id": site_id, "started_at": {"$gte": since}}},
+            {"$group": {
+                "_id": None,
+                "total_sessions": {"$sum": 1},
+                "total_messages": {"$sum": {"$size": {"$ifNull": ["$messages", []]}}},
+                "avg_duration": {
+                    "$avg": {
+                        "$cond": [
+                            {"$ifNull": ["$ended_at", False]},
+                            {"$divide": [
+                                {"$subtract": ["$ended_at", "$started_at"]},
+                                1000,  # ms → seconds
+                            ]},
+                            None,
+                        ]
+                    }
+                },
+            }},
+        ]
+        async for doc in self.col.aggregate(pipeline):
+            return {
+                "total_sessions": int(doc.get("total_sessions") or 0),
+                "total_messages": int(doc.get("total_messages") or 0),
+                "avg_session_duration_seconds": float(doc.get("avg_duration") or 0.0),
+            }
+        return {"total_sessions": 0, "total_messages": 0, "avg_session_duration_seconds": 0.0}
+
+    async def add_token_usage(
+        self, session_id: str, in_tokens: int, out_tokens: int, cost_usd: float
+    ) -> bool:
+        # matched_count so a zero-delta call (still a meaningful "session exists"
+        # signal) doesn't disagree with SQLite's rowcount>0 semantics.
+        result = await self.col.update_one(
+            {"_id": session_id},
+            {"$inc": {
+                "tokens_input": int(in_tokens),
+                "tokens_output": int(out_tokens),
+                "cost_usd": float(cost_usd),
+            }},
+        )
+        return result.matched_count > 0
 
 
 # --- Crawl Job ---
@@ -450,8 +510,9 @@ class MongoCrawlJobRepo(BaseCrawlJobRepo):
         return [_clean_doc(doc) async for doc in cursor]
 
     async def update(self, job_id: str, data: dict) -> bool:
+        # matched_count so a no-op update still reports "job exists" like SQLite does.
         result = await self.col.update_one({"_id": job_id}, {"$set": data})
-        return result.modified_count > 0
+        return result.matched_count > 0
 
 
 # --- User ---

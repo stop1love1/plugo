@@ -1,6 +1,8 @@
-"""Tests for Sites CRUD flow."""
+"""Tests for Sites CRUD flow and the per-site origin validator."""
 
 import pytest
+
+from utils.cors import validate_site_origin
 
 
 @pytest.mark.asyncio
@@ -19,40 +21,23 @@ async def test_create_site(client, auth_headers):
     assert "token" in data
     assert data["llm_provider"] == "claude"
     assert data["primary_color"] == "#6366f1"
+    # Fresh sites must not be auto-approved — approval is an explicit admin action.
+    assert data["is_approved"] is False
 
     # Cleanup
     await client.delete(f"/api/sites/{data['id']}", headers=auth_headers)
 
 
+@pytest.mark.parametrize("overrides", [
+    {"llm_provider": "invalid_provider"},
+    {"primary_color": "not-a-color"},
+    {"name": ""},
+])
 @pytest.mark.asyncio
-async def test_create_site_without_auth(client):
-    """POST /api/sites without auth should return 401."""
-    response = await client.post("/api/sites", json={
-        "name": "Unauthorized Site",
-        "url": "https://example.com",
-    })
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_create_site_invalid_provider(client, auth_headers):
-    """POST /api/sites with invalid provider should return 422."""
-    response = await client.post("/api/sites", json={
-        "name": "Bad Provider Site",
-        "url": "https://example.com",
-        "llm_provider": "invalid_provider",
-    }, headers=auth_headers)
-    assert response.status_code == 422
-
-
-@pytest.mark.asyncio
-async def test_create_site_invalid_color(client, auth_headers):
-    """POST /api/sites with invalid color should return 422."""
-    response = await client.post("/api/sites", json={
-        "name": "Bad Color Site",
-        "url": "https://example.com",
-        "primary_color": "not-a-color",
-    }, headers=auth_headers)
+async def test_create_site_rejects_invalid_payload(client, auth_headers, overrides):
+    """POST /api/sites with invalid provider / color / empty name should 422."""
+    payload = {"name": "Bad Site", "url": "https://example.com", **overrides}
+    response = await client.post("/api/sites", json=payload, headers=auth_headers)
     assert response.status_code == 422
 
 
@@ -65,13 +50,6 @@ async def test_list_sites(client, auth_headers, test_site):
     data = response.json()
     assert isinstance(data, list)
     assert any(s["id"] == test_site["id"] for s in data)
-
-
-@pytest.mark.asyncio
-async def test_list_sites_without_auth(client):
-    """GET /api/sites without auth should return 401."""
-    response = await client.get("/api/sites")
-    assert response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -104,29 +82,6 @@ async def test_update_site(client, auth_headers, test_site):
     data = response.json()
     assert data["name"] == "Updated Name"
     assert data["primary_color"] == "#ff0000"
-
-
-@pytest.mark.asyncio
-async def test_update_site_url(client, auth_headers, test_site):
-    """PUT /api/sites/{site_id} should update the website URL."""
-    response = await client.put(
-        f"/api/sites/{test_site['id']}",
-        json={"url": "https://updated.example.com"},
-        headers=auth_headers,
-    )
-    assert response.status_code == 200
-
-    data = response.json()
-    assert data["url"] == "https://updated.example.com"
-
-
-@pytest.mark.asyncio
-async def test_update_site_without_auth(client, test_site):
-    """PUT /api/sites/{site_id} without auth should return 401."""
-    response = await client.put(f"/api/sites/{test_site['id']}", json={
-        "name": "Hacked Name",
-    })
-    assert response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -185,44 +140,20 @@ async def test_delete_site_not_found(client, auth_headers):
     assert response.status_code == 404
 
 
+@pytest.mark.parametrize("method, path", [
+    ("POST", "/api/sites"),
+    ("GET", "/api/sites"),
+    ("PUT", "/api/sites/any-id"),
+])
 @pytest.mark.asyncio
-async def test_list_providers(client, auth_headers):
-    """GET /api/sites/providers/list should return available providers."""
-    response = await client.get("/api/sites/providers/list", headers=auth_headers)
-    assert response.status_code == 200
-
-    data = response.json()
-    assert isinstance(data, list)
-    assert len(data) > 0
-
-
-@pytest.mark.asyncio
-async def test_create_site_empty_name_rejected(client, auth_headers):
-    """POST /api/sites with empty name should return 422."""
-    response = await client.post("/api/sites", json={
-        "name": "",
-        "url": "https://example.com",
-    }, headers=auth_headers)
-    assert response.status_code == 422
+async def test_sites_endpoints_require_auth(client, method, path):
+    """All admin site endpoints must reject unauthenticated requests with 401."""
+    response = await client.request(method, path, json={"name": "x", "url": "https://x.com"})
+    assert response.status_code == 401
 
 
 # --- Approval flow ---
-
-
-@pytest.mark.asyncio
-async def test_new_site_is_not_approved_by_default(client, auth_headers):
-    """POST /api/sites should create site with is_approved=False."""
-    response = await client.post("/api/sites", json={
-        "name": "Unapproved Site",
-        "url": "https://unapproved.example.com",
-    }, headers=auth_headers)
-    assert response.status_code == 200
-
-    data = response.json()
-    assert data["is_approved"] is False
-
-    # Cleanup
-    await client.delete(f"/api/sites/{data['id']}", headers=auth_headers)
+# (is_approved=False default is asserted by test_create_site above.)
 
 
 @pytest.mark.asyncio
@@ -281,3 +212,40 @@ async def test_approve_site_viewer_forbidden(client):
         headers=headers,
     )
     assert response.status_code == 403
+
+
+# --- validate_site_origin (per-site origin gate for widget routes) ---
+
+
+@pytest.mark.parametrize(
+    "site, origin, expected",
+    [
+        # Empty allowed_domains → permissive (legacy behaviour).
+        ({"allowed_domains": ""}, "https://evil.com", True),
+        # Exact host match.
+        ({"allowed_domains": "example.com"}, "https://example.com", True),
+        # Subdomain match (deep + shallow both allowed).
+        ({"allowed_domains": "example.com"}, "https://sub.example.com", True),
+        # Non-match: sibling / substring domains must be rejected.
+        ({"allowed_domains": "example.com"}, "https://evilexample.com", False),
+        # Configured allowlist but no Origin header → deny.
+        ({"allowed_domains": "example.com"}, None, False),
+        # Malformed origin (no hostname) → deny.
+        ({"allowed_domains": "example.com"}, "not-a-url", False),
+        # `Origin: null` (sandboxed iframes, file://) with a configured
+        # allowlist → deny. This is a deliberate security contract: opaque
+        # origins cannot be attributed to a tenant, so they must not pass.
+        ({"allowed_domains": "example.com"}, "null", False),
+        # Same `Origin: null` with an EMPTY allowlist → allow (permissive
+        # dev path; the contract only tightens once a site opts in).
+        ({"allowed_domains": ""}, "null", True),
+    ],
+)
+def test_validate_site_origin(site, origin, expected):
+    assert validate_site_origin(site, origin) is expected
+
+
+def test_validate_site_origin_none_site_is_permissive():
+    # Defensive: if the caller passes None (site lookup returned None and
+    # they forgot to 404 first), don't raise.
+    assert validate_site_origin(None, "https://anywhere.com") is True

@@ -29,8 +29,21 @@ async def init_db():
 
 
 async def _migrate_add_columns(conn):
-    """Add missing columns to existing tables (idempotent)."""
+    """Add missing columns and indexes to existing tables (idempotent)."""
     import sqlalchemy as sa
+
+    # --- Composite indexes on knowledge_chunks ---
+    # Added to speed up hot paths (list_crawled_urls, list_by_url, create_many dedup,
+    # list_content_hashes) that previously did full table scans at scale.
+    index_migrations = [
+        "CREATE INDEX IF NOT EXISTS ix_knowledge_chunks_site_url "
+        "ON knowledge_chunks (site_id, source_url)",
+        "CREATE INDEX IF NOT EXISTS ix_knowledge_chunks_site_hash "
+        "ON knowledge_chunks (site_id, content_hash)",
+    ]
+    for stmt in index_migrations:
+        with contextlib.suppress(Exception):  # Index may already exist / table missing in legacy test DBs
+            await conn.execute(sa.text(stmt))
 
     migrations = [
         ("sites", "system_prompt", "TEXT DEFAULT ''"),
@@ -52,6 +65,12 @@ async def _migrate_add_columns(conn):
         ("sites", "crawl_login_username", "VARCHAR(500)"),
         ("sites", "crawl_login_password", "VARCHAR(500)"),
         ("sites", "crawl_login_success_url", "VARCHAR(2048)"),
+        # Per-site SSRF override for local dev / on-prem wikis
+        ("sites", "allow_private_urls", "BOOLEAN DEFAULT 0"),
+        # Per-session token usage + cost tracking
+        ("chat_sessions", "tokens_input", "INTEGER DEFAULT 0"),
+        ("chat_sessions", "tokens_output", "INTEGER DEFAULT 0"),
+        ("chat_sessions", "cost_usd", "REAL DEFAULT 0.0"),
     ]
     for table, column, col_type in migrations:
         with contextlib.suppress(Exception):  # Column may already exist

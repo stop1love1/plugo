@@ -84,6 +84,9 @@ class Settings(BaseSettings):
     rate_limit_default: str = _get("rate_limit", "default", "60/minute")
     rate_limit_chat: str = _get("rate_limit", "chat", "30/minute")
     rate_limit_crawl: str = _get("rate_limit", "crawl", "5/minute")
+    # Max simultaneous open SSE streams per site_token. Caps the long-lived
+    # connection footprint that slowapi's per-window limiter can't see.
+    rate_limit_sse_concurrent: int = _get("rate_limit", "sse_concurrent", 10)
 
     # --- Server (from config.json → server) ---
     backend_port: int = _get("server", "backend_port", 8000)

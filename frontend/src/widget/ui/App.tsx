@@ -1,12 +1,13 @@
 import { useState, useCallback, useRef, useEffect } from "preact/hooks";
 import { Bubble } from "./Bubble";
 import { ChatWindow } from "./Window";
-import { PlugoWebSocket, ConnectionState, type WsHistoryItem } from "../websocket";
+import { PlugoWebSocket, ConnectionState, type WsHistoryItem, type Citation } from "../websocket";
 
 type Message = {
   role: "user" | "bot";
   content: string;
   timestamp: number;
+  citations?: Citation[];
 };
 
 type AppProps = {
@@ -202,6 +203,16 @@ export function App({
         if (document.hidden) {
           playNotificationSound();
         }
+      },
+      onCitations: (items) => {
+        // Attach to the last assistant message (citations arrive before "end").
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (!last || last.role !== "bot") return prev;
+          const updated = [...prev];
+          updated[updated.length - 1] = { ...last, citations: items };
+          return updated;
+        });
       },
       onError: (error) => {
         setIsTyping(false);

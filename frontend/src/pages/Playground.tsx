@@ -33,7 +33,8 @@ function buildPlaygroundHtml(site: Site, siteUrl: string): string {
 </style>
 </head><body>
 <div class="playground-body">
-  <iframe class="site-frame" src="${esc(siteUrl)}" sandbox="allow-scripts allow-same-origin allow-popups allow-forms"></iframe>
+  <!-- Inner site iframe: no allow-same-origin — loads arbitrary user URL, widget runs in outer frame -->
+  <iframe class="site-frame" src="${esc(siteUrl)}" sandbox="allow-scripts allow-popups allow-forms"></iframe>
 </div>
 <script>
   window.PlugoConfig = {

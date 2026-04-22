@@ -28,6 +28,7 @@ export type Site = {
   auto_open_delay: number;
   bubble_size: string;
   allowed_domains: string;
+  allow_private_urls: boolean;
   system_prompt: string;
   bot_rules: string;
   response_language: string; // "auto" | "vi" | "en"

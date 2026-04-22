@@ -64,3 +64,79 @@ async def test_migrate_add_columns_adds_missing_site_columns(tmp_path: Path):
     assert "bubble_size" in column_names
     assert "crawl_max_depth" in column_names
     assert "crawl_exclude_patterns" in column_names
+
+
+@pytest.mark.asyncio
+async def test_migrate_add_columns_adds_chat_session_token_columns(tmp_path: Path):
+    """Chat sessions tracked in older DBs must gain token usage + cost columns."""
+    db_path = tmp_path / "legacy_chat.db"
+    engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+
+    async with engine.begin() as conn:
+        # Legacy chat_sessions schema without the token tracking columns.
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE chat_sessions (
+                    id VARCHAR PRIMARY KEY,
+                    site_id VARCHAR NOT NULL,
+                    visitor_id VARCHAR(255),
+                    page_url VARCHAR(2048),
+                    messages JSON,
+                    started_at DATETIME,
+                    ended_at DATETIME
+                )
+                """
+            )
+        )
+
+        await _migrate_add_columns(conn)
+
+        columns_result = await conn.execute(text("PRAGMA table_info(chat_sessions)"))
+        column_names = {row[1] for row in columns_result.fetchall()}
+
+    await engine.dispose()
+
+    assert "tokens_input" in column_names
+    assert "tokens_output" in column_names
+    assert "cost_usd" in column_names
+
+
+@pytest.mark.asyncio
+async def test_migrate_creates_knowledge_composite_indexes(tmp_path: Path):
+    """knowledge_chunks must gain composite indexes for (site_id,*) queries."""
+    db_path = tmp_path / "legacy_knowledge.db"
+    engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+
+    async with engine.begin() as conn:
+        # Legacy knowledge_chunks schema (no composite indexes).
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE knowledge_chunks (
+                    id VARCHAR PRIMARY KEY,
+                    site_id VARCHAR NOT NULL,
+                    source_url VARCHAR(2048),
+                    source_type VARCHAR(50),
+                    title VARCHAR(500),
+                    content TEXT NOT NULL,
+                    chunk_index INTEGER,
+                    content_hash VARCHAR(64),
+                    embedding_id VARCHAR(255),
+                    crawled_at DATETIME
+                )
+                """
+            )
+        )
+
+        await _migrate_add_columns(conn)
+
+        idx_result = await conn.execute(
+            text("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='knowledge_chunks'")
+        )
+        index_names = {row[0] for row in idx_result.fetchall()}
+
+    await engine.dispose()
+
+    assert "ix_knowledge_chunks_site_url" in index_names
+    assert "ix_knowledge_chunks_site_hash" in index_names

@@ -806,6 +806,32 @@ function getWidgetStyles(primaryColor: string): string {
     .plugo-msg-row.bot { justify-content: flex-start; }
     .plugo-msg-row.user { justify-content: flex-end; }
 
+    /* Citations footer — structured "Sources" list below an assistant message */
+    .plugo-citations {
+      display: flex; flex-wrap: wrap;
+      gap: 4px 10px;
+      margin-top: 4px; padding: 4px 2px;
+      font-size: 11px; color: #666;
+    }
+    .plugo-citations-label {
+      font-weight: 600; color: #888;
+      margin-right: 2px;
+    }
+    .plugo-citation {
+      display: inline-flex; align-items: baseline; gap: 2px;
+      color: var(--plugo-primary); text-decoration: none;
+      max-width: 200px;
+    }
+    .plugo-citation:hover { text-decoration: underline; }
+    .plugo-citation sup {
+      font-size: 10px; font-weight: 600;
+    }
+    .plugo-citation-title {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .plugo-dark .plugo-citations { color: #aaa; }
+    .plugo-dark .plugo-citations-label { color: #888; }
+
     /* Tool call card */
     .plugo-tool-card {
       display: flex; align-items: center; gap: 10px;

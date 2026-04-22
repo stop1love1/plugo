@@ -1,9 +1,11 @@
 import asyncio
 import fnmatch
 import hashlib
+import ipaddress
 import json
 import os
 import re
+import socket
 import uuid
 from collections import deque
 from datetime import UTC, datetime
@@ -19,6 +21,82 @@ from config import settings
 from knowledge.chunker import SemanticChunker
 from logging_config import logger
 from providers.factory import get_llm_provider
+
+# Hostnames used by cloud metadata services — always block to avoid credential exfil via SSRF.
+_BLOCKED_METADATA_HOSTS = frozenset({
+    "169.254.169.254",
+    "metadata.google.internal",
+    "metadata.azure.com",
+})
+_BLOCKED_LITERAL_HOSTS = frozenset({"localhost", "0.0.0.0", "::1"})
+
+
+def _ip_is_unsafe(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Return True if the IP address is not publicly routable."""
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+    )
+
+
+async def _is_safe_public_url(url: str, allow_private: bool = False) -> tuple[bool, str]:
+    """Return (is_safe, reason). Reject non-http(s), loopback, private, link-local,
+    reserved IPs, and well-known cloud metadata endpoints to prevent SSRF.
+
+    DNS rebinding defense: if the host is a name, resolve it via getaddrinfo and
+    reject if ANY resolved IP is private/loopback/etc. DNS resolution failures are
+    treated as unsafe (conservative default).
+
+    If `allow_private=True`, loopback/private/link-local IPs are permitted but cloud
+    metadata endpoints are STILL blocked (credential-exfil risk remains).
+    """
+    try:
+        parsed = urlparse(url)
+    except Exception as e:
+        return False, f"invalid URL: {e}"
+    if parsed.scheme not in ("http", "https"):
+        return False, f"unsupported scheme: {parsed.scheme or '(none)'}"
+    hostname = (parsed.hostname or "").lower()
+    if not hostname:
+        return False, "missing hostname"
+    if hostname in _BLOCKED_METADATA_HOSTS:
+        return False, f"blocked cloud metadata endpoint: {hostname}"
+    if not allow_private and hostname in _BLOCKED_LITERAL_HOSTS:
+        return False, f"blocked host: {hostname}"
+    try:
+        ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        # Hostname is not an IP literal — resolve via DNS and check every answer.
+        try:
+            infos = await asyncio.to_thread(socket.getaddrinfo, hostname, None)
+        except socket.gaierror as e:
+            return False, f"DNS resolution failed for {hostname}: {e}"
+        except Exception as e:
+            return False, f"DNS resolution error for {hostname}: {e}"
+        if not infos:
+            return False, f"DNS returned no addresses for {hostname}"
+        for info in infos:
+            sockaddr = info[4]
+            addr_str = sockaddr[0] if sockaddr else None
+            if not addr_str:
+                continue
+            # Strip IPv6 scope-id if present (e.g. "fe80::1%eth0")
+            if "%" in addr_str:
+                addr_str = addr_str.split("%", 1)[0]
+            try:
+                resolved = ipaddress.ip_address(addr_str)
+            except ValueError:
+                return False, f"DNS returned non-IP address for {hostname}: {addr_str}"
+            if not allow_private and _ip_is_unsafe(resolved):
+                return False, f"blocked internal IP via DNS ({hostname} -> {addr_str})"
+        return True, ""
+    if not allow_private and _ip_is_unsafe(ip):
+        return False, f"blocked internal IP: {hostname}"
+    return True, ""
 
 
 def _normalize_host(netloc: str) -> str:
@@ -65,9 +143,11 @@ class WebCrawler:
         exclude_patterns: list[str] | None = None,
         auth_cookies: list[dict] | None = None,
         login_url: str | None = None,
+        allow_private_urls: bool = False,
     ):
         self.max_pages = max_pages
         self.delay = delay if delay is not None else settings.crawl_request_delay
+        self.allow_private_urls = allow_private_urls
         self.visited: set[str] = set()
         self._stopped = False
         self._paused = False
@@ -221,14 +301,40 @@ class WebCrawler:
     ) -> tuple[int | None, str | None, str | None]:
         """Fetch a URL with retry logic. Returns (status_code, content_type, html).
         status_code: None=timeout, -1=error (html contains error message).
-        Also detects redirect-to-login as a 401 auth failure."""
+        Also detects redirect-to-login as a 401 auth failure.
+
+        Redirects are handled manually (httpx client has follow_redirects=False) so
+        each hop can be re-validated against the SSRF guard."""
+        safe, reason = await _is_safe_public_url(url, allow_private=self.allow_private_urls)
+        if not safe:
+            return (-1, None, f"blocked: internal URL ({reason})")
         last_error = None
         for attempt in range(1 + self.max_retries):
             try:
-                response = await client.get(url)
-                # Detect redirect to login URL (session expired)
+                current_url = url
+                response = None
+                for _hop in range(5):  # max 5 redirect hops
+                    response = await client.get(current_url)
+                    if response.status_code not in (301, 302, 303, 307, 308):
+                        break
+                    location = response.headers.get("location")
+                    if not location:
+                        break
+                    next_url = urljoin(current_url, location)
+                    safe, reason = await _is_safe_public_url(next_url, allow_private=self.allow_private_urls)
+                    if not safe:
+                        return (-1, None, f"blocked redirect to internal URL ({reason})")
+                    current_url = next_url
+                else:
+                    # Too many redirects
+                    return (-1, None, "too many redirects (>5)")
+
+                if response is None:
+                    return (-1, None, "no response")
+
+                # Detect redirect to login URL (session expired) — compare final URL
                 if self.login_url and response.status_code == 200:
-                    final_url = str(response.url)
+                    final_url = current_url
                     if self.login_url in final_url and final_url != url:
                         logger.warning(
                             "Session may have expired — redirected to login page",
@@ -379,6 +485,21 @@ class WebCrawler:
         _seed_params = f";{p0.params}" if p0.params else ""
         _seed_q = f"?{p0.query}" if p0.query else ""
         start_url = f"{p0.scheme}://{p0.netloc.lower()}{_seed_path}{_seed_params}{_seed_q}"
+
+        # SSRF guard — reject internal/loopback/private/metadata URLs before any network I/O.
+        # Cloud-metadata endpoints are always blocked; private/loopback may be allowed per-site.
+        safe, reason = await _is_safe_public_url(start_url, allow_private=self.allow_private_urls)
+        if not safe:
+            self._log(start_url, "error", error=reason, action="blocked unsafe start URL")
+            await repos.crawl_jobs.update(job_id, {
+                "status": "failed",
+                "error_log": f"Refused to crawl unsafe URL: {reason}",
+                "crawl_log": json.dumps(self.logs),
+                "current_url": None,
+                "finished_at": datetime.now(UTC),
+            })
+            return
+
         base_domain = urlparse(start_url).netloc
         # Queue stores (url, depth) tuples
         queue: deque[tuple[str, int]] = deque([(start_url, 0)])
@@ -421,7 +542,9 @@ class WebCrawler:
         try:
             client_kwargs = {
                 "timeout": settings.crawl_request_timeout,
-                "follow_redirects": True,
+                # Redirects are handled manually in _fetch_with_retry so each hop is
+                # re-validated against the SSRF guard (public URL -> private IP bypass).
+                "follow_redirects": False,
                 "verify": settings.crawl_verify_ssl,
                 "headers": {"User-Agent": "PlugoBot/1.0 (+https://github.com/stop1love1/plugo)"},
             }
@@ -568,8 +691,10 @@ class WebCrawler:
                                     and clean_url not in queued_urls
                                     and not self._is_excluded(clean_url)
                                 ):
-                                    queue.append((clean_url, child_depth))
-                                    queued_urls.add(clean_url)
+                                    safe, _ = await _is_safe_public_url(clean_url, allow_private=self.allow_private_urls)
+                                    if safe:
+                                        queue.append((clean_url, child_depth))
+                                        queued_urls.add(clean_url)
 
                         # Extract media links in markdown format before soup mutation
                         media_md = self._extract_media_markdown(soup, url)

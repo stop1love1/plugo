@@ -55,6 +55,10 @@ class Site(Base):
     last_crawled_at = Column(DateTime, nullable=True)        # Last crawl timestamp
     knowledge_count = Column(Integer, default=0)             # Total knowledge chunks stored
 
+    # Allow crawling localhost / private IPs. Default False (SSRF-safe).
+    # Set to True per-site for local development or on-prem internal wikis.
+    allow_private_urls = Column(Boolean, default=False)
+
     # --- Authenticated crawl (Playwright browser login) ---
     crawl_use_browser = Column(Boolean, default=False)                 # Enable browser-based auth crawl
     crawl_login_url = Column(String(2048), nullable=True)              # Login page URL

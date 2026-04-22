@@ -28,40 +28,17 @@ async def get_overview(
     }
     try:
         cutoff = datetime.now(UTC) - timedelta(days=days)
-        sessions = await repos.chat_sessions.list_by_site_since(site_id, cutoff)
-        if not sessions:
+        stats = await repos.chat_sessions.aggregate_overview(site_id, cutoff)
+        total_sessions = stats["total_sessions"]
+        total_messages = stats["total_messages"]
+        if total_sessions == 0:
             return empty_overview
-
-        total_sessions = 0
-        total_messages = 0
-        total_duration = 0
-        sessions_with_duration = 0
-
-        for s in sessions:
-            total_sessions += 1
-            msg_count = s.get("message_count", len(s.get("messages", [])))
-            total_messages += msg_count
-
-            started = s.get("started_at")
-            if isinstance(started, str):
-                started = datetime.fromisoformat(started)
-            ended = s.get("ended_at")
-            if started and ended:
-                if isinstance(ended, str):
-                    ended = datetime.fromisoformat(ended)
-                duration = (ended - started).total_seconds()
-                if duration > 0:
-                    total_duration += duration
-                    sessions_with_duration += 1
-
-        avg_duration = total_duration / sessions_with_duration if sessions_with_duration > 0 else 0
-        avg_messages = total_messages / total_sessions if total_sessions > 0 else 0
-
+        avg_messages = total_messages / total_sessions if total_sessions > 0 else 0.0
         return {
             "total_sessions": total_sessions,
             "total_messages": total_messages,
             "avg_messages_per_session": round(avg_messages, 1),
-            "avg_session_duration_seconds": round(avg_duration),
+            "avg_session_duration_seconds": round(stats["avg_session_duration_seconds"]),
         }
     except Exception as e:
         logger.error("Analytics overview error", error=str(e))

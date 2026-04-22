@@ -43,9 +43,9 @@ export default function Flows() {
       setNewDesc("");
       setNewRequiresLogin(false);
       setEditingFlowId(data.id);
-      toast.success("Flow created");
+      toast.success(t("flows.created"));
     },
-    onError: () => toast.error("Failed to create flow"),
+    onError: () => toast.error(t("flows.createFailed")),
   });
 
   const deleteMutation = useMutation({
@@ -53,9 +53,9 @@ export default function Flows() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["flows", siteId] });
       if (editingFlowId) setEditingFlowId(null);
-      toast.success("Flow deleted");
+      toast.success(t("flows.deleted"));
     },
-    onError: () => toast.error("Failed to delete flow"),
+    onError: () => toast.error(t("flows.deleteFailed")),
   });
 
   const handleCreate = (e: React.FormEvent) => {
@@ -71,12 +71,12 @@ export default function Flows() {
 
   return (
     <div>
-      <PageHeader title="Flow Guides" subtitle={`${flows?.length || 0} flows`}>
+      <PageHeader title={t("flows.title")} subtitle={t("flows.count").replace("{n}", String(flows?.length || 0))}>
         <button
           onClick={() => setShowCreate(true)}
           className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700"
         >
-          <Plus className="w-4 h-4" /> Add Flow
+          <Plus className="w-4 h-4" /> {t("flows.addFlow")}
         </button>
       </PageHeader>
 
@@ -86,28 +86,28 @@ export default function Flows() {
           <div className="fixed inset-0 bg-black/40" onClick={() => setShowCreate(false)} />
           <form onSubmit={handleCreate} className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6 z-10">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-lg">New Flow Guide</h3>
+              <h3 className="font-semibold text-lg">{t("flows.newFlow")}</h3>
               <button type="button" onClick={() => setShowCreate(false)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Flow Name *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("flows.flowName")}</label>
                 <input
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  placeholder='e.g. "How to place an order"'
+                  placeholder={t("flows.flowNamePlaceholder")}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
                   autoFocus
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("flows.descriptionLabel")}</label>
                 <textarea
                   value={newDesc}
                   onChange={(e) => setNewDesc(e.target.value)}
-                  placeholder="Brief description of this flow..."
+                  placeholder={t("flows.descriptionPlaceholder")}
                   rows={2}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
                 />
@@ -120,14 +120,14 @@ export default function Flows() {
                   className="rounded border-gray-300"
                 />
                 <Lock className="w-3.5 h-3.5" />
-                Requires user login
+                {t("flows.requiresLogin")}
               </label>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setShowCreate(false)} className="text-gray-500 px-4 py-2 hover:bg-gray-100 rounded-lg">
                   {t("common.cancel")}
                 </button>
                 <button type="submit" disabled={createMutation.isPending || !newName.trim()} className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50">
-                  {createMutation.isPending ? t("common.loading") : "Create"}
+                  {createMutation.isPending ? t("common.loading") : t("flows.create")}
                 </button>
               </div>
             </div>
@@ -151,7 +151,7 @@ export default function Flows() {
       {isLoading ? (
         <div className="text-gray-400">{t("common.loading")}</div>
       ) : !flows?.length ? (
-        <EmptyState icon={GitBranch} message="No flow guides yet. Create one to teach your bot website flows." />
+        <EmptyState icon={GitBranch} message={t("flows.empty")} />
       ) : (
         <div className="space-y-3">
           {flows.map((flow) => (
@@ -162,12 +162,12 @@ export default function Flows() {
                     <h4 className="font-medium text-gray-900">{flow.name}</h4>
                     {flow.requires_login && (
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-xs">
-                        <Lock className="w-3 h-3" /> Login required
+                        <Lock className="w-3 h-3" /> {t("flows.loginRequired")}
                       </span>
                     )}
                     {!flow.is_enabled && (
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-xs">
-                        <EyeOff className="w-3 h-3" /> Disabled
+                        <EyeOff className="w-3 h-3" /> {t("flows.disabled")}
                       </span>
                     )}
                   </div>
@@ -175,23 +175,23 @@ export default function Flows() {
                     <p className="text-sm text-gray-500 mt-1">{flow.description}</p>
                   )}
                   <p className="text-xs text-gray-400 mt-1">
-                    {flow.step_count || 0} steps
+                    {t("flows.stepCount").replace("{n}", String(flow.step_count || 0))}
                   </p>
                 </div>
                 <div className="flex gap-1">
                   <button
                     onClick={() => setEditingFlowId(flow.id)}
                     className="text-gray-400 hover:text-primary-600 p-1.5 rounded-lg hover:bg-gray-50"
-                    title="Edit flow"
+                    title={t("flows.editFlow")}
                   >
                     <Pencil className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => {
-                      if (confirm("Delete this flow?")) deleteMutation.mutate(flow.id);
+                      if (confirm(t("flows.confirmDelete"))) deleteMutation.mutate(flow.id);
                     }}
                     className="text-gray-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-gray-50"
-                    title="Delete flow"
+                    title={t("flows.deleteFlow")}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -227,9 +227,9 @@ function FlowEditor({ flowId, siteId, onClose }: { flowId: string; siteId: strin
     mutationFn: ({ data }: { data: Partial<Flow> }) => updateFlow(flowId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["flow", flowId] });
-      toast.success("Flow updated");
+      toast.success(t("flows.flowUpdated"));
     },
-    onError: () => toast.error("Failed to update"),
+    onError: () => toast.error(t("flows.updateFailed")),
   });
 
   const addStepMutation = useMutation({
@@ -239,9 +239,9 @@ function FlowEditor({ flowId, siteId, onClose }: { flowId: string; siteId: strin
       setNewStepTitle("");
       setNewStepDesc("");
       setNewStepUrl("");
-      toast.success("Step added");
+      toast.success(t("flows.stepAdded"));
     },
-    onError: () => toast.error("Failed to add step"),
+    onError: () => toast.error(t("flows.stepAddFailed")),
   });
 
   const updateStepMutation = useMutation({
@@ -249,16 +249,16 @@ function FlowEditor({ flowId, siteId, onClose }: { flowId: string; siteId: strin
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["flow", flowId] });
     },
-    onError: () => toast.error("Failed to update step"),
+    onError: () => toast.error(t("flows.stepUpdateFailed")),
   });
 
   const deleteStepMutation = useMutation({
     mutationFn: deleteFlowStep,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["flow", flowId] });
-      toast.success("Step deleted");
+      toast.success(t("flows.stepDeleted"));
     },
-    onError: () => toast.error("Failed to delete step"),
+    onError: () => toast.error(t("flows.stepDeleteFailed")),
   });
 
   const reorderMutation = useMutation({
@@ -312,7 +312,7 @@ function FlowEditor({ flowId, siteId, onClose }: { flowId: string; siteId: strin
                 const val = e.target.value.trim();
                 if (val !== flow.description) updateMutation.mutate({ data: { description: val } });
               }}
-              placeholder="Add a description..."
+              placeholder={t("flows.addDescription")}
               className="text-sm text-gray-500 w-full bg-transparent border-none outline-none focus:ring-0 p-0 mt-1"
             />
           </div>
@@ -324,7 +324,7 @@ function FlowEditor({ flowId, siteId, onClose }: { flowId: string; siteId: strin
                 onChange={(e) => updateMutation.mutate({ data: { requires_login: e.target.checked } })}
                 className="rounded border-gray-300"
               />
-              <Lock className="w-3 h-3" /> Login
+              <Lock className="w-3 h-3" /> {t("flows.loginShort")}
             </label>
             <label className="flex items-center gap-1.5 text-xs text-gray-500">
               <input
@@ -333,7 +333,7 @@ function FlowEditor({ flowId, siteId, onClose }: { flowId: string; siteId: strin
                 onChange={(e) => updateMutation.mutate({ data: { is_enabled: e.target.checked } })}
                 className="rounded border-gray-300"
               />
-              <Eye className="w-3 h-3" /> Enabled
+              <Eye className="w-3 h-3" /> {t("flows.enabled")}
             </label>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1">
               <X className="w-5 h-5" />
@@ -344,7 +344,7 @@ function FlowEditor({ flowId, siteId, onClose }: { flowId: string; siteId: strin
         {/* Steps */}
         <div className="flex-1 overflow-y-auto p-6 space-y-3">
           {steps.length === 0 && (
-            <p className="text-sm text-gray-400 text-center py-4">No steps yet. Add your first step below.</p>
+            <p className="text-sm text-gray-400 text-center py-4">{t("flows.noSteps")}</p>
           )}
 
           {steps.map((step, idx) => (
@@ -362,25 +362,25 @@ function FlowEditor({ flowId, siteId, onClose }: { flowId: string; siteId: strin
 
           {/* Add step form */}
           <form onSubmit={handleAddStep} className="bg-gray-50 rounded-lg p-4 border border-dashed border-gray-300">
-            <p className="text-xs font-medium text-gray-500 mb-3">+ Add Step {steps.length + 1}</p>
+            <p className="text-xs font-medium text-gray-500 mb-3">{t("flows.addStepN").replace("{n}", String(steps.length + 1))}</p>
             <div className="space-y-2">
               <input
                 value={newStepTitle}
                 onChange={(e) => setNewStepTitle(e.target.value)}
-                placeholder="Step title (e.g. Click the cart icon)"
+                placeholder={t("flows.stepTitlePlaceholder")}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-500"
               />
               <textarea
                 value={newStepDesc}
                 onChange={(e) => setNewStepDesc(e.target.value)}
-                placeholder="Detailed instructions (optional)"
+                placeholder={t("flows.stepDescPlaceholder")}
                 rows={2}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-500"
               />
               <input
                 value={newStepUrl}
                 onChange={(e) => setNewStepUrl(e.target.value)}
-                placeholder="Page URL (optional)"
+                placeholder={t("flows.stepUrlPlaceholder")}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-500"
               />
               <div className="flex justify-end">
@@ -389,7 +389,7 @@ function FlowEditor({ flowId, siteId, onClose }: { flowId: string; siteId: strin
                   disabled={addStepMutation.isPending || !newStepTitle.trim()}
                   className="bg-primary-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-primary-700 disabled:opacity-50"
                 >
-                  {addStepMutation.isPending ? t("common.loading") : "Add Step"}
+                  {addStepMutation.isPending ? t("common.loading") : t("flows.addStep")}
                 </button>
               </div>
             </div>
@@ -416,6 +416,7 @@ function StepCard({
   onUpdate: (data: Partial<FlowStep>) => void;
   onDelete: () => void;
 }) {
+  const { t } = useLocale();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(step.title);
   const [desc, setDesc] = useState(step.description);
@@ -457,7 +458,7 @@ function StepCard({
               <textarea
                 value={desc}
                 onChange={(e) => setDesc(e.target.value)}
-                placeholder="Instructions..."
+                placeholder={t("flows.instructionsPlaceholder")}
                 rows={2}
                 className="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-primary-500"
               />
@@ -468,8 +469,8 @@ function StepCard({
                 className="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-primary-500"
               />
               <div className="flex gap-2">
-                <button onClick={handleSave} className="text-xs bg-primary-600 text-white px-3 py-1 rounded hover:bg-primary-700">Save</button>
-                <button onClick={() => setEditing(false)} className="text-xs text-gray-500 hover:text-gray-700">Cancel</button>
+                <button onClick={handleSave} className="text-xs bg-primary-600 text-white px-3 py-1 rounded hover:bg-primary-700">{t("common.save")}</button>
+                <button onClick={() => setEditing(false)} className="text-xs text-gray-500 hover:text-gray-700">{t("common.cancel")}</button>
               </div>
             </div>
           ) : (

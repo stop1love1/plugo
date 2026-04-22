@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "preact/hooks";
 import { Message } from "./Message";
 import { getWidgetString, detectLanguage } from "../i18n";
-import type { ConnectionState } from "../websocket";
+import type { ConnectionState, Citation } from "../websocket";
 
 const MAX_INPUT_LENGTH = 500;
 
@@ -9,6 +9,7 @@ type ChatMessage = {
   role: "user" | "bot";
   content: string;
   timestamp: number;
+  citations?: Citation[];
 };
 
 type WindowProps = {
@@ -209,6 +210,7 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
               isError={msgIsError}
               isStreaming={isTyping && i === messages.length - 1 && msg.role === "bot" && !msgIsError}
               isLastInGroup={isLastInGroup(i)}
+              citations={msg.citations}
               onFeedback={msg.role === "bot" && msg.content && !msgIsError && !isTyping ? onFeedback : undefined}
               onRetry={msgIsError && onRetry && !isTyping ? () => onRetry(i) : undefined}
             />

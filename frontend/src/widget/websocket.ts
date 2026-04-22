@@ -18,12 +18,19 @@ export type WsEndPayload = {
   suggestions?: string[];
 };
 
+export type Citation = {
+  url: string;
+  title: string;
+  score?: number;
+};
+
 export type MessageHandler = {
   onToken: (token: string) => void;
   onStart: () => void;
   onEnd: (data?: WsEndPayload) => void;
   onError: (error: string) => void;
   onConnected: (data: WsConnectedPayload) => void;
+  onCitations?: (items: Citation[]) => void;
   onConnectionChange?: (state: ConnectionState) => void;
 };
 
@@ -90,6 +97,11 @@ export class PlugoWebSocket {
               break;
             case "end":
               this.handlers.onEnd(data);
+              break;
+            case "citations":
+              if (Array.isArray(data.items)) {
+                this.handlers.onCitations?.(data.items as Citation[]);
+              }
               break;
             case "error":
               this.handlers.onError(data.message);

@@ -5,7 +5,7 @@ import { getSites } from "../lib/api";
 import { useStore } from "../lib/store";
 import { useLocale } from "../lib/useLocale";
 import { useNotifications } from "../lib/useNotifications";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
 
 const sidebarGroups = [
   {
@@ -90,8 +90,10 @@ export default function Layout() {
     [t]
   );
 
-  // Update document title based on current route
-  useEffect(() => {
+  // Update document title based on current route.
+  // Use useLayoutEffect so the title is set synchronously before paint
+  // (prevents a brief "Plugo Dashboard" flash from the index.html fallback).
+  useLayoutEffect(() => {
     const path = location.pathname;
     const allLinks = sidebarGroups.flatMap((g) => g.links);
     const match = allLinks.find((link) => path.endsWith(`/${link.to}`));

@@ -1,14 +1,38 @@
 """LLM API Key management — save/retrieve provider API keys via dashboard."""
 
+import json
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from auth import TokenData, get_current_user
+from logging_config import logger
 from repositories import Repositories, get_repos
 from utils.crypto import decrypt_value, encrypt_value
 
 router = APIRouter(prefix="/api/llm-keys", tags=["llm-keys"])
+
+
+# Audit only mutations (save/delete). Read paths — `list_keys` and the
+# internal `get_key_for_provider` — fire on every chat turn and would
+# flood the audit log with low-signal rows.
+def _key_last4(raw_key: str) -> str:
+    return raw_key[-4:] if raw_key and len(raw_key) >= 4 else "****"
+
+
+async def _audit(repos: Repositories, user: TokenData, action: str, provider: str, details: dict) -> None:
+    try:
+        await repos.audit_logs.create({
+            "user_id": user.sub,
+            "username": user.sub,
+            "action": action,
+            "resource_type": "llm_key",
+            "resource_id": provider,
+            "details": json.dumps(details),
+        })
+    except Exception as e:
+        # Audit failure must never block a mutation — the key is already saved.
+        logger.warning("Failed to create llm_key audit log", action=action, provider=provider, error=str(e))
 
 
 class KeySave(BaseModel):
@@ -75,6 +99,10 @@ async def save_key(
     from providers.factory import refresh_key_cache
     await refresh_key_cache()
 
+    await _audit(
+        repos, user, "save", data.provider,
+        {"label": data.label, "key_last4": _key_last4(data.api_key)},
+    )
     return {"message": f"API key for {data.provider} saved", "provider": data.provider}
 
 
@@ -95,6 +123,7 @@ async def delete_key(
     from providers.factory import clear_provider_key
     clear_provider_key(provider)
 
+    await _audit(repos, user, "delete", provider, {"provider": provider})
     return {"message": f"API key for {provider} deleted"}
 
 

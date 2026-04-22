@@ -118,14 +118,14 @@ p{text-align:center;font-size:14px;}</style></head>
             className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
           >
             <Eye className="w-4 h-4" />
-            {showPreview ? "Hide" : "Show Preview"}
+            {showPreview ? t("embed.hidePreview") : t("embed.showPreview")}
           </button>
         </div>
 
         {/* Configurator controls */}
         <div className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Primary Color</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">{t("embed.primaryColor")}</label>
             <div className="flex items-center gap-2">
               <input
                 type="color"
@@ -141,18 +141,18 @@ p{text-align:center;font-size:14px;}</style></head>
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Position</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">{t("embed.position")}</label>
             <select
               value={previewPosition}
               onChange={(e) => setPreviewPosition(e.target.value)}
               className="w-full border rounded px-2 py-1.5 text-sm outline-none"
             >
-              <option value="bottom-right">Bottom Right</option>
-              <option value="bottom-left">Bottom Left</option>
+              <option value="bottom-right">{t("embed.positionBottomRight")}</option>
+              <option value="bottom-left">{t("embed.positionBottomLeft")}</option>
             </select>
           </div>
           <div className="lg:col-span-2">
-            <label className="block text-xs font-medium text-gray-600 mb-1">Greeting</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">{t("embed.greeting")}</label>
             <input
               value={previewGreeting}
               onChange={(e) => setPreviewGreeting(e.target.value)}
@@ -166,7 +166,7 @@ p{text-align:center;font-size:14px;}</style></head>
               onChange={(e) => setPreviewDarkMode(e.target.checked)}
               className="rounded"
             />
-            <label className="text-xs font-medium text-gray-600">Dark Mode</label>
+            <label className="text-xs font-medium text-gray-600">{t("embed.darkMode")}</label>
           </div>
         </div>
 
@@ -282,9 +282,9 @@ p{text-align:center;font-size:14px;}</style></head>
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-gray-500 border-b">
-              <th className="pb-2">Option</th>
-              <th className="pb-2">Type</th>
-              <th className="pb-2">Description</th>
+              <th className="pb-2">{t("embed.tableOption")}</th>
+              <th className="pb-2">{t("embed.tableType")}</th>
+              <th className="pb-2">{t("embed.tableDescription")}</th>
             </tr>
           </thead>
           <tbody className="text-gray-700">

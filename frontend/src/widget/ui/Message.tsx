@@ -1,5 +1,14 @@
 import { useMemo, useState } from "preact/hooks";
-import { parseMarkdown, parseStreamingMarkdown } from "../markdown";
+import { parseMarkdown, parseStreamingMarkdown, sanitizeUrl } from "../markdown";
+import type { Citation } from "../websocket";
+
+const SUPERSCRIPTS = ["¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸", "⁹"];
+
+function superscriptFor(index: number): string {
+  // 1..9 → unicode superscripts; beyond that fall back to (N).
+  if (index < SUPERSCRIPTS.length) return SUPERSCRIPTS[index];
+  return `(${index + 1})`;
+}
 
 /** Navigate slideshow to a specific index */
 function goToSlide(slideshow: Element, idx: number) {
@@ -49,6 +58,7 @@ export type MessageProps = {
   isError?: boolean;
   isStreaming?: boolean;
   isLastInGroup?: boolean;
+  citations?: Citation[];
   onFeedback?: (index: number, rating: "up" | "down") => void;
   onRetry?: () => void;
 };
@@ -89,7 +99,34 @@ function ToolCallCard({ toolName, isComplete }: { toolName: string; isComplete: 
   );
 }
 
-export function Message({ role, content, timestamp, index, isError, isStreaming, isLastInGroup = true, onFeedback, onRetry }: MessageProps) {
+function CitationsFooter({ items }: { items: Citation[] }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div class="plugo-citations" aria-label="Sources">
+      <span class="plugo-citations-label">Sources:</span>
+      {items.map((c, i) => {
+        // Sanitize URL to match the markdown renderer — keeps javascript:/data:
+        // URIs out of anchor hrefs even if the backend citation ever leaks one.
+        const safeHref = sanitizeUrl(c.url || "");
+        return (
+          <a
+            key={c.url || i}
+            class="plugo-citation"
+            href={safeHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={c.title || c.url}
+          >
+            <sup>{superscriptFor(i)}</sup>
+            <span class="plugo-citation-title">{c.title || c.url}</span>
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
+export function Message({ role, content, timestamp, index, isError, isStreaming, isLastInGroup = true, citations, onFeedback, onRetry }: MessageProps) {
   const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
 
   // Check for tool call markers in bot content
@@ -159,6 +196,9 @@ export function Message({ role, content, timestamp, index, isError, isStreaming,
               dangerouslySetInnerHTML={{ __html: html }}
               onClick={handleMsgClick}
             />
+          )}
+          {!isStreaming && citations && citations.length > 0 && (
+            <CitationsFooter items={citations} />
           )}
           {showActions && (
             <div class={`plugo-actions${feedback ? " has-feedback" : ""}`}>

@@ -58,7 +58,7 @@ export default function AuditLog() {
           <input
             value={searchFilter}
             onChange={(e) => setSearchFilter(e.target.value)}
-            placeholder="Search by user, action, resource, or details..."
+            placeholder={t("audit.searchPlaceholder")}
             className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
@@ -67,10 +67,10 @@ export default function AuditLog() {
           onChange={(e) => setActionFilter(e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-500"
         >
-          <option value="all">All Actions</option>
-          <option value="create">Create</option>
-          <option value="update">Update</option>
-          <option value="delete">Delete</option>
+          <option value="all">{t("audit.allActions")}</option>
+          <option value="create">{t("audit.actionCreate")}</option>
+          <option value="update">{t("audit.actionUpdate")}</option>
+          <option value="delete">{t("audit.actionDelete")}</option>
         </select>
       </div>
 
@@ -78,7 +78,7 @@ export default function AuditLog() {
       {(searchFilter || actionFilter !== "all") && (
         <div className="flex items-center gap-2 mb-3 text-xs text-gray-400">
           <Info className="w-3.5 h-3.5" />
-          <span>Filters apply to the current page only.</span>
+          <span>{t("audit.filterScope")}</span>
         </div>
       )}
 
@@ -87,7 +87,7 @@ export default function AuditLog() {
       ) : !data?.logs?.length ? (
         <EmptyState icon={FileText} message={t("audit.noLogs")} />
       ) : filteredLogs.length === 0 ? (
-        <div className="text-center py-12 text-sm text-gray-400">No matching audit logs found.</div>
+        <div className="text-center py-12 text-sm text-gray-400">{t("audit.noMatch")}</div>
       ) : (
         <>
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -98,7 +98,7 @@ export default function AuditLog() {
                   <th className="px-4 py-3">{t("audit.user")}</th>
                   <th className="px-4 py-3">{t("audit.action")}</th>
                   <th className="px-4 py-3">{t("audit.resource")}</th>
-                  <th className="px-4 py-3">Details</th>
+                  <th className="px-4 py-3">{t("audit.details")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -119,8 +119,8 @@ export default function AuditLog() {
                       {log.resource_type}
                       {log.resource_id && <span className="text-xs text-gray-400 ml-1">({log.resource_id.substring(0, 8)}...)</span>}
                     </td>
-                    <td className="px-4 py-3 text-gray-500 text-xs truncate max-w-[200px]">
-                      {log.details || ""}
+                    <td className="px-4 py-3 text-gray-500 text-xs max-w-[320px]">
+                      <DetailsCell details={log.details} />
                     </td>
                   </tr>
                 ))}
@@ -152,5 +152,27 @@ export default function AuditLog() {
         </>
       )}
     </div>
+  );
+}
+
+// Render details column: pretty-print JSON when possible, otherwise plain text.
+function DetailsCell({ details }: { details: string | null }) {
+  if (!details) return null;
+  let pretty: string;
+  try {
+    const parsed = JSON.parse(details);
+    pretty = JSON.stringify(parsed, null, 2);
+  } catch {
+    pretty = details;
+  }
+  const truncated = pretty.length > 100;
+  const display = truncated ? pretty.slice(0, 100) + "..." : pretty;
+  return (
+    <pre
+      className="whitespace-pre-wrap font-mono text-[11px] leading-snug text-gray-500 m-0"
+      title={pretty}
+    >
+      {display}
+    </pre>
   );
 }

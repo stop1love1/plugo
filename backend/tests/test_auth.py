@@ -19,25 +19,18 @@ async def test_login_success(client):
     assert data["username"] == "plugo"
 
 
+@pytest.mark.parametrize("username, password", [
+    ("plugo", "wrongpassword"),        # correct user, wrong password
+    ("nonexistentuser", "pluginme"),   # wrong user, correct password
+])
 @pytest.mark.asyncio
-async def test_login_wrong_password(client):
-    """POST /api/auth/login with wrong password should return 401."""
-    response = await client.post("/api/auth/login", json={
-        "username": "plugo",
-        "password": "wrongpassword",
-    })
+async def test_login_rejects_bad_credentials(client, username, password):
+    """POST /api/auth/login must 401 for both wrong username and wrong password."""
+    response = await client.post(
+        "/api/auth/login", json={"username": username, "password": password}
+    )
     assert response.status_code == 401
     assert response.json()["detail"] == "Invalid username or password"
-
-
-@pytest.mark.asyncio
-async def test_login_wrong_username(client):
-    """POST /api/auth/login with wrong username should return 401."""
-    response = await client.post("/api/auth/login", json={
-        "username": "nonexistentuser",
-        "password": "pluginme",
-    })
-    assert response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -51,19 +44,14 @@ async def test_get_me_with_valid_token(client, auth_headers):
     assert data["role"] == "admin"
 
 
+@pytest.mark.parametrize("headers", [
+    None,  # missing Authorization header
+    {"Authorization": "Bearer invalid-token-here"},  # malformed/invalid token
+])
 @pytest.mark.asyncio
-async def test_get_me_without_token(client):
-    """GET /api/auth/me without token should return 401."""
-    response = await client.get("/api/auth/me")
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_get_me_with_invalid_token(client):
-    """GET /api/auth/me with invalid token should return 401."""
-    response = await client.get("/api/auth/me", headers={
-        "Authorization": "Bearer invalid-token-here",
-    })
+async def test_get_me_rejects_missing_or_invalid_token(client, headers):
+    """GET /api/auth/me must return 401 when no token or a bad token is provided."""
+    response = await client.get("/api/auth/me", headers=headers or {})
     assert response.status_code == 401
 
 
@@ -107,3 +95,62 @@ async def test_verify_credentials():
     assert verify_credentials("plugo", "pluginme") is True
     assert verify_credentials("plugo", "wrong") is False
     assert verify_credentials("wrong", "pluginme") is False
+
+
+# --- LLM key audit trail (C-5) ---
+
+
+@pytest.mark.asyncio
+async def test_save_llm_key_writes_audit_log(client, auth_headers, db_repos, monkeypatch):
+    """POST /api/llm-keys must leave an audit row with action=save, key_last4 only."""
+    # Avoid touching the real provider factory cache between tests.
+    monkeypatch.setattr("providers.factory.refresh_key_cache", lambda: _noop_async())
+
+    raw_key = "sk-abc-TEST-KEY-1234"
+    r = await client.post(
+        "/api/llm-keys",
+        json={"provider": "openai", "api_key": raw_key, "label": "primary"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200, r.text
+
+    audit = await db_repos.audit_logs.list_by_site(page=1, per_page=50)
+    llm_logs = [
+        log for log in audit.get("logs", [])
+        if log.get("resource_type") == "llm_key" and log.get("action") == "save"
+    ]
+    assert llm_logs, "save audit log not found"
+    # Full key MUST NOT appear in details — only last 4 chars.
+    row = llm_logs[0]
+    details = row["details"] if isinstance(row["details"], str) else str(row["details"])
+    assert raw_key not in details
+    assert raw_key[-4:] in details
+
+    # Cleanup.
+    await client.delete("/api/llm-keys/openai", headers=auth_headers)
+
+
+@pytest.mark.asyncio
+async def test_delete_llm_key_writes_audit_log(client, auth_headers, db_repos, monkeypatch):
+    monkeypatch.setattr("providers.factory.refresh_key_cache", lambda: _noop_async())
+
+    # Create a key first.
+    await client.post(
+        "/api/llm-keys",
+        json={"provider": "gemini", "api_key": "g-key-zzzz", "label": ""},
+        headers=auth_headers,
+    )
+    r = await client.delete("/api/llm-keys/gemini", headers=auth_headers)
+    assert r.status_code == 200
+
+    audit = await db_repos.audit_logs.list_by_site(page=1, per_page=50)
+    assert any(
+        log.get("resource_type") == "llm_key"
+        and log.get("action") == "delete"
+        and log.get("resource_id") == "gemini"
+        for log in audit.get("logs", [])
+    )
+
+
+async def _noop_async():  # helper: coroutine-returning stub for refresh_key_cache
+    return None

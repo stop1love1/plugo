@@ -18,11 +18,17 @@ from logging_config import logger
 from routers import analytics, chat, crawl, flows, knowledge, memory, sessions, sites, tools
 from routers import audit as audit_router
 from routers import auth as auth_router
+from routers import chat_sse as chat_sse_router
 from routers import config as config_router
 from routers import llm_keys as llm_keys_router
 from routers import models as models_router
 
 # --- Rate limiter ---
+# Default key: per-IP. Public embeddable endpoints (SSE, WebSocket) override
+# with `site_token_key` from utils.rate_limit so one noisy embedder can't
+# starve other tenants sharing its egress IP (e.g. behind a CDN).
+# Admin endpoints: per-IP (authenticated, so IPs are meaningful).
+# Public endpoints: per-site-token (isolate tenants).
 limiter = Limiter(key_func=get_remote_address, default_limits=[settings.rate_limit_default])
 
 
@@ -80,6 +86,10 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # --- CORS ---
+# Global allowlist — coarse gate for the admin dashboard and anything not
+# tied to a specific tenant. Multi-tenant isolation for public widget routes
+# lives in `utils/cors.py::validate_site_origin` because this middleware
+# can't see which `site_token` a request targets.
 origins = [o.strip() for o in settings.cors_origins.split(",")]
 app.add_middleware(
     CORSMiddleware,
@@ -134,6 +144,7 @@ app.include_router(llm_keys_router.router)
 app.include_router(models_router.router)
 app.include_router(config_router.router)
 app.include_router(flows.router)
+app.include_router(chat_sse_router.register_routes())
 
 
 @app.get("/")

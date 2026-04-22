@@ -12,11 +12,34 @@ from agent.memory import ConversationSummarizer, MemoryExtractor
 from logging_config import logger
 from providers.factory import get_llm_provider
 from repositories import create_repos
+from utils.cors import validate_site_origin
+from utils.pricing import estimate_cost
+from utils.rate_limit import SiteTokenWSRateLimiter
 
 router = APIRouter()
 
 # Store active agents per session
 active_agents: dict[str, ChatAgent] = {}
+
+# Per-session locks to serialize the resume check + active_agents insert.
+# Bounded to keep memory in check for long-lived servers; we drop unheld locks
+# once we exceed the cap, since a fresh Lock will be created next time it's needed.
+_session_resume_locks: dict[str, asyncio.Lock] = {}
+_SESSION_LOCKS_MAX = 1000
+
+
+def _get_session_resume_lock(session_id: str) -> asyncio.Lock:
+    """Return (creating if needed) a Lock for this session_id. Drops unheld locks
+    when the registry exceeds _SESSION_LOCKS_MAX entries."""
+    lock = _session_resume_locks.get(session_id)
+    if lock is None:
+        if len(_session_resume_locks) >= _SESSION_LOCKS_MAX:
+            stale = [k for k, v in _session_resume_locks.items() if not v.locked()]
+            for k in stale[: max(1, len(stale) // 2)]:
+                _session_resume_locks.pop(k, None)
+        lock = asyncio.Lock()
+        _session_resume_locks[session_id] = lock
+    return lock
 
 # Retain references until background tasks complete (RUF006 / asyncio.create_task)
 _background_tasks: set[asyncio.Task] = set()
@@ -28,42 +51,13 @@ def _fire_and_forget(coro):
     task.add_done_callback(_background_tasks.discard)
 
 # --- WebSocket rate limiting ---
+# Bucket per (site_token, session) so one tenant's traffic can't starve another's.
 WS_RATE_LIMIT_WINDOW = 60  # seconds
-WS_RATE_LIMIT_MAX = 20  # max messages per window per session
+WS_RATE_LIMIT_MAX = 20  # max messages per window
 
-
-class WSRateLimiter:
-    """Simple per-session rate limiter for WebSocket messages."""
-
-    def __init__(self):
-        self._timestamps: dict[str, list[float]] = {}
-
-    def is_allowed(self, session_id: str) -> bool:
-        now = time()
-
-        # Lazy eviction: remove stale sessions whose timestamps are all expired
-        stale_keys = [
-            key for key, ts_list in self._timestamps.items()
-            if key != session_id and all(now - t >= WS_RATE_LIMIT_WINDOW for t in ts_list)
-        ]
-        for key in stale_keys:
-            del self._timestamps[key]
-
-        timestamps = self._timestamps.get(session_id, [])
-        # Remove expired timestamps for current session
-        timestamps = [t for t in timestamps if now - t < WS_RATE_LIMIT_WINDOW]
-        if len(timestamps) >= WS_RATE_LIMIT_MAX:
-            self._timestamps[session_id] = timestamps
-            return False
-        timestamps.append(now)
-        self._timestamps[session_id] = timestamps
-        return True
-
-    def cleanup(self, session_id: str):
-        self._timestamps.pop(session_id, None)
-
-
-_ws_rate_limiter = WSRateLimiter()
+_ws_rate_limiter = SiteTokenWSRateLimiter(
+    window_seconds=WS_RATE_LIMIT_WINDOW, max_requests=WS_RATE_LIMIT_MAX
+)
 
 # --- Site config cache ---
 _site_cache: dict[str, tuple[dict, float]] = {}
@@ -116,19 +110,22 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
         await websocket.close()
         return
 
-    # Validate WebSocket origin against site's allowed_domains
+    # Validate WebSocket origin against site's allowed_domains.
+    # Per-site tenant isolation — the global CORS middleware is a site-agnostic
+    # allowlist and can't enforce this; see utils/cors.py for contract.
     origin = websocket.headers.get("origin", "")
-    if site.get("allowed_domains"):
-        allowed = [d.strip() for d in site["allowed_domains"].split(",") if d.strip()]
-        if allowed:
-            if not origin:
-                await websocket.close(code=4003, reason="Origin required")
-                return
-            from urllib.parse import urlparse as _urlparse
-            origin_host = _urlparse(origin).hostname
-            if not origin_host or not any(origin_host == d or origin_host.endswith("." + d) for d in allowed):
-                await websocket.close(code=4003, reason="Origin not allowed")
-                return
+    if site.get("allowed_domains") and not validate_site_origin(site, origin):
+        reason = "Origin required" if not origin else "Origin not allowed"
+        # SSE returns 403 (visible in access logs); WS closing silently would
+        # be a monitoring blind spot. Log each rejection with its reason.
+        logger.warning(
+            "WS origin rejected",
+            site_id=site.get("id"),
+            origin=origin or "<none>",
+            reason=reason,
+        )
+        await websocket.close(code=4003, reason=reason)
+        return
 
     if not site.get("is_approved"):
         await websocket.send_json({"type": "error", "message": "This chat is not available yet. Please try again later."})
@@ -152,64 +149,79 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
     # Scope to this site to prevent cross-site memory access
     visitor_id = f"{site['id']}:{sanitized}"
 
-    # Check if client wants to resume an existing session
-    if first_data.get("type") == "init" and first_data.get("session_id"):
-        existing_session = await repos.chat_sessions.get_by_id(first_data["session_id"])
-        if existing_session and existing_session.get("site_id") == site["id"]:
-            # Allow resume if session is still open OR ended less than 5 minutes ago
-            ended_at = existing_session.get("ended_at")
-            can_resume = not ended_at
-            if ended_at and isinstance(ended_at, str):
+    # Serialize resume checks + active_agents insert so two concurrent clients can't
+    # both pass the ended_at window and both become "live" for the same session.
+    # Only acquire a lock on the resume path — a new-connection path doesn't need
+    # serialization and would just pollute the lock registry with unique keys.
+    requested_resume_id = first_data.get("session_id") if first_data.get("type") == "init" else None
+    resume_lock = _get_session_resume_lock(requested_resume_id) if requested_resume_id else contextlib.nullcontext()
+    async with resume_lock:
+        # Check if client wants to resume an existing session
+        if requested_resume_id:
+            if requested_resume_id in active_agents:
+                # Another WS is already live for this session — reject to prevent interleaved streams.
+                # Use try/finally so repos.close() always runs even if websocket.close() raises.
                 try:
-                    ended_time = datetime.fromisoformat(ended_at)
-                    if ended_time.tzinfo is None:
-                        ended_time = ended_time.replace(tzinfo=UTC)
-                    can_resume = (datetime.now(UTC) - ended_time).total_seconds() < 300
-                except ValueError:
-                    pass
-            elif ended_at and isinstance(ended_at, datetime):
-                if ended_at.tzinfo is None:
-                    ended_at = ended_at.replace(tzinfo=UTC)
-                can_resume = (datetime.now(UTC) - ended_at).total_seconds() < 300
+                    await websocket.close(code=4409, reason="Session already active")
+                finally:
+                    await repos.close()
+                return
+            existing_session = await repos.chat_sessions.get_by_id(requested_resume_id)
+            if existing_session and existing_session.get("site_id") == site["id"]:
+                # Allow resume if session is still open OR ended less than 5 minutes ago
+                ended_at = existing_session.get("ended_at")
+                can_resume = not ended_at
+                if ended_at and isinstance(ended_at, str):
+                    try:
+                        ended_time = datetime.fromisoformat(ended_at)
+                        if ended_time.tzinfo is None:
+                            ended_time = ended_time.replace(tzinfo=UTC)
+                        can_resume = (datetime.now(UTC) - ended_time).total_seconds() < 300
+                    except ValueError:
+                        pass
+                elif ended_at and isinstance(ended_at, datetime):
+                    if ended_at.tzinfo is None:
+                        ended_at = ended_at.replace(tzinfo=UTC)
+                    can_resume = (datetime.now(UTC) - ended_at).total_seconds() < 300
 
-            if can_resume:
-                session_id = existing_session["id"]
-                messages = existing_session.get("messages", [])
-                resumed = True
-                # Clear ended_at since session is being resumed
-                await repos.chat_sessions.set_ended(session_id, clear=True)
-                # Use visitor_id from existing session if not provided
-                if not visitor_id:
-                    visitor_id = existing_session.get("visitor_id")
-                logger.info("Session resumed", session_id=session_id, message_count=len(messages))
+                if can_resume:
+                    session_id = existing_session["id"]
+                    messages = existing_session.get("messages", [])
+                    resumed = True
+                    # Clear ended_at since session is being resumed
+                    await repos.chat_sessions.set_ended(session_id, clear=True)
+                    # Use visitor_id from existing session if not provided
+                    if not visitor_id:
+                        visitor_id = existing_session.get("visitor_id")
+                    logger.info("Session resumed", session_id=session_id, message_count=len(messages))
 
-    # Create new session if not resuming
-    if not session_id:
-        session_data = {"site_id": site["id"]}
-        if visitor_id:
-            session_data["visitor_id"] = visitor_id
-        chat_session = await repos.chat_sessions.create(session_data)
-        session_id = chat_session["id"]
+        # Create new session if not resuming
+        if not session_id:
+            session_data = {"site_id": site["id"]}
+            if visitor_id:
+                session_data["visitor_id"] = visitor_id
+            chat_session = await repos.chat_sessions.create(session_data)
+            session_id = chat_session["id"]
 
-    # Create or restore agent
-    agent = ChatAgent(
-        site_id=site["id"],
-        site_name=site["name"],
-        site_url=site["url"],
-        llm_provider=site["llm_provider"],
-        llm_model=site["llm_model"],
-        system_prompt=site.get("system_prompt", ""),
-        bot_rules=site.get("bot_rules", ""),
-        response_language=site.get("response_language", "auto"),
-    )
+        # Create or restore agent
+        agent = ChatAgent(
+            site_id=site["id"],
+            site_name=site["name"],
+            site_url=site["url"],
+            llm_provider=site["llm_provider"],
+            llm_model=site["llm_model"],
+            system_prompt=site.get("system_prompt", ""),
+            bot_rules=site.get("bot_rules", ""),
+            response_language=site.get("response_language", "auto"),
+        )
 
-    # Restore agent conversation history from saved messages
-    if resumed and messages:
-        for msg in messages:
-            role = "user" if msg["role"] == "user" else "assistant"
-            agent.messages.append({"role": role, "content": msg["content"]})
+        # Restore agent conversation history from saved messages
+        if resumed and messages:
+            for msg in messages:
+                role = "user" if msg["role"] == "user" else "assistant"
+                agent.messages.append({"role": role, "content": msg["content"]})
 
-    active_agents[session_id] = agent
+        active_agents[session_id] = agent
 
     # Fetch conversation summary for resumed sessions
     conversation_summary = None
@@ -289,8 +301,8 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
                 if isinstance(page_text, str) and len(page_text) > 5000:
                     page_context["text"] = page_text[:5000]
 
-            # Rate limit WebSocket messages
-            if not _ws_rate_limiter.is_allowed(session_id):
+            # Rate limit WebSocket messages — bucket per (site_token, session)
+            if not _ws_rate_limiter.is_allowed(session_id, site_token):
                 await websocket.send_json({
                     "type": "error",
                     "message": "Too many messages. Please slow down.",
@@ -330,7 +342,7 @@ async def websocket_chat(websocket: WebSocket, site_token: str):
         except Exception as e:
             logger.warning("Failed to mark session ended", session_id=session_id, error=str(e))
         active_agents.pop(session_id, None)
-        _ws_rate_limiter.cleanup(session_id)
+        _ws_rate_limiter.cleanup(session_id, site_token)
         await repos.close()
 
         # Background: extract memories from this conversation
@@ -402,6 +414,27 @@ async def _handle_message(
             await repos.chat_sessions.update_messages(session_id, messages)
         except Exception as e:
             logger.error("Failed to save messages", session_id=session_id, error=str(e))
+
+    # Emit structured citations (if any) BEFORE the end marker so the client
+    # can attach them to the just-finished assistant message.
+    if not stream_error and agent.last_citations:
+        with contextlib.suppress(Exception):
+            await websocket.send_json({
+                "type": "citations",
+                "items": agent.last_citations,
+            })
+
+    # Record token usage for this turn (providers without usage reporting are no-ops).
+    usage = agent.total_usage
+    if usage:
+        in_t = int(usage.get("input_tokens") or 0)
+        out_t = int(usage.get("output_tokens") or 0)
+        if in_t or out_t:
+            cost = estimate_cost(agent.llm_model, in_t, out_t)
+            try:
+                await repos.chat_sessions.add_token_usage(session_id, in_t, out_t, cost)
+            except Exception as e:
+                logger.warning("Failed to record token usage", session_id=session_id, error=str(e))
 
     if not stream_error:
         with contextlib.suppress(Exception):

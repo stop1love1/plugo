@@ -1,15 +1,23 @@
 """Tests for the web crawler text extraction and chunking."""
 
 import os
+import socket
 import sys
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from urllib.parse import urlparse
 
+import pytest
 from bs4 import BeautifulSoup
 
-from knowledge.crawler import WebCrawler, _canonical_internal_url, _normalize_host
+from knowledge.crawler import (
+    WebCrawler,
+    _canonical_internal_url,
+    _is_safe_public_url,
+    _normalize_host,
+)
 
 
 def test_extract_text_removes_nav_footer():
@@ -116,3 +124,99 @@ def test_crawler_stop_signal():
 
     crawler.stop()
     assert crawler._stopped is True
+
+
+@pytest.mark.asyncio
+async def test_is_safe_public_url_rejects_unsafe():
+    """SSRF guard must reject non-http, loopback, private, link-local, and cloud metadata URLs."""
+    # 1. Non-http(s) scheme
+    ok, reason = await _is_safe_public_url("file:///etc/passwd")
+    assert not ok and "scheme" in reason
+
+    # 2. localhost hostname
+    ok, reason = await _is_safe_public_url("http://localhost/secret")
+    assert not ok and "localhost" in reason
+
+    # 3. Loopback IP
+    ok, reason = await _is_safe_public_url("http://127.0.0.1:8000/admin")
+    assert not ok and "127.0.0.1" in reason
+
+    # 4. Private IP
+    ok, reason = await _is_safe_public_url("http://192.168.1.1/")
+    assert not ok and "192.168.1.1" in reason
+
+    # 5. Cloud metadata endpoint
+    ok, reason = await _is_safe_public_url("http://169.254.169.254/latest/meta-data/")
+    assert not ok
+
+    # And also metadata.google.internal
+    ok, _ = await _is_safe_public_url("http://metadata.google.internal/")
+    assert not ok
+
+
+@pytest.mark.asyncio
+async def test_is_safe_public_url_allows_public():
+    """Legitimate public URLs must pass the SSRF guard (DNS resolution returns public IPs)."""
+    # Mock DNS so the test doesn't depend on live name resolution.
+    public_info = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 0))]
+    with patch("knowledge.crawler.socket.getaddrinfo", return_value=public_info):
+        ok, _ = await _is_safe_public_url("https://example.com/page")
+        assert ok
+    # IP literal path doesn't hit DNS
+    ok, _ = await _is_safe_public_url("http://8.8.8.8/")
+    assert ok
+
+
+@pytest.mark.asyncio
+async def test_is_safe_public_url_rejects_dns_resolving_to_private():
+    """DNS rebinding defense: reject when a public hostname resolves to a private IP."""
+    # Simulate evil.com resolving to a private/internal address.
+    private_info = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("169.254.169.254", 0))]
+    with patch("knowledge.crawler.socket.getaddrinfo", return_value=private_info):
+        ok, reason = await _is_safe_public_url("https://evil.example.com/path")
+    assert not ok
+    assert "169.254.169.254" in reason or "internal" in reason.lower()
+
+    # Also test a classic RFC1918 private address.
+    rfc1918_info = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("10.0.0.1", 0))]
+    with patch("knowledge.crawler.socket.getaddrinfo", return_value=rfc1918_info):
+        ok, reason = await _is_safe_public_url("https://rebind.example.com/")
+    assert not ok
+    assert "10.0.0.1" in reason or "internal" in reason.lower()
+
+
+@pytest.mark.asyncio
+async def test_is_safe_public_url_rejects_dns_resolution_failure():
+    """Conservative default: if DNS resolution fails, reject the URL."""
+    with patch(
+        "knowledge.crawler.socket.getaddrinfo",
+        side_effect=socket.gaierror("name or service not known"),
+    ):
+        ok, reason = await _is_safe_public_url("https://nonexistent.invalid/")
+    assert not ok
+    assert "DNS" in reason or "resolution" in reason.lower()
+
+
+@pytest.mark.asyncio
+async def test_is_safe_public_url_allow_private_flag():
+    """With allow_private=True, localhost and RFC1918 IPs are permitted — but cloud
+    metadata endpoints MUST still be blocked (credential-exfil risk)."""
+    # Localhost literal passes when flag is set.
+    ok, _ = await _is_safe_public_url("http://localhost:9999/login", allow_private=True)
+    assert ok
+    # Loopback IP passes.
+    ok, _ = await _is_safe_public_url("http://127.0.0.1:8000/", allow_private=True)
+    assert ok
+    # RFC1918 IP passes.
+    ok, _ = await _is_safe_public_url("http://192.168.1.1/", allow_private=True)
+    assert ok
+    # Cloud metadata NEVER passes, even with the flag.
+    ok, reason = await _is_safe_public_url("http://169.254.169.254/latest/", allow_private=True)
+    assert not ok and "metadata" in reason.lower()
+    ok, _ = await _is_safe_public_url("http://metadata.google.internal/", allow_private=True)
+    assert not ok
+    # DNS resolving to private IP passes with flag (on-prem wiki behind reverse proxy).
+    private_info = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("10.0.0.5", 0))]
+    with patch("knowledge.crawler.socket.getaddrinfo", return_value=private_info):
+        ok, _ = await _is_safe_public_url("https://wiki.internal/", allow_private=True)
+    assert ok

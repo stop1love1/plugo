@@ -15,6 +15,7 @@ class OpenAIProvider(BaseLLMProvider):
     def __init__(self, api_key: str, model: str = "gpt-4o"):
         self.client = AsyncOpenAI(api_key=api_key)
         self.model = model
+        self.last_usage: dict | None = None
 
     async def chat(
         self,
@@ -37,7 +38,15 @@ class OpenAIProvider(BaseLLMProvider):
             kwargs["tools"] = self._convert_tools(tools)
 
         response = await self.client.chat.completions.create(**kwargs)
-        return self._parse_response(response)
+        result = self._parse_response(response)
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            self.last_usage = {
+                "input_tokens": getattr(usage, "prompt_tokens", 0) or 0,
+                "output_tokens": getattr(usage, "completion_tokens", 0) or 0,
+            }
+            result["usage"] = self.last_usage
+        return result
 
     async def stream(
         self,
@@ -51,17 +60,27 @@ class OpenAIProvider(BaseLLMProvider):
             msgs.append({"role": "system", "content": system_prompt})
         msgs.extend(messages)
 
+        # include_usage asks OpenAI to emit token counts in the final chunk.
         kwargs = {
             "model": self.model,
             "messages": msgs,
             "temperature": temperature,
             "stream": True,
+            "stream_options": {"include_usage": True},
         }
 
+        self.last_usage = None
         response = await self.client.chat.completions.create(**kwargs)
         async for chunk in response:
-            if chunk.choices[0].delta.content:
+            # Final usage chunk has no choices — ignore content extraction there.
+            if chunk.choices and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
+            usage = getattr(chunk, "usage", None)
+            if usage is not None:
+                self.last_usage = {
+                    "input_tokens": getattr(usage, "prompt_tokens", 0) or 0,
+                    "output_tokens": getattr(usage, "completion_tokens", 0) or 0,
+                }
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         embed_model = self.model if self.is_embedding_model() else "text-embedding-3-small"

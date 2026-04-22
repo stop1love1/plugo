@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from auth import TokenData, get_current_user
 from logging_config import logger
 
-router = APIRouter(prefix="/config", tags=["config"])
+router = APIRouter(prefix="/api/config", tags=["config"])
 
 # Resolve config.json path (same logic as config.py)
 _CONFIG_PATHS = [

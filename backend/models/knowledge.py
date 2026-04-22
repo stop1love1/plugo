@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text
 
 from database import Base
 
@@ -17,9 +17,19 @@ class KnowledgeChunk(Base):
     title = Column(String(500), nullable=True)
     content = Column(Text, nullable=False)
     chunk_index = Column(Integer, default=0)
-    content_hash = Column(String(64), nullable=True, index=True)
+    # Composite index below covers (site_id, content_hash) — a standalone index
+    # on content_hash is redundant for our access patterns, so drop it.
+    content_hash = Column(String(64), nullable=True)
 
     # Reference to ChromaDB
     embedding_id = Column(String(255), nullable=True)
 
     crawled_at = Column(DateTime, default=lambda: datetime.now(UTC))
+
+    # Composite indexes for the hot paths:
+    #   list_crawled_urls / list_by_url  → (site_id, source_url)
+    #   create_many dedup / list_content_hashes → (site_id, content_hash)
+    __table_args__ = (
+        Index("ix_knowledge_chunks_site_url", "site_id", "source_url"),
+        Index("ix_knowledge_chunks_site_hash", "site_id", "content_hash"),
+    )

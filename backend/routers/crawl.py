@@ -556,17 +556,35 @@ async def _run_crawl_with_tracking(
     round_number = 0
     max_rounds = settings.crawl_max_continuous_rounds
 
+    # Load per-site SSRF override flag once (used by browser login + WebCrawler).
+    allow_private = False
+    try:
+        _repos_flag = await create_repos()
+        try:
+            _site_flag = await _repos_flag.sites.get_by_id(site_id)
+            allow_private = bool(_site_flag.get("allow_private_urls")) if _site_flag else False
+        finally:
+            await _repos_flag.close()
+    except Exception:
+        allow_private = False
+
     # Browser login: extract cookies once before crawl loop
     auth_cookies = None
     login_url = None
     if use_browser:
         try:
             from knowledge.browser_crawler import browser_login_and_extract_cookies
+            from knowledge.crawler import _is_safe_public_url
             repos_init = await create_repos()
             try:
                 site = await repos_init.sites.get_by_id(site_id)
                 if site and site.get("crawl_login_url") and site.get("crawl_login_username"):
                     login_url = site["crawl_login_url"]
+                    # Same SSRF guard as the HTTP crawler — cloud metadata always blocked,
+                    # private/loopback respects the per-site allow_private_urls flag.
+                    safe, reason = await _is_safe_public_url(login_url, allow_private=allow_private)
+                    if not safe:
+                        raise RuntimeError(f"login URL blocked by SSRF guard: {reason}")
                     raw_pw = await repos_init.sites.get_crawl_password(site_id)
                     auth_cookies = await browser_login_and_extract_cookies(
                         login_url=login_url,
@@ -606,6 +624,7 @@ async def _run_crawl_with_tracking(
             exclude_patterns=exclude_patterns,
             auth_cookies=auth_cookies,
             login_url=login_url,
+            allow_private_urls=allow_private,
         )
         _active_crawlers[site_id] = crawler
 

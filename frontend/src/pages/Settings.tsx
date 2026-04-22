@@ -39,6 +39,7 @@ export default function Settings() {
     auto_open_delay: 0,
     bubble_size: "medium",
     allowed_domains: "",
+    allow_private_urls: false,
     suggestions: "",
     system_prompt: "",
     bot_rules: "",
@@ -66,6 +67,7 @@ export default function Settings() {
         auto_open_delay: site.auto_open_delay || 0,
         bubble_size: site.bubble_size || "medium",
         allowed_domains: site.allowed_domains,
+        allow_private_urls: site.allow_private_urls || false,
         suggestions: (site.suggestions || []).join(", "),
         system_prompt: site.system_prompt || "",
         bot_rules: site.bot_rules || "",
@@ -93,6 +95,7 @@ export default function Settings() {
       form.auto_open_delay !== (site.auto_open_delay || 0) ||
       form.bubble_size !== (site.bubble_size || "medium") ||
       form.allowed_domains !== site.allowed_domains ||
+      form.allow_private_urls !== (site.allow_private_urls || false) ||
       form.suggestions !== (site.suggestions || []).join(", ") ||
       form.system_prompt !== (site.system_prompt || "") ||
       form.bot_rules !== (site.bot_rules || "") ||
@@ -126,7 +129,7 @@ export default function Settings() {
     mutationFn: (data: UpdateSiteData) => updateSite(siteId!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["site", siteId] });
-      toast.success("Settings saved");
+      toast.success(t("settings.saved"));
     },
     onError: (error) => toast.error(getErrorMessage(error)),
   });
@@ -170,7 +173,7 @@ export default function Settings() {
     if (!hasChanges) return;
 
     const handleBeforeNav = (e: PopStateEvent) => {
-      if (!window.confirm("You have unsaved changes. Are you sure you want to leave this page?")) {
+      if (!window.confirm(t("settings.unsavedLeaveConfirm"))) {
         e.preventDefault();
         // Push the current URL back to cancel the navigation
         window.history.pushState(null, "", window.location.href);
@@ -179,16 +182,16 @@ export default function Settings() {
 
     window.addEventListener("popstate", handleBeforeNav);
     return () => window.removeEventListener("popstate", handleBeforeNav);
-  }, [hasChanges]);
+  }, [hasChanges, t]);
 
   const deletesMutation = useMutation({
     mutationFn: () => deleteSite(siteId!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sites"] });
-      toast.success("Site deleted");
+      toast.success(t("settings.siteDeleted"));
       navigate("/");
     },
-    onError: () => toast.error("Failed to delete site"),
+    onError: () => toast.error(t("settings.deleteFailed")),
   });
 
   const handleSave = (e: React.FormEvent) => {
@@ -201,7 +204,7 @@ export default function Settings() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-2">{t("settings.title")}</h1>
-      <p className="text-gray-500 mb-8">{t("settings.widget")}</p>
+      <p className="text-gray-500 mb-8">{t("settings.subtitle")}</p>
 
       {hasChanges && (
         <div className="mb-4 px-4 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700 flex items-center gap-2">
@@ -239,6 +242,18 @@ export default function Settings() {
               {errors.allowed_domains && (
                 <p className="text-xs text-red-500 mt-1">{errors.allowed_domains}</p>
               )}
+            </div>
+            <div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.allow_private_urls}
+                  onChange={(e) => setForm({ ...form, allow_private_urls: e.target.checked })}
+                  className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                <span className="text-sm font-medium text-gray-700">{t("settings.allowPrivateUrls.label")}</span>
+              </label>
+              <p className="text-xs text-red-600 mt-1">{t("settings.allowPrivateUrls.help")}</p>
             </div>
           </div>
         </div>
@@ -323,7 +338,7 @@ export default function Settings() {
 
         {/* Widget — Appearance */}
         <div className="bg-white p-6 rounded-xl border border-gray-200">
-          <h3 className="font-semibold mb-4">{t("settings.widget")} — Appearance</h3>
+          <h3 className="font-semibold mb-4">{t("settings.widgetAppearance")}</h3>
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
@@ -350,36 +365,36 @@ export default function Settings() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.position")}</label>
                 <select value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })}
                   className="w-full border rounded-lg px-3 py-2 outline-none">
-                  <option value="bottom-right">Bottom Right</option>
-                  <option value="bottom-left">Bottom Left</option>
+                  <option value="bottom-right">{t("settings.positionBottomRight")}</option>
+                  <option value="bottom-left">{t("settings.positionBottomLeft")}</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Dark Mode</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.darkMode")}</label>
                 <select value={form.dark_mode} onChange={(e) => setForm({ ...form, dark_mode: e.target.value })}
                   className="w-full border rounded-lg px-3 py-2 outline-none">
-                  <option value="auto">Auto (follow system)</option>
-                  <option value="light">Always Light</option>
-                  <option value="dark">Always Dark</option>
+                  <option value="auto">{t("settings.darkModeAuto")}</option>
+                  <option value="light">{t("settings.darkModeLight")}</option>
+                  <option value="dark">{t("settings.darkModeDark")}</option>
                 </select>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Bot Avatar</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.botAvatar")}</label>
                 <input value={form.bot_avatar} onChange={(e) => setForm({ ...form, bot_avatar: e.target.value })}
                   placeholder="🤖"
                   maxLength={4}
                   className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
-                <p className="text-xs text-gray-400 mt-1">Emoji hiển thị trong header và tin nhắn bot</p>
+                <p className="text-xs text-gray-400 mt-1">{t("settings.botAvatarHint")}</p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Bubble Size</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.bubbleSize")}</label>
                 <select value={form.bubble_size} onChange={(e) => setForm({ ...form, bubble_size: e.target.value })}
                   className="w-full border rounded-lg px-3 py-2 outline-none">
-                  <option value="small">Small (48px)</option>
-                  <option value="medium">Medium (56px)</option>
-                  <option value="large">Large (64px)</option>
+                  <option value="small">{t("settings.bubbleSmall")}</option>
+                  <option value="medium">{t("settings.bubbleMedium")}</option>
+                  <option value="large">{t("settings.bubbleLarge")}</option>
                 </select>
               </div>
             </div>
@@ -388,17 +403,17 @@ export default function Settings() {
 
         {/* Widget — Content */}
         <div className="bg-white p-6 rounded-xl border border-gray-200">
-          <h3 className="font-semibold mb-4">{t("settings.widget")} — Content</h3>
+          <h3 className="font-semibold mb-4">{t("settings.widgetContent")}</h3>
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Widget Title</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.widgetTitle")}</label>
                 <input value={form.widget_title} onChange={(e) => setForm({ ...form, widget_title: e.target.value })}
                   placeholder="Chat with us"
                   className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Header Subtitle</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.headerSubtitle")}</label>
                 <input value={form.header_subtitle} onChange={(e) => setForm({ ...form, header_subtitle: e.target.value })}
                   placeholder="Online"
                   className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
@@ -411,20 +426,20 @@ export default function Settings() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Input Placeholder</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.inputPlaceholder")}</label>
                 <input value={form.input_placeholder} onChange={(e) => setForm({ ...form, input_placeholder: e.target.value })}
                   placeholder="Type a message..."
                   className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Auto Open (seconds)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.autoOpen")}</label>
                 <input type="number" min={0} max={120} value={form.auto_open_delay}
                   onChange={(e) => {
                     const val = parseInt(e.target.value);
                     setForm({ ...form, auto_open_delay: Number.isNaN(val) ? form.auto_open_delay : val });
                   }}
                   className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
-                <p className="text-xs text-gray-400 mt-1">0 = tắt. Tự mở widget sau N giây khi user vào trang</p>
+                <p className="text-xs text-gray-400 mt-1">{t("settings.autoOpenHint")}</p>
               </div>
             </div>
             <div>
