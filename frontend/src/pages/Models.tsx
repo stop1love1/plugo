@@ -54,7 +54,9 @@ export default function Models() {
       toast.success(t("models.modelAdded"));
     },
     onError: (err: unknown) => {
-      const detail = axios.isAxiosError(err) ? (err.response?.data as { detail?: string } | undefined)?.detail : undefined;
+      const detail = axios.isAxiosError(err)
+        ? (err.response?.data as { detail?: string } | undefined)?.detail
+        : undefined;
       toast.error(detail || "Failed to add model");
     },
   });
@@ -71,7 +73,8 @@ export default function Models() {
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
-    const provider = providerSelection === "__custom__" ? customProviderName.trim() : providerSelection;
+    const provider =
+      providerSelection === "__custom__" ? customProviderName.trim() : providerSelection;
     if (!provider || !newModel.model_id || !newModel.model_name) return;
     addMutation.mutate({ ...newModel, provider });
   };
@@ -143,7 +146,9 @@ export default function Models() {
           <form onSubmit={handleAdd} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("models.provider")}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t("models.provider")}
+                </label>
                 <select
                   value={providerSelection}
                   onChange={(e) => {
@@ -156,14 +161,18 @@ export default function Models() {
                 >
                   <option value="">{t("models.selectProvider")}</option>
                   {providers.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
                   ))}
                   <option value="__custom__">{t("models.otherProvider")}</option>
                 </select>
               </div>
               {providerSelection === "__custom__" && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("models.providerName")}</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {t("models.providerName")}
+                  </label>
                   <input
                     value={customProviderName}
                     onChange={(e) => setCustomProviderName(e.target.value)}
@@ -175,7 +184,9 @@ export default function Models() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("models.modelId")}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t("models.modelId")}
+                </label>
                 <input
                   value={newModel.model_id}
                   onChange={(e) => setNewModel({ ...newModel, model_id: e.target.value })}
@@ -184,7 +195,9 @@ export default function Models() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("models.modelName")}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t("models.modelName")}
+                </label>
                 <input
                   value={newModel.model_name}
                   onChange={(e) => setNewModel({ ...newModel, model_name: e.target.value })}
@@ -194,7 +207,9 @@ export default function Models() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t("models.description")}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t("models.description")}
+              </label>
               <input
                 value={newModel.description}
                 onChange={(e) => setNewModel({ ...newModel, description: e.target.value })}
@@ -205,7 +220,9 @@ export default function Models() {
             <button
               type="submit"
               disabled={
-                !(providerSelection === "__custom__" ? customProviderName.trim() : providerSelection) ||
+                !(providerSelection === "__custom__"
+                  ? customProviderName.trim()
+                  : providerSelection) ||
                 !newModel.model_id ||
                 !newModel.model_name ||
                 addMutation.isPending
@@ -236,64 +253,73 @@ export default function Models() {
 
             return (
               <div key={provider.id}>
-              {/* Provider header */}
-              <button
-                onClick={() => toggleProvider(provider.id)}
-                className="w-full flex items-center justify-between px-6 py-3 hover:bg-gray-50 transition-colors text-left"
-              >
-                <div className="flex items-center gap-3">
-                  {expandedProvider === provider.id ? (
-                    <ChevronDown className="w-4 h-4 text-gray-400" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4 text-gray-400" />
-                  )}
-                  <span className="font-medium text-sm">{provider.name}</span>
-                  <span className="text-xs text-gray-400">{provider.models.length} models</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${badge.className}`}>
-                    {badge.label}
-                  </span>
-                  {provider.requires_key && provider.has_key && provider.key_status === "invalid" && (
-                    <span className="text-xs text-red-500">{t("models.keySavedButInvalid")}</span>
-                  )}
-                </div>
-              </button>
-
-              {/* Models list */}
-              {expandedProvider === provider.id && (
-                <div className="bg-gray-50 px-6 py-2">
-                  <div className="space-y-1">
-                    {provider.models.map((model) => (
-                      <div
-                        key={model.id}
-                        className="flex items-center justify-between py-2 px-3 bg-white rounded-lg border border-gray-100"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <code className="text-sm font-mono text-gray-800">{model.id}</code>
-                            {isCustomModel(provider.id, model.id) && (
-                              <span className="text-[10px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded">Custom</span>
-                            )}
-                          </div>
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            {model.name}{model.description ? ` — ${model.description}` : ""}
-                          </p>
-                        </div>
-                        {isCustomModel(provider.id, model.id) && (
-                          <button
-                            onClick={() => deleteMutation.mutate({ provider: provider.id, modelId: model.id })}
-                            className="text-red-400 hover:text-red-600 p-1 ml-2"
-                            title={t("common.delete")}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                {/* Provider header */}
+                <button
+                  onClick={() => toggleProvider(provider.id)}
+                  className="w-full flex items-center justify-between px-6 py-3 hover:bg-gray-50 transition-colors text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    {expandedProvider === provider.id ? (
+                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-gray-400" />
+                    )}
+                    <span className="font-medium text-sm">{provider.name}</span>
+                    <span className="text-xs text-gray-400">{provider.models.length} models</span>
                   </div>
-                </div>
-              )}
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${badge.className}`}>
+                      {badge.label}
+                    </span>
+                    {provider.requires_key &&
+                      provider.has_key &&
+                      provider.key_status === "invalid" && (
+                        <span className="text-xs text-red-500">
+                          {t("models.keySavedButInvalid")}
+                        </span>
+                      )}
+                  </div>
+                </button>
+
+                {/* Models list */}
+                {expandedProvider === provider.id && (
+                  <div className="bg-gray-50 px-6 py-2">
+                    <div className="space-y-1">
+                      {provider.models.map((model) => (
+                        <div
+                          key={model.id}
+                          className="flex items-center justify-between py-2 px-3 bg-white rounded-lg border border-gray-100"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <code className="text-sm font-mono text-gray-800">{model.id}</code>
+                              {isCustomModel(provider.id, model.id) && (
+                                <span className="text-[10px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded">
+                                  Custom
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {model.name}
+                              {model.description ? ` — ${model.description}` : ""}
+                            </p>
+                          </div>
+                          {isCustomModel(provider.id, model.id) && (
+                            <button
+                              onClick={() =>
+                                deleteMutation.mutate({ provider: provider.id, modelId: model.id })
+                              }
+                              className="text-red-400 hover:text-red-600 p-1 ml-2"
+                              title={t("common.delete")}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

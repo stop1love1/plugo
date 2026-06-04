@@ -39,19 +39,33 @@ class SemanticChunker:
 
             # If section fits in one chunk, keep it as-is
             if len(text) <= self.max_chars:
-                chunks.append(self._make_chunk(
-                    text, title, source_url, site_id,
-                    chunk_index, header, header_path,
-                ))
+                chunks.append(
+                    self._make_chunk(
+                        text,
+                        title,
+                        source_url,
+                        site_id,
+                        chunk_index,
+                        header,
+                        header_path,
+                    )
+                )
                 chunk_index += 1
             else:
                 # Split large section with overlap
                 sub_chunks = self._split_with_overlap(text)
                 for sub in sub_chunks:
-                    chunks.append(self._make_chunk(
-                        sub, title, source_url, site_id,
-                        chunk_index, header, header_path,
-                    ))
+                    chunks.append(
+                        self._make_chunk(
+                            sub,
+                            title,
+                            source_url,
+                            site_id,
+                            chunk_index,
+                            header,
+                            header_path,
+                        )
+                    )
                     chunk_index += 1
 
         return chunks
@@ -85,11 +99,13 @@ class SemanticChunker:
                     # Save current section
                     text = "\n\n".join(current_text_parts).strip()
                     if text:
-                        sections.append({
-                            "header": current_header,
-                            "path": current_path,
-                            "text": text,
-                        })
+                        sections.append(
+                            {
+                                "header": current_header,
+                                "path": current_path,
+                                "text": text,
+                            }
+                        )
                         current_text_parts = []
 
                     level = int(element.name[1])
@@ -113,14 +129,36 @@ class SemanticChunker:
 
             # Extract text from leaf elements in markdown format
             if isinstance(element, Tag) and element.name in (
-                "p", "li", "td", "th", "dt", "dd", "blockquote",
-                "pre", "code", "span", "div",
+                "p",
+                "li",
+                "td",
+                "th",
+                "dt",
+                "dd",
+                "blockquote",
+                "pre",
+                "code",
+                "span",
+                "div",
             ):
                 # Only process leaf-like elements (those without block children)
                 has_block_child = any(
-                    isinstance(c, Tag) and c.name in (
-                        "p", "div", "section", "article", "ul", "ol", "table",
-                        "h1", "h2", "h3", "h4", "h5", "h6",
+                    isinstance(c, Tag)
+                    and c.name
+                    in (
+                        "p",
+                        "div",
+                        "section",
+                        "article",
+                        "ul",
+                        "ol",
+                        "table",
+                        "h1",
+                        "h2",
+                        "h3",
+                        "h4",
+                        "h5",
+                        "h6",
                     )
                     for c in element.children
                 )
@@ -139,11 +177,13 @@ class SemanticChunker:
         # Don't forget the last section
         text = "\n\n".join(current_text_parts).strip()
         if text:
-            sections.append({
-                "header": current_header,
-                "path": current_path,
-                "text": text,
-            })
+            sections.append(
+                {
+                    "header": current_header,
+                    "path": current_path,
+                    "text": text,
+                }
+            )
 
         return sections
 
@@ -161,7 +201,7 @@ class SemanticChunker:
             if len(current) + len(para) > self.max_chars and current:
                 chunks.append(current.strip())
                 # Keep overlap from end of current chunk
-                current = current[-self.overlap_chars:].strip() + "\n\n" + para if self.overlap_chars > 0 else para
+                current = current[-self.overlap_chars :].strip() + "\n\n" + para if self.overlap_chars > 0 else para
             else:
                 current = current + "\n\n" + para if current else para
 
@@ -196,19 +236,31 @@ class SemanticChunker:
                 continue
 
             if len(current) + len(para) > self.max_chars and current:
-                chunks.append(self._make_chunk(
-                    current.strip(), title, source_url, site_id, chunk_index,
-                ))
+                chunks.append(
+                    self._make_chunk(
+                        current.strip(),
+                        title,
+                        source_url,
+                        site_id,
+                        chunk_index,
+                    )
+                )
                 chunk_index += 1
                 # Keep overlap from end of current chunk
-                current = current[-self.overlap_chars:].strip() + "\n\n" + para if self.overlap_chars > 0 else para
+                current = current[-self.overlap_chars :].strip() + "\n\n" + para if self.overlap_chars > 0 else para
             else:
                 current = current + "\n\n" + para if current else para
 
         if current.strip():
-            chunks.append(self._make_chunk(
-                current.strip(), title, source_url, site_id, chunk_index,
-            ))
+            chunks.append(
+                self._make_chunk(
+                    current.strip(),
+                    title,
+                    source_url,
+                    site_id,
+                    chunk_index,
+                )
+            )
 
         return chunks
 

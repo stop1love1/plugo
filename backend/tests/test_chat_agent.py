@@ -43,7 +43,7 @@ async def test_get_response_returns_fallback_without_knowledge(monkeypatch):
     monkeypatch.setattr("agent.core.get_llm_provider", lambda *args, **kwargs: FailingProvider())
     monkeypatch.setattr("agent.core.embed_cache.get", lambda query: [0.1, 0.2, 0.3])
 
-    async def fake_search(site_id, query_embedding, top_k=10):
+    async def fake_search(site_id, query_embedding, top_k=10, **kwargs):
         return []
 
     monkeypatch.setattr("agent.core.rag_engine.search", fake_search)
@@ -62,7 +62,7 @@ async def test_get_response_ignores_stale_vector_chunks_missing_from_db(monkeypa
     monkeypatch.setattr("agent.core.get_llm_provider", lambda *args, **kwargs: FailingProvider())
     monkeypatch.setattr("agent.core.embed_cache.get", lambda query: [0.1, 0.2, 0.3])
 
-    async def fake_search(site_id, query_embedding, top_k=10):
+    async def fake_search(site_id, query_embedding, top_k=10, **kwargs):
         return [
             {
                 "id": "stale-chunk",
@@ -89,7 +89,7 @@ async def test_stream_response_returns_fallback_without_knowledge(monkeypatch):
     monkeypatch.setattr("agent.core.get_llm_provider", lambda *args, **kwargs: FailingProvider())
     monkeypatch.setattr("agent.core.embed_cache.get", lambda query: [0.1, 0.2, 0.3])
 
-    async def fake_search(site_id, query_embedding, top_k=10):
+    async def fake_search(site_id, query_embedding, top_k=10, **kwargs):
         return []
 
     monkeypatch.setattr("agent.core.rag_engine.search", fake_search)

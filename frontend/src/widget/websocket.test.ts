@@ -45,17 +45,14 @@ describe("PlugoWebSocket citations event", () => {
     globalThis.WebSocket.OPEN = 1;
 
     const onCitations = vi.fn();
-    const ws = new PlugoWebSocket(
-      "ws://localhost:8000/ws/chat/test-token",
-      {
-        onToken: vi.fn(),
-        onStart: vi.fn(),
-        onEnd: vi.fn(),
-        onError: vi.fn(),
-        onConnected: vi.fn(),
-        onCitations,
-      }
-    );
+    const ws = new PlugoWebSocket("ws://localhost:8000/ws/chat", "test-token", {
+      onToken: vi.fn(),
+      onStart: vi.fn(),
+      onEnd: vi.fn(),
+      onError: vi.fn(),
+      onConnected: vi.fn(),
+      onCitations,
+    });
     ws.connect();
 
     const payload: Citation[] = [
@@ -69,5 +66,38 @@ describe("PlugoWebSocket citations event", () => {
 
     expect(onCitations).toHaveBeenCalledTimes(1);
     expect(onCitations).toHaveBeenCalledWith(payload);
+  });
+
+  it("reconnect() dials again after an intentional disconnect", () => {
+    const instance = {
+      readyState: 1,
+      send: vi.fn(),
+      close: vi.fn(),
+      onopen: null,
+      onmessage: null,
+      onclose: null,
+      onerror: null,
+    };
+    const WsMock = vi.fn(() => instance);
+    // @ts-expect-error — test stub, not a full WebSocket
+    globalThis.WebSocket = WsMock;
+    // @ts-expect-error — writing static on stub
+    globalThis.WebSocket.OPEN = 1;
+
+    const ws = new PlugoWebSocket("ws://localhost:8000/ws/chat", "test-token", {
+      onToken: vi.fn(),
+      onStart: vi.fn(),
+      onEnd: vi.fn(),
+      onError: vi.fn(),
+      onConnected: vi.fn(),
+    });
+    ws.connect();
+    expect(WsMock).toHaveBeenCalledTimes(1);
+
+    ws.disconnect();
+    // Without reconnect() the socket is stuck — reconnect() must reset state and dial again.
+    instance.readyState = 3; // CLOSED
+    ws.reconnect();
+    expect(WsMock).toHaveBeenCalledTimes(2);
   });
 });

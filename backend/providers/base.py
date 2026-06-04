@@ -10,6 +10,13 @@ class BaseLLMProvider(ABC):
     Providers without reliable usage reporting leave it as None.
     """
 
+    # Whether this provider actually implements tool/function calling in its
+    # chat()/stream() path. Conservative default: opt-in. The agent only
+    # advertises and dispatches tools when this is True, so a provider that
+    # can't invoke tools degrades to knowledge-only instead of silently
+    # dropping every tool call.
+    supports_tools: bool = False
+
     # Must be initialized by subclasses (or set here so attribute always exists).
     last_usage: dict | None = None
 

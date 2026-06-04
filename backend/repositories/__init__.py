@@ -32,6 +32,7 @@ from repositories.base import (
 
 class Repositories:
     """Container for all repository instances."""
+
     def __init__(
         self,
         sites: BaseSiteRepo,
@@ -74,8 +75,10 @@ _mongo_db = None
 def _get_mongo_db():
     global _mongo_client, _mongo_db
     if _mongo_db is None:
-        from config import settings
         from motor.motor_asyncio import AsyncIOMotorClient
+
+        from config import settings
+
         _mongo_client = AsyncIOMotorClient(settings.mongodb_url)
         _mongo_db = _mongo_client[settings.mongodb_database]
     return _mongo_db
@@ -89,6 +92,7 @@ def _get_sqlite_session():
     global _sqlite_session_factory
     if _sqlite_session_factory is None:
         from database import async_session
+
         _sqlite_session_factory = async_session
     return _sqlite_session_factory
 
@@ -114,6 +118,7 @@ async def create_repos() -> Repositories:
             MongoToolRepo,
             MongoVisitorMemoryRepo,
         )
+
         db = _get_mongo_db()
         return Repositories(
             sites=MongoSiteRepo(db),
@@ -143,6 +148,7 @@ async def create_repos() -> Repositories:
             SQLiteToolRepo,
             SQLiteVisitorMemoryRepo,
         )
+
         session_factory = _get_sqlite_session()
         db = session_factory()
         repos = Repositories(

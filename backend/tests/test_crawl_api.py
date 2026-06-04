@@ -29,3 +29,25 @@ async def test_update_crawl_settings_does_not_create_job(client, auth_headers, t
     status_after = await client.get(f"/api/crawl/status/{site_id}", headers=auth_headers)
     assert status_after.status_code == 200
     assert status_after.json().get("crawl_status") == "idle"
+
+
+@pytest.mark.asyncio
+async def test_crawl_settings_rejects_excessive_max_pages(client, auth_headers, test_site):
+    """max_pages must be capped so a request can't schedule an unbounded crawl."""
+    resp = await client.put(
+        f"/api/crawl/settings/{test_site['id']}",
+        json={"max_pages": 999999},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_crawl_settings_rejects_negative_max_depth(client, auth_headers, test_site):
+    """max_depth must be non-negative."""
+    resp = await client.put(
+        f"/api/crawl/settings/{test_site['id']}",
+        json={"max_depth": -5},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422

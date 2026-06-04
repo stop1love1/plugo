@@ -2,12 +2,12 @@ import asyncio
 import json
 import os
 
-from auth import TokenData, get_current_user
-from config import settings
 from fastapi import APIRouter, Depends, HTTPException
-from logging_config import logger
 from pydantic import BaseModel, Field
 
+from auth import TokenData, get_current_user
+from config import settings
+from logging_config import logger
 from providers.factory import get_all_providers, get_embedding_providers, get_llm_provider, load_provider_key
 from routers.llm_keys import get_key_for_provider
 
@@ -96,28 +96,34 @@ async def list_all_providers(_user: TokenData = Depends(get_current_user)):
         provider_found = False
         for p in providers:
             if p["id"] == cm["provider"]:
-                p["models"].append({
-                    "id": cm["model_id"],
-                    "name": cm["model_name"],
-                    "description": cm.get("description", "Custom model"),
-                    "custom": True,
-                })
+                p["models"].append(
+                    {
+                        "id": cm["model_id"],
+                        "name": cm["model_name"],
+                        "description": cm.get("description", "Custom model"),
+                        "custom": True,
+                    }
+                )
                 provider_found = True
                 break
         if not provider_found:
-            providers.append({
-                "id": cm["provider"],
-                "name": cm["provider"].title(),
-                "models": [{
-                    "id": cm["model_id"],
-                    "name": cm["model_name"],
-                    "description": cm.get("description", "Custom model"),
+            providers.append(
+                {
+                    "id": cm["provider"],
+                    "name": cm["provider"].title(),
+                    "models": [
+                        {
+                            "id": cm["model_id"],
+                            "name": cm["model_name"],
+                            "description": cm.get("description", "Custom model"),
+                            "custom": True,
+                        }
+                    ],
+                    "requires_key": True,
+                    "has_key": False,
                     "custom": True,
-                }],
-                "requires_key": True,
-                "has_key": False,
-                "custom": True,
-            })
+                }
+            )
 
     statuses = await asyncio.gather(
         *(get_provider_key_status(p["id"], p["requires_key"], p["has_key"]) for p in providers)
@@ -153,12 +159,14 @@ async def add_custom_model(
         if m["provider"] == data.provider and m["model_id"] == data.model_id:
             raise HTTPException(status_code=409, detail="Model already exists for this provider")
 
-    models.append({
-        "provider": data.provider,
-        "model_id": data.model_id,
-        "model_name": data.model_name,
-        "description": data.description,
-    })
+    models.append(
+        {
+            "provider": data.provider,
+            "model_id": data.model_id,
+            "model_name": data.model_name,
+            "description": data.description,
+        }
+    )
     _save_custom_models(models)
     logger.info("Custom model added", provider=data.provider, model_id=data.model_id)
     return {"message": "Model added", "provider": data.provider, "model_id": data.model_id}

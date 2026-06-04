@@ -35,6 +35,21 @@ async def _scheduler_loop():
 
             repos = await create_repos()
             try:
+                # Purge chat sessions past the retention window (0 disables).
+                retention_days = settings.session_retention_days
+                if retention_days > 0:
+                    try:
+                        cutoff = datetime.now(UTC) - timedelta(days=retention_days)
+                        removed = await repos.chat_sessions.delete_older_than(cutoff)
+                        if removed:
+                            logger.info(
+                                "Purged expired chat sessions",
+                                removed=removed,
+                                retention_days=retention_days,
+                            )
+                    except Exception as e:
+                        logger.error("Session retention cleanup failed", error=str(e))
+
                 sites = await repos.sites.list_all()
                 now = datetime.now(UTC)
 
@@ -89,10 +104,12 @@ async def _scheduler_loop():
                     exclude_raw = site.get("crawl_exclude_patterns", "")
                     exclude_patterns = [p.strip() for p in exclude_raw.split("\n") if p.strip()] if exclude_raw else []
 
-                    job = await repos.crawl_jobs.create({
-                        "site_id": site_id,
-                        "start_url": crawl_url,
-                    })
+                    job = await repos.crawl_jobs.create(
+                        {
+                            "site_id": site_id,
+                            "start_url": crawl_url,
+                        }
+                    )
                     await repos.sites.update(site_id, {"crawl_status": "running"})
 
                     logger.info(
@@ -105,7 +122,10 @@ async def _scheduler_loop():
 
                     crawl_task = asyncio.create_task(
                         _run_crawl_with_tracking(
-                            site_id, crawl_url, job["id"], max_pages,
+                            site_id,
+                            crawl_url,
+                            job["id"],
+                            max_pages,
                             max_depth=max_depth,
                             exclude_patterns=exclude_patterns,
                             use_browser=site.get("crawl_use_browser", False),

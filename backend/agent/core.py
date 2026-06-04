@@ -2,12 +2,11 @@ import json
 from collections.abc import AsyncGenerator
 from typing import ClassVar
 
-from config import settings
-from logging_config import logger
-
 from agent.rag import rag_engine
 from agent.tools import tool_executor
+from config import settings
 from knowledge.embed_cache import embed_cache
+from logging_config import logger
 from providers.base import BaseLLMProvider
 from providers.factory import get_llm_provider
 
@@ -27,6 +26,7 @@ def _fence_untrusted(label: str, content: str) -> str:
     """Wrap visitor-sourced content in a clearly-delimited untrusted block."""
     safe = _neutralize_fence_markers(str(content))
     return f"--- UNTRUSTED_{label}_BEGIN ---\n{safe}\n--- UNTRUSTED_{label}_END ---"
+
 
 DEFAULT_SYSTEM_PROMPT = """You are a friendly customer support assistant for "{site_name}" ({site_url}).
 
@@ -141,7 +141,13 @@ class ChatAgent:
         self.llm_model = llm_model
         self.provider: BaseLLMProvider = get_llm_provider(llm_provider, llm_model)
         self.messages: list[dict] = []
-        self.supports_tools = llm_provider not in self._NO_TOOL_PROVIDERS
+        # Enable tools only when the provider actually implements function calling
+        # (authoritative capability) AND the admin hasn't force-disabled the
+        # provider via no_tool_providers. This stops the agent from advertising
+        # tools to a provider that silently returns no tool_calls (e.g. Gemini).
+        self.supports_tools = (
+            getattr(self.provider, "supports_tools", False) and llm_provider not in self._NO_TOOL_PROVIDERS
+        )
         # Accumulated across tool rounds and turns. None when the provider can't report.
         self.total_usage: dict | None = None
         # Structured citations from the most recent turn (deduped by URL, max score kept).
@@ -163,36 +169,57 @@ class ChatAgent:
         """Append tool call assistant message and tool result in the correct format for the active provider."""
         if self.llm_provider_name in ("claude",):
             # Anthropic format: tool_use content block + tool_result content block
-            self.messages.append({
-                "role": "assistant",
-                "content": [{"type": "tool_use", "id": tc["id"], "name": tc["name"], "input": tc["arguments"]}],
-            })
-            self.messages.append({
-                "role": "user",
-                "content": [{"type": "tool_result", "tool_use_id": tc["id"], "content": result_str}],
-            })
+            self.messages.append(
+                {
+                    "role": "assistant",
+                    "content": [{"type": "tool_use", "id": tc["id"], "name": tc["name"], "input": tc["arguments"]}],
+                }
+            )
+            self.messages.append(
+                {
+                    "role": "user",
+                    "content": [{"type": "tool_result", "tool_use_id": tc["id"], "content": result_str}],
+                }
+            )
         elif self.llm_provider_name in ("gemini",):
             # Gemini doesn't support tool calling in this codebase yet; use text-based fallback
-            self.messages.append({
-                "role": "assistant",
-                "content": f"Executing: {tc['name']}({json.dumps(tc['arguments'], ensure_ascii=False)})",
-            })
-            self.messages.append({
-                "role": "user",
-                "content": f"Tool result {tc['name']}: {result_str}",
-            })
+            self.messages.append(
+                {
+                    "role": "assistant",
+                    "content": f"Executing: {tc['name']}({json.dumps(tc['arguments'], ensure_ascii=False)})",
+                }
+            )
+            self.messages.append(
+                {
+                    "role": "user",
+                    "content": f"Tool result {tc['name']}: {result_str}",
+                }
+            )
         else:
             # OpenAI, Ollama, LMStudio — OpenAI-compatible format
-            self.messages.append({
-                "role": "assistant",
-                "content": None,
-                "tool_calls": [{"id": tc["id"], "type": "function", "function": {"name": tc["name"], "arguments": json.dumps(tc["arguments"], ensure_ascii=False)}}],
-            })
-            self.messages.append({
-                "role": "tool",
-                "tool_call_id": tc["id"],
-                "content": result_str,
-            })
+            self.messages.append(
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": tc["id"],
+                            "type": "function",
+                            "function": {
+                                "name": tc["name"],
+                                "arguments": json.dumps(tc["arguments"], ensure_ascii=False),
+                            },
+                        }
+                    ],
+                }
+            )
+            self.messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tc["id"],
+                    "content": result_str,
+                }
+            )
 
     # Patterns that indicate casual/chitchat — no knowledge lookup needed
     _CASUAL_PATTERNS: ClassVar[list[str]] = [
@@ -214,6 +241,7 @@ class ChatAgent:
     def _is_casual_message(text: str) -> bool:
         """Detect greetings, small talk, and other casual messages that don't need knowledge lookup."""
         import re
+
         cleaned = text.strip().lower()
         # Short messages (<=5 words) that match casual patterns
         if len(cleaned.split()) <= 6:
@@ -301,9 +329,8 @@ class ChatAgent:
 
         if conversation_summary:
             # Summary is produced by the LLM from prior visitor messages — still treat as untrusted.
-            memory_section += (
-                "\n\n## Earlier in this conversation\n"
-                + _fence_untrusted("CONVERSATION_SUMMARY", conversation_summary)
+            memory_section += "\n\n## Earlier in this conversation\n" + _fence_untrusted(
+                "CONVERSATION_SUMMARY", conversation_summary
             )
 
         # --- Page context ---
@@ -313,11 +340,7 @@ class ChatAgent:
             safe_url = _neutralize_fence_markers(str(page_context.get("url", "N/A")))
             safe_title = _neutralize_fence_markers(str(page_context.get("title", "N/A")))
             safe_page_text = _neutralize_fence_markers(page_context.get("pageText", "")[:1500])
-            context_body = (
-                f"- URL: {safe_url}\n"
-                f"- Title: {safe_title}\n"
-                f"- Page content:\n{safe_page_text}"
-            )
+            context_body = f"- URL: {safe_url}\n- Title: {safe_title}\n- Page content:\n{safe_page_text}"
             context_section = "## Current Page\n" + _fence_untrusted("PAGE_CONTEXT", context_body)
 
         # --- Knowledge (from crawl) ---
@@ -345,7 +368,7 @@ class ChatAgent:
                     query_embedding = None
 
             if query_embedding is not None:
-                chunks = await rag_engine.search(self.site_id, query_embedding, top_k=10)
+                chunks = await rag_engine.search(self.site_id, query_embedding, top_k=10, query_text=query)
                 if chunks and repos:
                     try:
                         valid_chunk_ids = {
@@ -367,7 +390,7 @@ class ChatAgent:
                         title = chunk["metadata"].get("title", "")
                         score = float(chunk.get("score", 0) or 0)
                         knowledge_parts.append(
-                            f"[{i+1}] {title} ({source}) [relevance: {score:.0%}]\n{chunk['content']}"
+                            f"[{i + 1}] {title} ({source}) [relevance: {score:.0%}]\n{chunk['content']}"
                         )
                         if source:
                             existing = citations_by_url.get(source)
@@ -378,9 +401,7 @@ class ChatAgent:
                                     "score": score,
                                 }
                     # Sort by score desc for deterministic rendering.
-                    self.last_citations = sorted(
-                        citations_by_url.values(), key=lambda c: c["score"], reverse=True
-                    )
+                    self.last_citations = sorted(citations_by_url.values(), key=lambda c: c["score"], reverse=True)
                     knowledge_section = (
                         "## Knowledge Base (crawled content)\n"
                         "Use the following context to answer the user. Do not fabricate URLs.\n\n"
@@ -414,7 +435,9 @@ class ChatAgent:
                 tools_section = "## API Tools\n(No tools configured — Knowledge/guidance mode only)"
 
         # Use custom system prompt from config if set, otherwise use default
-        template = settings.agent_system_prompt.strip() if settings.agent_system_prompt.strip() else DEFAULT_SYSTEM_PROMPT
+        template = (
+            settings.agent_system_prompt.strip() if settings.agent_system_prompt.strip() else DEFAULT_SYSTEM_PROMPT
+        )
         prompt = template.format(
             site_name=self.site_name,
             site_url=self.site_url,
@@ -459,7 +482,11 @@ class ChatAgent:
         self.total_usage = None
 
         system_prompt, tools, has_knowledge_match = await self._build_system_prompt(
-            message, page_context, repos, visitor_id, conversation_summary,
+            message,
+            page_context,
+            repos,
+            visitor_id,
+            conversation_summary,
         )
 
         # Casual messages (greetings, thanks, etc.) bypass knowledge check — let the LLM respond naturally
@@ -486,16 +513,12 @@ class ChatAgent:
                 round_count += 1
                 tool_called = False
                 for tc in result["tool_calls"]:
-                    tool_meta = next(
-                        (t["_meta"] for t in tools if t["name"] == tc["name"]), None
-                    )
+                    tool_meta = next((t["_meta"] for t in tools if t["name"] == tc["name"]), None)
                     if tool_meta:
                         # Notify the client about the tool call
                         yield f"\n\n> Calling **{tc['name']}**...\n\n"
 
-                        tool_result = await tool_executor.execute_tool(
-                            tool_meta, tc["arguments"]
-                        )
+                        tool_result = await tool_executor.execute_tool(tool_meta, tc["arguments"])
                         result_str = json.dumps(tool_result, ensure_ascii=False)
                         self._append_tool_messages(tc, result_str)
                         tool_called = True
@@ -544,7 +567,11 @@ class ChatAgent:
         self.messages.append({"role": "user", "content": message})
         self.total_usage = None
         system_prompt, tools, has_knowledge_match = await self._build_system_prompt(
-            message, page_context, repos, visitor_id, conversation_summary,
+            message,
+            page_context,
+            repos,
+            visitor_id,
+            conversation_summary,
         )
 
         if not has_knowledge_match and not self._is_casual_message(message):
@@ -567,13 +594,9 @@ class ChatAgent:
             round_count += 1
             tool_called = False
             for tc in result["tool_calls"]:
-                tool_meta = next(
-                    (t["_meta"] for t in tools if t["name"] == tc["name"]), None
-                )
+                tool_meta = next((t["_meta"] for t in tools if t["name"] == tc["name"]), None)
                 if tool_meta:
-                    tool_result = await tool_executor.execute_tool(
-                        tool_meta, tc["arguments"]
-                    )
+                    tool_result = await tool_executor.execute_tool(tool_meta, tc["arguments"])
                     result_str = json.dumps(tool_result, ensure_ascii=False)
                     self._append_tool_messages(tc, result_str)
                     tool_called = True

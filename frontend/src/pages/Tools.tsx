@@ -11,7 +11,17 @@ import {
   type Tool,
   type UpdateToolData,
 } from "../lib/api";
-import { Wrench, Plus, Trash2, Play, CheckCircle, Pencil, X, ToggleLeft, ToggleRight } from "lucide-react";
+import {
+  Wrench,
+  Plus,
+  Trash2,
+  Play,
+  CheckCircle,
+  Pencil,
+  X,
+  ToggleLeft,
+  ToggleRight,
+} from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { FormField } from "../components/FormField";
 import { EmptyState } from "../components/EmptyState";
@@ -136,7 +146,8 @@ export default function Tools() {
     // Auto-sync to JSON
     const schema: Record<string, ParamSchemaField> = {};
     next.forEach((p) => {
-      if (p.name) schema[p.name] = { type: p.type, description: p.description, required: p.required };
+      if (p.name)
+        schema[p.name] = { type: p.type, description: p.description, required: p.required };
     });
     setForm({ ...form, params_schema: JSON.stringify(schema, null, 2) });
   };
@@ -146,7 +157,8 @@ export default function Tools() {
     setParams(next);
     const schema: Record<string, ParamSchemaField> = {};
     next.forEach((p) => {
-      if (p.name) schema[p.name] = { type: p.type, description: p.description, required: p.required };
+      if (p.name)
+        schema[p.name] = { type: p.type, description: p.description, required: p.required };
     });
     setForm({ ...form, params_schema: JSON.stringify(schema, null, 2) });
   };
@@ -213,39 +225,74 @@ export default function Tools() {
     <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl border border-gray-200 mb-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold">{editingId ? t("tools.editTool") : t("tools.addTool")}</h3>
-        <button type="button" onClick={() => { setShowAdd(false); cancelEdit(); }} className="text-gray-400 hover:text-gray-600">
+        <button
+          type="button"
+          onClick={() => {
+            setShowAdd(false);
+            cancelEdit();
+          }}
+          className="text-gray-400 hover:text-gray-600"
+        >
           <X className="w-4 h-4" />
         </button>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <FormField label={t("tools.toolName")}>
-          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="search_products" className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+          <input
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            placeholder="search_products"
+            className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
+          />
         </FormField>
         <FormField label={t("tools.method")}>
-          <select value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}
-            className="w-full border rounded-lg px-3 py-2 outline-none">
-            <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option>
+          <select
+            value={form.method}
+            onChange={(e) => setForm({ ...form, method: e.target.value })}
+            className="w-full border rounded-lg px-3 py-2 outline-none"
+          >
+            <option>GET</option>
+            <option>POST</option>
+            <option>PUT</option>
+            <option>DELETE</option>
           </select>
         </FormField>
         <FormField label={t("tools.description")} className="lg:col-span-2">
-          <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
-            placeholder="Search products by name or category" className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+          <input
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            placeholder="Search products by name or category"
+            className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
+          />
         </FormField>
         <FormField label={t("tools.url")} className="lg:col-span-2">
-          <input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })}
-            placeholder="https://api.example.com/products" className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+          <input
+            value={form.url}
+            onChange={(e) => setForm({ ...form, url: e.target.value })}
+            placeholder="https://api.example.com/products"
+            className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
+          />
         </FormField>
         <FormField label={t("tools.authType")}>
-          <select value={form.auth_type} onChange={(e) => setForm({ ...form, auth_type: e.target.value })}
-            className="w-full border rounded-lg px-3 py-2 outline-none">
-            <option value="none">None</option><option value="bearer">Bearer Token</option>
-            <option value="api_key">API Key</option><option value="basic">Basic Auth</option>
+          <select
+            value={form.auth_type}
+            onChange={(e) => setForm({ ...form, auth_type: e.target.value })}
+            className="w-full border rounded-lg px-3 py-2 outline-none"
+          >
+            <option value="none">None</option>
+            <option value="bearer">Bearer Token</option>
+            <option value="api_key">API Key</option>
+            <option value="basic">Basic Auth</option>
           </select>
         </FormField>
         <FormField label={t("tools.authValue")}>
-          <input value={form.auth_value} onChange={(e) => setForm({ ...form, auth_value: e.target.value })}
-            placeholder="Token or key..." type="password" className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+          <input
+            value={form.auth_value}
+            onChange={(e) => setForm({ ...form, auth_value: e.target.value })}
+            placeholder="Token or key..."
+            type="password"
+            className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
+          />
         </FormField>
         <div className="lg:col-span-2">
           <div className="flex items-center justify-between mb-1">
@@ -264,7 +311,11 @@ export default function Tools() {
               }}
               className="text-xs text-primary-600 hover:text-primary-700 flex items-center gap-1"
             >
-              {useBuilder ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+              {useBuilder ? (
+                <ToggleRight className="w-4 h-4" />
+              ) : (
+                <ToggleLeft className="w-4 h-4" />
+              )}
               {useBuilder ? t("tools.switchToJson") : t("tools.switchToBuilder")}
             </button>
           </div>
@@ -305,7 +356,11 @@ export default function Tools() {
                     />
                     {t("tools.paramRequired")}
                   </label>
-                  <button type="button" onClick={() => removeParam(i)} className="text-gray-400 hover:text-red-500">
+                  <button
+                    type="button"
+                    onClick={() => removeParam(i)}
+                    className="text-gray-400 hover:text-red-500"
+                  >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
@@ -319,17 +374,32 @@ export default function Tools() {
               </button>
             </div>
           ) : (
-            <textarea value={form.params_schema} onChange={(e) => setForm({ ...form, params_schema: e.target.value })}
-              rows={4} placeholder='{"q": {"type": "string", "description": "Search query", "required": true}}'
-              className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm" />
+            <textarea
+              value={form.params_schema}
+              onChange={(e) => setForm({ ...form, params_schema: e.target.value })}
+              rows={4}
+              placeholder='{"q": {"type": "string", "description": "Search query", "required": true}}'
+              className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+            />
           )}
         </div>
       </div>
       <div className="flex gap-3 mt-4">
-        <button type="submit" disabled={isPending} className="bg-primary-600 text-white px-4 py-2 rounded-lg">
+        <button
+          type="submit"
+          disabled={isPending}
+          className="bg-primary-600 text-white px-4 py-2 rounded-lg"
+        >
           {isPending ? t("settings.saving") : editingId ? t("tools.saveTool") : t("tools.saveTool")}
         </button>
-        <button type="button" onClick={() => { setShowAdd(false); cancelEdit(); }} className="text-gray-500 px-4 py-2">
+        <button
+          type="button"
+          onClick={() => {
+            setShowAdd(false);
+            cancelEdit();
+          }}
+          className="text-gray-500 px-4 py-2"
+        >
           {t("common.cancel")}
         </button>
       </div>
@@ -340,7 +410,10 @@ export default function Tools() {
     <div>
       <PageHeader title={t("tools.title")} subtitle={t("tools.subtitle")}>
         <button
-          onClick={() => { setShowAdd(true); cancelEdit(); }}
+          onClick={() => {
+            setShowAdd(true);
+            cancelEdit();
+          }}
           className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700"
         >
           <Plus className="w-4 h-4" /> {t("tools.addTool")}
@@ -353,7 +426,11 @@ export default function Tools() {
       <ConfirmDialog
         open={!!deleteTarget}
         title={t("common.delete")}
-        message={t("tools.deleteConfirm") === "tools.deleteConfirm" ? "Are you sure you want to delete this tool? This action cannot be undone." : t("tools.deleteConfirm")}
+        message={
+          t("tools.deleteConfirm") === "tools.deleteConfirm"
+            ? "Are you sure you want to delete this tool? This action cannot be undone."
+            : t("tools.deleteConfirm")
+        }
         confirmLabel={t("common.delete")}
         danger
         loading={deleteMutation.isPending}
@@ -374,11 +451,16 @@ export default function Tools() {
       ) : (
         <div className="space-y-3">
           {tools.map((tool) => (
-            <div key={tool.id} className={`bg-white p-4 rounded-xl border ${editingId === tool.id ? "border-primary-300 bg-primary-50" : "border-gray-200"}`}>
+            <div
+              key={tool.id}
+              className={`bg-white p-4 rounded-xl border ${editingId === tool.id ? "border-primary-300 bg-primary-50" : "border-gray-200"}`}
+            >
               <div className="flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">{tool.method}</span>
+                    <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">
+                      {tool.method}
+                    </span>
                     <h4 className="font-medium">{tool.name}</h4>
                     {tool.enabled && <CheckCircle className="w-3.5 h-3.5 text-green-500" />}
                   </div>
@@ -386,13 +468,25 @@ export default function Tools() {
                   <p className="text-xs text-gray-400 mt-1 font-mono">{tool.url}</p>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => handleTest(tool.id)} className="text-blue-500 hover:text-blue-700 p-1" title="Test">
+                  <button
+                    onClick={() => handleTest(tool.id)}
+                    className="text-blue-500 hover:text-blue-700 p-1"
+                    title="Test"
+                  >
                     <Play className="w-4 h-4" />
                   </button>
-                  <button onClick={() => startEdit(tool)} className="text-gray-400 hover:text-primary-600 p-1" title={t("common.edit")}>
+                  <button
+                    onClick={() => startEdit(tool)}
+                    className="text-gray-400 hover:text-primary-600 p-1"
+                    title={t("common.edit")}
+                  >
                     <Pencil className="w-4 h-4" />
                   </button>
-                  <button onClick={() => setDeleteTarget(tool.id)} className="text-gray-400 hover:text-red-500 p-1" title={t("common.delete")}>
+                  <button
+                    onClick={() => setDeleteTarget(tool.id)}
+                    className="text-gray-400 hover:text-red-500 p-1"
+                    title={t("common.delete")}
+                  >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -400,7 +494,9 @@ export default function Tools() {
               <div className="mt-3">
                 <textarea
                   value={testParamsJson[tool.id] || ""}
-                  onChange={(e) => setTestParamsJson((prev) => ({ ...prev, [tool.id]: e.target.value }))}
+                  onChange={(e) =>
+                    setTestParamsJson((prev) => ({ ...prev, [tool.id]: e.target.value }))
+                  }
                   placeholder='Test parameters JSON, e.g. {"q": "shoes"}'
                   rows={2}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-primary-500"

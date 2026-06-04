@@ -5,8 +5,9 @@ Global configuration API — read and update config.json from the dashboard.
 import json
 from pathlib import Path
 
-from auth import TokenData, get_current_user
 from fastapi import APIRouter, Depends, HTTPException
+
+from auth import TokenData, get_current_user
 from logging_config import logger
 
 router = APIRouter(prefix="/api/config", tags=["config"])
@@ -17,6 +18,7 @@ _CONFIG_PATHS = [
     Path(__file__).parent.parent / "config.json",  # backend/
     Path("config.json"),  # cwd
 ]
+
 
 def _find_config_path() -> Path:
     for p in _CONFIG_PATHS:
@@ -46,8 +48,16 @@ _SECRET_KEYS = {"auth"}
 
 # Whitelist of allowed top-level config sections
 _ALLOWED_SECTIONS = {
-    "llm", "ollama", "embedding", "database", "vector_store",
-    "rag", "server", "rate_limit", "crawl", "agent",
+    "llm",
+    "ollama",
+    "embedding",
+    "database",
+    "vector_store",
+    "rag",
+    "server",
+    "rate_limit",
+    "crawl",
+    "agent",
 }
 
 

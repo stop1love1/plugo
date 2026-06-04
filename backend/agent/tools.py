@@ -1,8 +1,55 @@
 import httpx
+
 from logging_config import logger
 from utils.crypto import decrypt_value
 
-from knowledge.crawler import _is_safe_public_url
+# JSON-schema primitive type → Python type(s). bool is handled separately because
+# it is a subclass of int and must not satisfy "number"/"integer".
+_TYPE_MAP: dict[str, type | tuple[type, ...]] = {
+    "string": str,
+    "number": (int, float),
+    "integer": int,
+    "boolean": bool,
+    "object": dict,
+    "array": list,
+}
+
+
+def validate_tool_arguments(parameters: dict | None, arguments: dict) -> tuple[bool, str | None]:
+    """Validate LLM-provided ``arguments`` against a tool's ``parameters`` schema.
+
+    ``parameters`` is the formatted ``{"type": "object", "properties": {...},
+    "required": [...]}`` shape produced by :meth:`ToolExecutor.get_tools_for_site`.
+    Returns ``(is_valid, error_message)``. An empty/missing schema validates
+    anything (no constraints declared); unknown extra params are tolerated.
+    """
+    if not isinstance(arguments, dict):
+        return False, "arguments must be an object"
+    if not parameters:
+        return True, None
+
+    properties = parameters.get("properties", {}) or {}
+    required = parameters.get("required", []) or []
+
+    for name in required:
+        if name not in arguments:
+            return False, f"missing required parameter '{name}'"
+
+    for name, value in arguments.items():
+        spec = properties.get(name)
+        if not spec or value is None:
+            continue  # tolerate extra/unknown params and explicit nulls
+        expected = spec.get("type")
+        py_type = _TYPE_MAP.get(expected)
+        if py_type is None:
+            continue  # unknown declared type → don't block
+        # bool is a subclass of int; reject it for numeric types explicitly.
+        if expected in ("number", "integer") and isinstance(value, bool):
+            return False, f"parameter '{name}' must be a {expected}"
+        if not isinstance(value, py_type):
+            return False, f"parameter '{name}' must be a {expected}"
+
+    return True, None
 
 
 class ToolExecutor:
@@ -25,23 +72,29 @@ class ToolExecutor:
                 if schema.get("required", False):
                     required.append(name)
 
-            formatted.append({
-                "name": tool["name"],
-                "description": tool["description"],
-                "parameters": {
-                    "type": "object",
-                    "properties": properties,
-                    "required": required,
-                },
-                "_meta": {
-                    "id": tool["id"],
-                    "method": tool["method"],
-                    "url": tool["url"],
-                    "auth_type": tool.get("auth_type"),
-                    "auth_value": self._decrypt_auth(tool.get("auth_value")),
-                    "headers": tool.get("headers", {}),
-                },
-            })
+            parameters = {
+                "type": "object",
+                "properties": properties,
+                "required": required,
+            }
+            formatted.append(
+                {
+                    "name": tool["name"],
+                    "description": tool["description"],
+                    "parameters": parameters,
+                    "_meta": {
+                        "id": tool["id"],
+                        "method": tool["method"],
+                        "url": tool["url"],
+                        "auth_type": tool.get("auth_type"),
+                        "auth_value": self._decrypt_auth(tool.get("auth_value")),
+                        "headers": tool.get("headers", {}),
+                        # Carried through so execute_tool can validate LLM-supplied
+                        # arguments against the declared schema before any HTTP call.
+                        "parameters": parameters,
+                    },
+                }
+            )
         return formatted
 
     @staticmethod
@@ -70,8 +123,20 @@ class ToolExecutor:
         url = tool_meta["url"]
         headers = dict(tool_meta.get("headers", {}))
 
+        # Validate LLM-supplied arguments against the tool's declared schema before
+        # doing any network work. A wrong-typed or missing param is returned as a
+        # tool error so the model can self-correct, instead of firing a malformed
+        # request at the upstream API.
+        valid, reason = validate_tool_arguments(tool_meta.get("parameters"), arguments)
+        if not valid:
+            logger.info("Rejected tool call with invalid arguments", url=url, reason=reason)
+            return {"error": f"Invalid arguments: {reason}", "success": False}
+
         # SSRF guard: tool URLs are admin-configured but revalidated at execution time
         # (DNS rebinding defense). Tools never get the allow_private escape hatch.
+        # Imported lazily to avoid a knowledge.crawler ↔ agent import cycle at load time.
+        from knowledge.crawler import _is_safe_public_url
+
         safe, reason = await _is_safe_public_url(url, allow_private=False)
         if not safe:
             logger.warning("Blocked tool execution due to unsafe URL", url=url, reason=reason)

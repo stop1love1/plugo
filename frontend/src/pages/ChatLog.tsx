@@ -64,11 +64,13 @@ export default function ChatLog() {
 
   const exportSessionCsv = () => {
     if (!sessionDetail?.messages) return;
-    const rows = sessionDetail.messages.map((msg: { role: string; content: string; timestamp?: string; created_at?: string }) => {
-      const content = (msg.content || "").replace(/"/g, '""');
-      const timestamp = msg.created_at || "";
-      return `"${timestamp}","${msg.role}","${content}"`;
-    });
+    const rows = sessionDetail.messages.map(
+      (msg: { role: string; content: string; timestamp?: string; created_at?: string }) => {
+        const content = (msg.content || "").replace(/"/g, '""');
+        const timestamp = msg.created_at || "";
+        return `"${timestamp}","${msg.role}","${content}"`;
+      },
+    );
     const csv = "Timestamp,Role,Content\n" + rows.join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -116,7 +118,10 @@ export default function ChatLog() {
           </div>
           {(dateFrom || dateTo) && (
             <button
-              onClick={() => { setDateFrom(""); setDateTo(""); }}
+              onClick={() => {
+                setDateFrom("");
+                setDateTo("");
+              }}
               className="text-xs text-gray-400 hover:text-gray-600"
             >
               Clear dates
@@ -133,7 +138,9 @@ export default function ChatLog() {
           ) : filteredSessions.length === 0 ? (
             <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
               <MessageCircle className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-              <p className="text-sm text-gray-500">{searchQuery ? t("common.noResults") : t("chatLog.noSessions")}</p>
+              <p className="text-sm text-gray-500">
+                {searchQuery ? t("common.noResults") : t("chatLog.noSessions")}
+              </p>
             </div>
           ) : (
             <div className="space-y-2 max-h-[calc(100dvh-200px)] overflow-y-auto">
@@ -212,7 +219,12 @@ export default function ChatLog() {
                     <div className="flex items-center gap-2">
                       <Globe className="w-3 h-3" />
                       <span className="font-medium">{t("chatLog.page")}:</span>
-                      <a href={sessionDetail.page_url} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline truncate">
+                      <a
+                        href={sessionDetail.page_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary-600 hover:underline truncate"
+                      >
                         {sessionDetail.page_url}
                       </a>
                     </div>
@@ -221,30 +233,40 @@ export default function ChatLog() {
                     <div className="flex items-center gap-2">
                       <Clock className="w-3 h-3" />
                       <span className="font-medium">{t("chatLog.duration")}:</span>
-                      <span>{formatDuration(sessionDetail.started_at, sessionDetail.ended_at)}</span>
+                      <span>
+                        {formatDuration(sessionDetail.started_at, sessionDetail.ended_at)}
+                      </span>
                     </div>
                   )}
                 </div>
               )}
 
               <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4 max-h-[calc(100dvh-200px)] overflow-y-auto">
-                {sessionDetail.messages.map((msg: { role: string; content: string; timestamp?: string }, i: number) => (
-                  <div key={`${msg.role}-${msg.timestamp ?? i}`} className="flex gap-3">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
-                      msg.role === "user" ? "bg-blue-100" : "bg-purple-100"
-                    }`}>
-                      {msg.role === "user"
-                        ? <User className="w-3.5 h-3.5 text-blue-600" />
-                        : <Bot className="w-3.5 h-3.5 text-purple-600" />}
+                {sessionDetail.messages.map(
+                  (msg: { role: string; content: string; timestamp?: string }, i: number) => (
+                    <div key={`${msg.role}-${msg.timestamp ?? i}`} className="flex gap-3">
+                      <div
+                        className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
+                          msg.role === "user" ? "bg-blue-100" : "bg-purple-100"
+                        }`}
+                      >
+                        {msg.role === "user" ? (
+                          <User className="w-3.5 h-3.5 text-blue-600" />
+                        ) : (
+                          <Bot className="w-3.5 h-3.5 text-purple-600" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <span className="text-xs font-medium text-gray-500">
+                          {msg.role === "user" ? t("chatLog.visitor") : t("chatLog.bot")}
+                        </span>
+                        <p className="text-sm text-gray-800 mt-0.5 whitespace-pre-wrap">
+                          {msg.content}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <span className="text-xs font-medium text-gray-500">
-                        {msg.role === "user" ? t("chatLog.visitor") : t("chatLog.bot")}
-                      </span>
-                      <p className="text-sm text-gray-800 mt-0.5 whitespace-pre-wrap">{msg.content}</p>
-                    </div>
-                  </div>
-                ))}
+                  ),
+                )}
               </div>
             </div>
           ) : (

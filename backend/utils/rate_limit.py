@@ -66,8 +66,7 @@ class SiteTokenWSRateLimiter:
         if self._calls_since_sweep >= self.SWEEP_EVERY:
             self._calls_since_sweep = 0
             stale_keys = [
-                k for k, ts in self._timestamps.items()
-                if k != key and all(now - t >= self.window for t in ts)
+                k for k, ts in self._timestamps.items() if k != key and all(now - t >= self.window for t in ts)
             ]
             for k in stale_keys:
                 del self._timestamps[k]
@@ -125,6 +124,7 @@ class SSEConcurrencyGuard:
 def _default_sse_cap() -> int:
     try:
         from config import settings
+
         return int(getattr(settings, "rate_limit_sse_concurrent", 10))
     except Exception:
         return 10

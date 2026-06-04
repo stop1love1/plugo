@@ -1,10 +1,11 @@
-export function SkeletonLine({ width = "100%", height = "16px" }: { width?: string; height?: string }) {
-  return (
-    <div
-      className="animate-pulse bg-gray-200 rounded"
-      style={{ width, height }}
-    />
-  );
+export function SkeletonLine({
+  width = "100%",
+  height = "16px",
+}: {
+  width?: string;
+  height?: string;
+}) {
+  return <div className="animate-pulse bg-gray-200 rounded" style={{ width, height }} />;
 }
 
 export function SkeletonCard() {

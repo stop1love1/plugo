@@ -49,7 +49,10 @@ export default function Sites() {
   });
 
   const validateUrl = (value: string) => {
-    if (!value) { setUrlError(""); return; }
+    if (!value) {
+      setUrlError("");
+      return;
+    }
     try {
       new URL(value);
       setUrlError("");
@@ -85,11 +88,16 @@ export default function Sites() {
       </div>
 
       {showCreate && (
-        <form onSubmit={handleCreate} className="bg-white p-6 rounded-xl border border-gray-200 mb-6">
+        <form
+          onSubmit={handleCreate}
+          className="bg-white p-6 rounded-xl border border-gray-200 mb-6"
+        >
           <h3 className="font-semibold text-lg mb-4">{t("sites.addSite")}</h3>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.websiteName")}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t("settings.websiteName")}
+              </label>
               <input
                 ref={nameInputRef}
                 value={name}
@@ -102,7 +110,10 @@ export default function Sites() {
               <label className="block text-sm font-medium text-gray-700 mb-1">URL</label>
               <input
                 value={url}
-                onChange={(e) => { setUrl(e.target.value); validateUrl(e.target.value); }}
+                onChange={(e) => {
+                  setUrl(e.target.value);
+                  validateUrl(e.target.value);
+                }}
                 placeholder="https://example.com"
                 className={`w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none ${urlError ? "border-red-300" : "border-gray-300"}`}
               />
@@ -112,10 +123,18 @@ export default function Sites() {
               {t("sites.approvalNote")}
             </p>
             <div className="flex gap-3">
-              <button type="submit" disabled={mutation.isPending} className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700">
+              <button
+                type="submit"
+                disabled={mutation.isPending}
+                className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700"
+              >
                 {mutation.isPending ? t("common.loading") : t("sites.addSite")}
               </button>
-              <button type="button" onClick={() => setShowCreate(false)} className="text-gray-500 px-4 py-2">
+              <button
+                type="button"
+                onClick={() => setShowCreate(false)}
+                className="text-gray-500 px-4 py-2"
+              >
                 {t("common.cancel")}
               </button>
             </div>
@@ -155,7 +174,9 @@ export default function Sites() {
                     )}
                   </div>
                   <p className="text-sm text-gray-500 mt-1">{site.url}</p>
-                  <p className="text-xs text-gray-400 mt-1">Token: {site.token.substring(0, 12)}...</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Token: {site.token.substring(0, 12)}...
+                  </p>
                 </div>
 
                 <div className="flex items-center gap-2 ml-4">

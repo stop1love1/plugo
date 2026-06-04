@@ -1,8 +1,30 @@
 import { Outlet, Link, useParams, useLocation, useNavigate } from "react-router-dom";
-import { Database, Wrench, Code, Settings, LayoutDashboard, MessageCircle, LogOut, User, Brain, BarChart3, Globe, FileText, Menu, X, Play, Link2, Bell, Cpu, SlidersHorizontal, GitBranch } from "lucide-react";
+import {
+  Database,
+  Wrench,
+  Code,
+  Settings,
+  LayoutDashboard,
+  MessageCircle,
+  LogOut,
+  User,
+  Brain,
+  BarChart3,
+  Globe,
+  FileText,
+  Menu,
+  X,
+  Play,
+  Link2,
+  Bell,
+  Cpu,
+  SlidersHorizontal,
+  GitBranch,
+} from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { getSites } from "../lib/api";
+import { getSites, logout as apiLogout } from "../lib/api";
 import { useStore } from "../lib/store";
+import ErrorBoundary from "./ErrorBoundary";
 import { useLocale } from "../lib/useLocale";
 import { useNotifications } from "../lib/useNotifications";
 import { useCallback, useLayoutEffect, useState } from "react";
@@ -10,9 +32,7 @@ import { useCallback, useLayoutEffect, useState } from "react";
 const sidebarGroups = [
   {
     heading: null,
-    links: [
-      { to: "analytics", label: "nav.analytics", icon: BarChart3 },
-    ],
+    links: [{ to: "analytics", label: "nav.analytics", icon: BarChart3 }],
   },
   {
     heading: "nav.group.content",
@@ -40,9 +60,7 @@ const sidebarGroups = [
   },
   {
     heading: null,
-    links: [
-      { to: "settings", label: "nav.settings", icon: Settings },
-    ],
+    links: [{ to: "settings", label: "nav.settings", icon: Settings }],
   },
 ];
 
@@ -87,7 +105,7 @@ export default function Layout() {
       }
       return val;
     },
-    [t]
+    [t],
   );
 
   // Update document title based on current route.
@@ -120,6 +138,9 @@ export default function Layout() {
   });
 
   const handleLogout = () => {
+    // Clear the httpOnly session cookie server-side; ignore failures so logout
+    // always proceeds locally.
+    apiLogout().catch(() => undefined);
     logout();
     navigate("/login");
   };
@@ -142,14 +163,27 @@ export default function Layout() {
 
       {/* Sidebar overlay on mobile */}
       {sidebarOpen && (
-        <div className="lg:hidden fixed inset-0 bg-black/30 z-30" onClick={() => setSidebarOpen(false)} />
+        <div
+          className="lg:hidden fixed inset-0 bg-black/30 z-30"
+          onClick={() => setSidebarOpen(false)}
+        />
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-64 shrink-0 bg-white border-r border-gray-200 flex flex-col transform transition-transform lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
+      <aside
+        className={`fixed lg:static inset-y-0 left-0 z-40 w-64 shrink-0 bg-white border-r border-gray-200 flex flex-col transform transition-transform lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
+      >
         <div className="border-b border-gray-200 px-4 py-3 flex items-center h-16">
-          <Link to="/" onClick={handleNavClick} className="flex items-center gap-3 text-2xl font-bold text-primary-600">
-            <img src={new URL("../assets/images/logo.png", import.meta.url).href} alt="Plugo" className="h-10 object-contain" />
+          <Link
+            to="/"
+            onClick={handleNavClick}
+            className="flex items-center gap-3 text-2xl font-bold text-primary-600"
+          >
+            <img
+              src={new URL("../assets/images/logo.png", import.meta.url).href}
+              alt="Plugo"
+              className="h-10 object-contain"
+            />
             Plugo
           </Link>
         </div>
@@ -168,7 +202,9 @@ export default function Layout() {
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-primary-500 truncate"
                 >
                   {sites.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -246,7 +282,9 @@ export default function Layout() {
                   className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors w-full"
                 >
                   <Globe className="w-5 h-5" />
-                  <span className="flex-1 text-left">{locale === "vi" ? "Tiếng Việt" : "English"}</span>
+                  <span className="flex-1 text-left">
+                    {locale === "vi" ? "Tiếng Việt" : "English"}
+                  </span>
                 </button>
                 <button
                   onClick={handleLogout}
@@ -265,7 +303,9 @@ export default function Layout() {
             {/* Site list */}
             {sites.length > 0 && (
               <div className="mb-4">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 px-3 pb-1">Sites</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 px-3 pb-1">
+                  Sites
+                </p>
                 <div className="space-y-0.5">
                   {sites.map((s) => (
                     <Link
@@ -323,7 +363,9 @@ export default function Layout() {
                   className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors w-full"
                 >
                   <Globe className="w-5 h-5" />
-                  <span className="flex-1 text-left">{locale === "vi" ? "Tiếng Việt" : "English"}</span>
+                  <span className="flex-1 text-left">
+                    {locale === "vi" ? "Tiếng Việt" : "English"}
+                  </span>
                 </button>
                 <button
                   onClick={handleLogout}
@@ -353,7 +395,9 @@ export default function Layout() {
 
       {/* Main content */}
       <main className="flex-1 min-w-0 p-4 pt-16 lg:p-8 lg:pt-8 overflow-auto">
-        <Outlet />
+        <ErrorBoundary>
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   );

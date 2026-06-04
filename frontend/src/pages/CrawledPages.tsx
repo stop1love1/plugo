@@ -3,12 +3,22 @@ import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import {
-  getCrawledUrls, getChunksByUrl, deleteByUrl, recrawlUrl,
-  type CrawledUrl, type KnowledgeChunk,
+  getCrawledUrls,
+  getChunksByUrl,
+  deleteByUrl,
+  recrawlUrl,
+  type CrawledUrl,
+  type KnowledgeChunk,
 } from "../lib/api";
 import {
-  Globe, Trash2, RefreshCw, ChevronDown, ChevronUp,
-  ExternalLink, Search, AlertTriangle,
+  Globe,
+  Trash2,
+  RefreshCw,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  Search,
+  AlertTriangle,
 } from "lucide-react";
 import { useLocale } from "../lib/useLocale";
 
@@ -56,9 +66,10 @@ export default function CrawledPages() {
   });
 
   const filtered = search
-    ? urls.filter((u: CrawledUrl) =>
-        u.source_url.toLowerCase().includes(search.toLowerCase()) ||
-        (u.title || "").toLowerCase().includes(search.toLowerCase())
+    ? urls.filter(
+        (u: CrawledUrl) =>
+          u.source_url.toLowerCase().includes(search.toLowerCase()) ||
+          (u.title || "").toLowerCase().includes(search.toLowerCase()),
       )
     : urls;
 
@@ -66,10 +77,14 @@ export default function CrawledPages() {
 
   const sourceTypeLabel = (type: string) => {
     switch (type) {
-      case "crawl": return t("crawledPages.typeCrawl");
-      case "manual": return t("crawledPages.typeManual");
-      case "upload": return t("crawledPages.typeUpload");
-      default: return type;
+      case "crawl":
+        return t("crawledPages.typeCrawl");
+      case "manual":
+        return t("crawledPages.typeManual");
+      case "upload":
+        return t("crawledPages.typeUpload");
+      default:
+        return type;
     }
   };
 
@@ -135,7 +150,10 @@ export default function CrawledPages() {
             const isDeleting = confirmDelete === url.source_url;
 
             return (
-              <div key={url.source_url} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div
+                key={url.source_url}
+                className="bg-white rounded-xl border border-gray-200 overflow-hidden"
+              >
                 {/* URL header row */}
                 <button
                   onClick={() => setExpandedUrl(isExpanded ? null : url.source_url)}
@@ -147,11 +165,15 @@ export default function CrawledPages() {
                       <span className="text-sm font-medium text-gray-900 truncate">
                         {url.title || url.source_url}
                       </span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                        url.source_type === "crawl" ? "bg-blue-50 text-blue-600" :
-                        url.source_type === "manual" ? "bg-green-50 text-green-600" :
-                        "bg-purple-50 text-purple-600"
-                      }`}>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                          url.source_type === "crawl"
+                            ? "bg-blue-50 text-blue-600"
+                            : url.source_type === "manual"
+                              ? "bg-green-50 text-green-600"
+                              : "bg-purple-50 text-purple-600"
+                        }`}
+                      >
                         {sourceTypeLabel(url.source_type)}
                       </span>
                     </div>
@@ -172,7 +194,11 @@ export default function CrawledPages() {
                         </div>
                       </div>
                     )}
-                    {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                    {isExpanded ? (
+                      <ChevronUp className="w-4 h-4 text-gray-400" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                    )}
                   </div>
                 </button>
 
@@ -195,12 +221,18 @@ export default function CrawledPages() {
                         disabled={recrawlMutation.isPending}
                         className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 px-2 py-1 rounded border border-blue-200 bg-white disabled:opacity-50"
                       >
-                        <RefreshCw className={`w-3 h-3 ${recrawlMutation.isPending ? "animate-spin" : ""}`} />
-                        {recrawlMutation.isPending ? t("crawledPages.recrawling") : t("crawledPages.recrawl")}
+                        <RefreshCw
+                          className={`w-3 h-3 ${recrawlMutation.isPending ? "animate-spin" : ""}`}
+                        />
+                        {recrawlMutation.isPending
+                          ? t("crawledPages.recrawling")
+                          : t("crawledPages.recrawl")}
                       </button>
                       {isDeleting ? (
                         <div className="flex items-center gap-2 ml-auto">
-                          <span className="text-xs text-red-600">{t("crawledPages.confirmDelete")}</span>
+                          <span className="text-xs text-red-600">
+                            {t("crawledPages.confirmDelete")}
+                          </span>
                           <button
                             onClick={() => deleteMutation.mutate(url.source_url)}
                             disabled={deleteMutation.isPending}
@@ -251,7 +283,8 @@ export default function CrawledPages() {
                                 </span>
                               </div>
                               <p className="text-xs text-gray-600 line-clamp-3 whitespace-pre-wrap">
-                                {chunk.content.substring(0, 300)}{chunk.content.length > 300 ? "..." : ""}
+                                {chunk.content.substring(0, 300)}
+                                {chunk.content.length > 300 ? "..." : ""}
                               </p>
                             </div>
                           ))}

@@ -21,6 +21,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "common.add": "Thêm",
     "common.search": "Tìm kiếm...",
     "common.loading": "Đang tải...",
+    "common.errorTitle": "Đã xảy ra lỗi khi hiển thị trang này",
+    "common.errorRetry": "Thử lại",
     "common.confirm": "Xác nhận",
     "common.previous": "Trước",
     "common.next": "Tiếp",
@@ -49,9 +51,11 @@ const translations: Record<Locale, Record<string, string>> = {
     "knowledge.allCleared": "Đã xóa toàn bộ kiến thức",
     "knowledge.chunkTitle": "Tiêu đề",
     "knowledge.titlePlaceholder": "Nhập tiêu đề (hoặc để trống để tự động tạo)",
-    "knowledge.titleAutoHint": "Nếu để trống, tiêu đề sẽ được tạo tự động từ dòng đầu tiên của nội dung.",
+    "knowledge.titleAutoHint":
+      "Nếu để trống, tiêu đề sẽ được tạo tự động từ dòng đầu tiên của nội dung.",
     "knowledge.content": "Nội dung",
-    "knowledge.contentPlaceholder": "Nhập nội dung kiến thức...\n\nHỗ trợ Markdown: ## Heading, **bold**, - list item",
+    "knowledge.contentPlaceholder":
+      "Nhập nội dung kiến thức...\n\nHỗ trợ Markdown: ## Heading, **bold**, - list item",
     // Tools
     "tools.title": "Công cụ API",
     "tools.subtitle": "Cho phép bot gọi API của trang web",
@@ -80,8 +84,10 @@ const translations: Record<Locale, Record<string, string>> = {
     // Settings - Delete Site
     "settings.dangerZone": "Vùng nguy hiểm",
     "settings.deleteSite": "Xóa trang web",
-    "settings.deleteSiteDesc": "Xóa vĩnh viễn trang web này và tất cả dữ liệu liên quan. Hành động này không thể hoàn tác.",
-    "settings.deleteSiteConfirm": "Bạn có chắc muốn xóa trang web này? Tất cả dữ liệu sẽ bị mất vĩnh viễn.",
+    "settings.deleteSiteDesc":
+      "Xóa vĩnh viễn trang web này và tất cả dữ liệu liên quan. Hành động này không thể hoàn tác.",
+    "settings.deleteSiteConfirm":
+      "Bạn có chắc muốn xóa trang web này? Tất cả dữ liệu sẽ bị mất vĩnh viễn.",
     "settings.deleteSiteButton": "Xóa trang web này",
     "settings.unsavedChanges": "Có thay đổi chưa lưu",
     "settings.invalidColor": "Mã màu hex không hợp lệ",
@@ -92,7 +98,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "settings.websiteUrlHint": "URL chính của website. Dùng cho Playground và Auto Crawl.",
     "settings.domainWhitelist": "Domain cho phép (phân cách bằng dấu phẩy)",
     "settings.allowPrivateUrls.label": "Cho phép URL nội bộ (localhost, IP riêng)",
-    "settings.allowPrivateUrls.help": "⚠️ Chỉ bật khi crawl site nội bộ (dev/on-prem). Mặc định chặn để bảo vệ SSRF. Cloud metadata endpoints (169.254.169.254) luôn bị chặn.",
+    "settings.allowPrivateUrls.help":
+      "⚠️ Chỉ bật khi crawl site nội bộ (dev/on-prem). Mặc định chặn để bảo vệ SSRF. Cloud metadata endpoints (169.254.169.254) luôn bị chặn.",
     "settings.provider": "Nhà cung cấp",
     "settings.model": "Mô hình",
     "settings.primaryColor": "Màu chủ đạo",
@@ -101,7 +108,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "settings.suggestions": "Gợi ý mặc định (phân cách bằng dấu phẩy)",
     "settings.suggestionsHint": "Nút gợi ý hiển thị cho khách trong widget chat",
     "settings.apiKeys": "API Keys",
-    "settings.apiKeysDesc": "Nhập API key cho các nhà cung cấp LLM. Key được lưu an toàn và ưu tiên hơn .env.",
+    "settings.apiKeysDesc":
+      "Nhập API key cho các nhà cung cấp LLM. Key được lưu an toàn và ưu tiên hơn .env.",
     "settings.keySaved": "Đã lưu API key",
     "settings.keyFailed": "Lưu API key thất bại",
     "settings.keyDeleted": "Đã xóa API key",
@@ -116,13 +124,18 @@ const translations: Record<Locale, Record<string, string>> = {
     "settings.manageModels": "Quản lý models",
     "settings.aiRules": "Quy tắc AI",
     "settings.systemPrompt": "System Prompt",
-    "settings.systemPromptPlaceholder": "Bạn là trợ lý bán hàng thân thiện. Luôn gọi khách bằng 'anh/chị'...",
-    "settings.systemPromptHint": "Hướng dẫn tùy chỉnh cho bot. Sẽ được thêm vào system prompt mặc định.",
+    "settings.systemPromptPlaceholder":
+      "Bạn là trợ lý bán hàng thân thiện. Luôn gọi khách bằng 'anh/chị'...",
+    "settings.systemPromptHint":
+      "Hướng dẫn tùy chỉnh cho bot. Sẽ được thêm vào system prompt mặc định.",
     "settings.botRules": "Quy tắc bot (mỗi dòng một quy tắc)",
-    "settings.botRulesPlaceholder": "Không trả lời câu hỏi về đối thủ cạnh tranh\nKhông đưa ra giá nếu khách chưa hỏi\nLuôn đề xuất gọi hotline cho vấn đề phức tạp\nKhông dùng tiếng lóng hoặc từ ngữ không chuyên nghiệp",
-    "settings.botRulesHint": "Danh sách quy tắc mà bot phải tuân theo. Mỗi dòng là một quy tắc riêng biệt.",
+    "settings.botRulesPlaceholder":
+      "Không trả lời câu hỏi về đối thủ cạnh tranh\nKhông đưa ra giá nếu khách chưa hỏi\nLuôn đề xuất gọi hotline cho vấn đề phức tạp\nKhông dùng tiếng lóng hoặc từ ngữ không chuyên nghiệp",
+    "settings.botRulesHint":
+      "Danh sách quy tắc mà bot phải tuân theo. Mỗi dòng là một quy tắc riêng biệt.",
     "settings.responseLanguage": "Ngôn ngữ trả lời",
-    "settings.responseLanguageHint": "Chọn ngôn ngữ bot sẽ sử dụng khi trả lời. 'Tự động' sẽ phát hiện ngôn ngữ của người dùng.",
+    "settings.responseLanguageHint":
+      "Chọn ngôn ngữ bot sẽ sử dụng khi trả lời. 'Tự động' sẽ phát hiện ngôn ngữ của người dùng.",
     "settings.langAuto": "Tự động phát hiện",
     "settings.langVi": "Tiếng Việt",
     "settings.langEn": "English",
@@ -239,7 +252,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "setup.siteUrl": "URL website (plugin widget)",
     "setup.autoTarget": "Auto crawl sẽ dùng URL này",
     "setup.scanUrl": "URL để scan thủ công",
-    "setup.scanUrlHint": "Để trống = dùng URL site ở trên. Hoặc nhập URL cụ thể để scan thêm trang.",
+    "setup.scanUrlHint":
+      "Để trống = dùng URL site ở trên. Hoặc nhập URL cụ thể để scan thêm trang.",
     "setup.pauseCrawl": "Tạm dừng",
     "setup.resumeCrawl": "Tiếp tục",
     "setup.pausing": "Đang tạm dừng...",
@@ -255,7 +269,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "setup.depthUnlimited": "Không giới hạn",
     "setup.depthLevels": "tầng từ trang gốc",
     "setup.excludePatterns": "URL loại trừ",
-    "setup.excludePatternsHint": "Mỗi dòng 1 pattern. Hỗ trợ glob (*/admin/*, *.pdf) hoặc substring (/login).",
+    "setup.excludePatternsHint":
+      "Mỗi dòng 1 pattern. Hỗ trợ glob (*/admin/*, *.pdf) hoặc substring (/login).",
     "setup.forceRecrawl": "Crawl lại toàn bộ",
     "setup.forceRecrawlHint": "(bỏ qua cache, crawl lại tất cả trang)",
     "setup.crawlStartedForce": "Đã bắt đầu crawl (force recrawl)",
@@ -373,7 +388,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "sites.approved": "Đã phê duyệt site",
     "sites.rejected": "Đã thu hồi phê duyệt",
     "sites.approvalFailed": "Cập nhật phê duyệt thất bại",
-    "sites.approvalNote": "Site mới sẽ ở trạng thái chờ duyệt. Admin cần phê duyệt trước khi widget hoạt động.",
+    "sites.approvalNote":
+      "Site mới sẽ ở trạng thái chờ duyệt. Admin cần phê duyệt trước khi widget hoạt động.",
     "sites.statusApproved": "Đã duyệt",
     "sites.statusPending": "Chờ duyệt",
     "sites.approve": "Phê duyệt",
@@ -385,14 +401,17 @@ const translations: Record<Locale, Record<string, string>> = {
     "embed.sitePendingDesc": "Vào trang Sites để phê duyệt trước khi nhúng widget vào website.",
     "embed.authGuide": "Hướng dẫn nhúng Widget",
     "embed.authStep1": "Tạo site trên dashboard và điền URL website của bạn.",
-    "embed.authStep2": "Admin phê duyệt site (trang Sites > nút Phê duyệt). Widget chỉ hoạt động sau khi được duyệt.",
-    "embed.authStep3": "Sao chép mã nhúng bên trên và dán vào website trước thẻ </body>. Token là duy nhất cho mỗi site — không cần thêm API key hay xác thực khác.",
-    "embed.authStep4": "(Tùy chọn) Cấu hình allowed_domains trong Settings để giới hạn widget chỉ chạy trên domain bạn cho phép.",
+    "embed.authStep2":
+      "Admin phê duyệt site (trang Sites > nút Phê duyệt). Widget chỉ hoạt động sau khi được duyệt.",
+    "embed.authStep3":
+      "Sao chép mã nhúng bên trên và dán vào website trước thẻ </body>. Token là duy nhất cho mỗi site — không cần thêm API key hay xác thực khác.",
+    "embed.authStep4":
+      "(Tùy chọn) Cấu hình allowed_domains trong Settings để giới hạn widget chỉ chạy trên domain bạn cho phép.",
     "embed.optToken": "Token xác thực site (bắt buộc)",
     "embed.optServerUrl": "URL backend server",
     "embed.optColor": "Màu chủ đạo (hex)",
     "embed.optGreeting": "Lời chào khi mở chat",
-    "embed.optPosition": "\"bottom-right\" hoặc \"bottom-left\"",
+    "embed.optPosition": '"bottom-right" hoặc "bottom-left"',
     "embed.optDarkMode": "Bật giao diện tối",
     "embed.optLanguage": "Ngôn ngữ (vi, en, ja, ko, zh, fr, de, es, th)",
     // Playground
@@ -402,7 +421,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "playground.reload": "Tải lại",
     "playground.openExternal": "Mở tab mới",
     "playground.noUrl": "Chưa có URL. Vui lòng cập nhật URL cho site trong Settings.",
-    "playground.iframeBlocked": "Website này không cho phép nhúng trong iframe. Hãy mở trong tab mới.",
+    "playground.iframeBlocked":
+      "Website này không cho phép nhúng trong iframe. Hãy mở trong tab mới.",
     "playground.liveChat": "Chat trực tiếp với widget",
     // Flows
     "flows.title": "Hướng dẫn Flow",
@@ -411,7 +431,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "flows.empty": "Chưa có hướng dẫn nào. Tạo luồng để dạy bot các bước trên website.",
     "flows.newFlow": "Luồng mới",
     "flows.flowName": "Tên luồng *",
-    "flows.flowNamePlaceholder": "VD: \"Cách đặt hàng\"",
+    "flows.flowNamePlaceholder": 'VD: "Cách đặt hàng"',
     "flows.descriptionLabel": "Mô tả",
     "flows.descriptionPlaceholder": "Mô tả ngắn về luồng này...",
     "flows.requiresLogin": "Yêu cầu đăng nhập",
@@ -482,7 +502,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "embed.tableDescription": "Mô tả",
     // Global Settings
     "globalSettings.title": "Cài đặt chung",
-    "globalSettings.subtitle": "Cấu hình toàn hệ thống cho tất cả site. Một số thay đổi cần khởi động lại server.",
+    "globalSettings.subtitle":
+      "Cấu hình toàn hệ thống cho tất cả site. Một số thay đổi cần khởi động lại server.",
     "globalSettings.sidebarHeading": "Cài đặt",
     "globalSettings.tabAi": "AI & Prompt",
     "globalSettings.tabLlm": "LLM & Mô hình",
@@ -529,6 +550,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "common.add": "Add",
     "common.search": "Search...",
     "common.loading": "Loading...",
+    "common.errorTitle": "Something went wrong rendering this page",
+    "common.errorRetry": "Try again",
     "common.confirm": "Confirm",
     "common.previous": "Previous",
     "common.next": "Next",
@@ -557,9 +580,11 @@ const translations: Record<Locale, Record<string, string>> = {
     "knowledge.allCleared": "All knowledge cleared",
     "knowledge.chunkTitle": "Title",
     "knowledge.titlePlaceholder": "Enter title (or leave empty for auto-generate)",
-    "knowledge.titleAutoHint": "If left empty, the title will be auto-generated from the first line of content.",
+    "knowledge.titleAutoHint":
+      "If left empty, the title will be auto-generated from the first line of content.",
     "knowledge.content": "Content",
-    "knowledge.contentPlaceholder": "Enter knowledge content...\n\nSupports Markdown: ## Heading, **bold**, - list item",
+    "knowledge.contentPlaceholder":
+      "Enter knowledge content...\n\nSupports Markdown: ## Heading, **bold**, - list item",
     // Tools
     "tools.title": "API Tools",
     "tools.subtitle": "Let the bot call your website's APIs",
@@ -588,8 +613,10 @@ const translations: Record<Locale, Record<string, string>> = {
     // Settings - Delete Site
     "settings.dangerZone": "Danger Zone",
     "settings.deleteSite": "Delete Site",
-    "settings.deleteSiteDesc": "Permanently delete this site and all its data. This action cannot be undone.",
-    "settings.deleteSiteConfirm": "Are you sure you want to delete this site? All data will be permanently lost.",
+    "settings.deleteSiteDesc":
+      "Permanently delete this site and all its data. This action cannot be undone.",
+    "settings.deleteSiteConfirm":
+      "Are you sure you want to delete this site? All data will be permanently lost.",
     "settings.deleteSiteButton": "Delete this site",
     "settings.unsavedChanges": "You have unsaved changes",
     "settings.invalidColor": "Invalid hex color code",
@@ -600,7 +627,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "settings.websiteUrlHint": "Main URL of your website. Used for Playground and Auto Crawl.",
     "settings.domainWhitelist": "Domain Whitelist (comma-separated)",
     "settings.allowPrivateUrls.label": "Allow private URLs (localhost, private IPs)",
-    "settings.allowPrivateUrls.help": "⚠️ Only enable for internal/on-prem crawls. Blocked by default to prevent SSRF. Cloud metadata endpoints (169.254.169.254) are always blocked.",
+    "settings.allowPrivateUrls.help":
+      "⚠️ Only enable for internal/on-prem crawls. Blocked by default to prevent SSRF. Cloud metadata endpoints (169.254.169.254) are always blocked.",
     "settings.provider": "Provider",
     "settings.model": "Model",
     "settings.primaryColor": "Primary Color",
@@ -609,7 +637,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "settings.suggestions": "Default Suggestions (comma-separated)",
     "settings.suggestionsHint": "Quick reply buttons shown to visitors in the chat widget",
     "settings.apiKeys": "API Keys",
-    "settings.apiKeysDesc": "Enter API keys for LLM providers. Keys are stored securely and take priority over .env file.",
+    "settings.apiKeysDesc":
+      "Enter API keys for LLM providers. Keys are stored securely and take priority over .env file.",
     "settings.keySaved": "API key saved",
     "settings.keyFailed": "Failed to save API key",
     "settings.keyDeleted": "API key deleted",
@@ -624,13 +653,17 @@ const translations: Record<Locale, Record<string, string>> = {
     "settings.manageModels": "Manage models",
     "settings.aiRules": "AI Rules",
     "settings.systemPrompt": "System Prompt",
-    "settings.systemPromptPlaceholder": "You are a friendly sales assistant. Always be polite and helpful...",
-    "settings.systemPromptHint": "Custom instructions for the bot. Added to the default system prompt.",
+    "settings.systemPromptPlaceholder":
+      "You are a friendly sales assistant. Always be polite and helpful...",
+    "settings.systemPromptHint":
+      "Custom instructions for the bot. Added to the default system prompt.",
     "settings.botRules": "Bot Rules (one per line)",
-    "settings.botRulesPlaceholder": "Do not answer questions about competitors\nDo not reveal pricing unless asked\nAlways suggest calling hotline for complex issues\nDo not use slang or unprofessional language",
+    "settings.botRulesPlaceholder":
+      "Do not answer questions about competitors\nDo not reveal pricing unless asked\nAlways suggest calling hotline for complex issues\nDo not use slang or unprofessional language",
     "settings.botRulesHint": "Rules the bot must follow. Each line is a separate rule.",
     "settings.responseLanguage": "Response Language",
-    "settings.responseLanguageHint": "Choose the language the bot will use to respond. 'Auto detect' will match the user's language.",
+    "settings.responseLanguageHint":
+      "Choose the language the bot will use to respond. 'Auto detect' will match the user's language.",
     "settings.langAuto": "Auto detect",
     "settings.langVi": "Tiếng Việt",
     "settings.langEn": "English",
@@ -747,7 +780,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "setup.siteUrl": "Website URL (widget installed)",
     "setup.autoTarget": "Auto crawl uses this URL",
     "setup.scanUrl": "URL to scan manually",
-    "setup.scanUrlHint": "Leave empty to use site URL above. Or enter a specific URL to scan additional pages.",
+    "setup.scanUrlHint":
+      "Leave empty to use site URL above. Or enter a specific URL to scan additional pages.",
     "setup.pauseCrawl": "Pause",
     "setup.resumeCrawl": "Resume",
     "setup.pausing": "Pausing...",
@@ -763,13 +797,15 @@ const translations: Record<Locale, Record<string, string>> = {
     "setup.depthUnlimited": "Unlimited",
     "setup.depthLevels": "levels from start URL",
     "setup.excludePatterns": "Exclude URL Patterns",
-    "setup.excludePatternsHint": "One pattern per line. Supports glob (*/admin/*, *.pdf) or substring (/login).",
+    "setup.excludePatternsHint":
+      "One pattern per line. Supports glob (*/admin/*, *.pdf) or substring (/login).",
     "setup.forceRecrawl": "Force Recrawl",
     "setup.forceRecrawlHint": "(ignore cache, recrawl all pages)",
     "setup.crawlStartedForce": "Crawl started (force recrawl)",
     // Crawled Pages
     "crawledPages.title": "Crawled Pages",
-    "crawledPages.subtitle": "View content learned from each URL — delete or re-crawl individual pages",
+    "crawledPages.subtitle":
+      "View content learned from each URL — delete or re-crawl individual pages",
     "crawledPages.totalUrls": "Total URLs",
     "crawledPages.totalChunks": "Total Chunks",
     "crawledPages.avgChunks": "Avg Chunks/URL",
@@ -792,7 +828,8 @@ const translations: Record<Locale, Record<string, string>> = {
     // Visitors
     "visitors.title": "Visitor Memory",
     "visitors.subtitle": "View and manage what the bot remembers about visitors",
-    "visitors.noMemories": "No visitor memories yet. Memories are extracted automatically after chat sessions.",
+    "visitors.noMemories":
+      "No visitor memories yet. Memories are extracted automatically after chat sessions.",
     "visitors.search": "Search visitors...",
     "visitors.filterAll": "All",
     "visitors.sortMemories": "Most memories",
@@ -881,7 +918,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "sites.approved": "Site approved",
     "sites.rejected": "Site approval revoked",
     "sites.approvalFailed": "Failed to update approval",
-    "sites.approvalNote": "New sites are pending approval. Admin must approve before the widget becomes active.",
+    "sites.approvalNote":
+      "New sites are pending approval. Admin must approve before the widget becomes active.",
     "sites.statusApproved": "Approved",
     "sites.statusPending": "Pending",
     "sites.approve": "Approve",
@@ -890,17 +928,21 @@ const translations: Record<Locale, Record<string, string>> = {
     "embed.siteApproved": "Site is approved — widget is active",
     "embed.siteApprovedDesc": "The chat widget can receive messages from visitors.",
     "embed.sitePending": "Site is not approved — widget is inactive",
-    "embed.sitePendingDesc": "Go to the Sites page to approve this site before embedding the widget.",
+    "embed.sitePendingDesc":
+      "Go to the Sites page to approve this site before embedding the widget.",
     "embed.authGuide": "Widget Integration Guide",
     "embed.authStep1": "Create a site on the dashboard and enter your website URL.",
-    "embed.authStep2": "Admin approves the site (Sites page > Approve button). The widget only works after approval.",
-    "embed.authStep3": "Copy the embed code above and paste it into your website before the </body> tag. The token is unique per site — no additional API keys or auth needed.",
-    "embed.authStep4": "(Optional) Configure allowed_domains in Settings to restrict the widget to run only on your domains.",
+    "embed.authStep2":
+      "Admin approves the site (Sites page > Approve button). The widget only works after approval.",
+    "embed.authStep3":
+      "Copy the embed code above and paste it into your website before the </body> tag. The token is unique per site — no additional API keys or auth needed.",
+    "embed.authStep4":
+      "(Optional) Configure allowed_domains in Settings to restrict the widget to run only on your domains.",
     "embed.optToken": "Site authentication token (required)",
     "embed.optServerUrl": "Backend server URL",
     "embed.optColor": "Primary theme color (hex)",
     "embed.optGreeting": "Welcome message when chat opens",
-    "embed.optPosition": "\"bottom-right\" or \"bottom-left\"",
+    "embed.optPosition": '"bottom-right" or "bottom-left"',
     "embed.optDarkMode": "Enable dark theme",
     "embed.optLanguage": "UI language (vi, en, ja, ko, zh, fr, de, es, th)",
     // Playground
@@ -910,7 +952,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "playground.reload": "Reload",
     "playground.openExternal": "Open in new tab",
     "playground.noUrl": "No URL set. Please update the site URL in Settings.",
-    "playground.iframeBlocked": "This website does not allow embedding in an iframe. Try opening in a new tab.",
+    "playground.iframeBlocked":
+      "This website does not allow embedding in an iframe. Try opening in a new tab.",
     "playground.liveChat": "Live chat with widget",
     // Flows
     "flows.title": "Flow Guides",
@@ -919,7 +962,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "flows.empty": "No flow guides yet. Create one to teach your bot website flows.",
     "flows.newFlow": "New Flow Guide",
     "flows.flowName": "Flow Name *",
-    "flows.flowNamePlaceholder": "e.g. \"How to place an order\"",
+    "flows.flowNamePlaceholder": 'e.g. "How to place an order"',
     "flows.descriptionLabel": "Description",
     "flows.descriptionPlaceholder": "Brief description of this flow...",
     "flows.requiresLogin": "Requires user login",
@@ -968,14 +1011,16 @@ const translations: Record<Locale, Record<string, string>> = {
     "settings.headerSubtitle": "Header Subtitle",
     "settings.inputPlaceholder": "Input Placeholder",
     "settings.autoOpen": "Auto Open (seconds)",
-    "settings.autoOpenHint": "0 = disabled. Automatically opens widget after N seconds when user lands on page",
+    "settings.autoOpenHint":
+      "0 = disabled. Automatically opens widget after N seconds when user lands on page",
     "settings.positionBottomRight": "Bottom Right",
     "settings.positionBottomLeft": "Bottom Left",
     "settings.subtitle": "Configure the widget and AI content",
     "settings.siteDeleted": "Site deleted",
     "settings.saved": "Settings saved",
     "settings.deleteFailed": "Failed to delete site",
-    "settings.unsavedLeaveConfirm": "You have unsaved changes. Are you sure you want to leave this page?",
+    "settings.unsavedLeaveConfirm":
+      "You have unsaved changes. Are you sure you want to leave this page?",
     // Embed — configurator
     "embed.showPreview": "Show Preview",
     "embed.hidePreview": "Hide Preview",
@@ -990,7 +1035,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "embed.tableDescription": "Description",
     // Global Settings
     "globalSettings.title": "Global Settings",
-    "globalSettings.subtitle": "System-wide configuration for all sites. Some changes require a server restart.",
+    "globalSettings.subtitle":
+      "System-wide configuration for all sites. Some changes require a server restart.",
     "globalSettings.sidebarHeading": "Settings",
     "globalSettings.tabAi": "AI & Prompts",
     "globalSettings.tabLlm": "LLM & Models",

@@ -47,10 +47,7 @@ function getPageContext() {
   _cachedPageContext = {
     url: currentUrl,
     title: document.title,
-    meta:
-      document
-        .querySelector('meta[name="description"]')
-        ?.getAttribute("content") || "",
+    meta: document.querySelector('meta[name="description"]')?.getAttribute("content") || "",
     pageText: (document.body?.innerText || "").substring(0, 2000),
   };
   return _cachedPageContext;
@@ -123,7 +120,7 @@ function init() {
       // backend sees no URL/title/pageText for this visitor.
       getPageContext: config.disablePageContext ? () => ({}) : getPageContext,
     }),
-    container
+    container,
   );
 }
 

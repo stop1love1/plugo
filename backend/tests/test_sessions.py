@@ -18,13 +18,15 @@ async def test_session(db_repos, test_site):
         {"role": "user", "content": "Tell me about your product", "timestamp": datetime.now(UTC).isoformat()},
         {"role": "assistant", "content": "Our product is great!", "timestamp": datetime.now(UTC).isoformat()},
     ]
-    session = await db_repos.chat_sessions.create({
-        "id": session_id,
-        "site_id": test_site["id"],
-        "visitor_id": f"visitor_{uuid.uuid4().hex[:8]}",
-        "messages": messages,
-        "started_at": datetime.now(UTC),
-    })
+    session = await db_repos.chat_sessions.create(
+        {
+            "id": session_id,
+            "site_id": test_site["id"],
+            "visitor_id": f"visitor_{uuid.uuid4().hex[:8]}",
+            "messages": messages,
+            "started_at": datetime.now(UTC),
+        }
+    )
     yield session
     with contextlib.suppress(Exception):
         await db_repos.chat_sessions.delete(session_id)
@@ -35,6 +37,13 @@ async def test_list_sessions_without_auth(client, test_site):
     """GET /api/sessions without auth should return 401."""
     response = await client.get(f"/api/sessions?site_id={test_site['id']}")
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_list_sessions_rejects_oversized_per_page(client, auth_headers, test_site):
+    """per_page must be capped so a client can't request an unbounded page (DoS)."""
+    response = await client.get(f"/api/sessions?site_id={test_site['id']}&per_page=100000", headers=auth_headers)
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -62,26 +71,35 @@ async def test_get_session_not_found(client, auth_headers):
     assert "error" in response.json()
 
 
-@pytest.mark.parametrize("message_index, rating", [
-    (1, "up"),     # happy path: upvote an assistant reply
-    (3, "down"),   # happy path: downvote an assistant reply
-])
+@pytest.mark.parametrize(
+    "message_index, rating",
+    [
+        (1, "up"),  # happy path: upvote an assistant reply
+        (3, "down"),  # happy path: downvote an assistant reply
+    ],
+)
 @pytest.mark.asyncio
-async def test_submit_feedback_recorded(client, auth_headers, test_session, message_index, rating):
-    """POST /api/sessions/{id}/feedback with a valid rating returns 200 + 'Feedback recorded'."""
+async def test_submit_feedback_recorded(client, test_site, test_session, message_index, rating):
+    """POST /api/sessions/{id}/feedback with a valid rating returns 200 + 'Feedback recorded'.
+
+    Feedback is a widget action authorized by the site token (sent as a bearer),
+    not the admin JWT — so we authenticate the way the embedded widget does."""
     response = await client.post(
         f"/api/sessions/{test_session['id']}/feedback",
         json={"message_index": message_index, "rating": rating},
-        headers=auth_headers,
+        headers={"Authorization": f"Bearer {test_site['token']}"},
     )
     assert response.status_code == 200
     assert response.json()["message"] == "Feedback recorded"
 
 
-@pytest.mark.parametrize("payload", [
-    {"message_index": 1, "rating": "neutral"},  # invalid rating enum
-    {"message_index": -1, "rating": "up"},      # negative index rejected by schema
-])
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"message_index": 1, "rating": "neutral"},  # invalid rating enum
+        {"message_index": -1, "rating": "up"},  # negative index rejected by schema
+    ],
+)
 @pytest.mark.asyncio
 async def test_submit_feedback_schema_rejects_bad_payload(client, auth_headers, test_session, payload):
     """Invalid rating enum or negative message_index must 422 at the schema layer."""
@@ -94,12 +112,12 @@ async def test_submit_feedback_schema_rejects_bad_payload(client, auth_headers, 
 
 
 @pytest.mark.asyncio
-async def test_submit_feedback_out_of_range_index(client, auth_headers, test_session):
+async def test_submit_feedback_out_of_range_index(client, test_site, test_session):
     """An in-range-typed but non-existent message index should 200 with an error field, or 400."""
     response = await client.post(
         f"/api/sessions/{test_session['id']}/feedback",
         json={"message_index": 999, "rating": "up"},
-        headers=auth_headers,
+        headers={"Authorization": f"Bearer {test_site['token']}"},
     )
     assert response.status_code in (200, 400)
     if response.status_code == 200:
@@ -114,39 +132,43 @@ async def test_aggregate_overview_counts_at_db_layer(db_repos, test_site):
     created_ids = []
     try:
         # Session 1: 2 messages, 60s duration
-        s1 = await db_repos.chat_sessions.create({
-            "site_id": site_id,
-            "messages": [
-                {"role": "user", "content": "a"},
-                {"role": "assistant", "content": "b"},
-            ],
-        })
+        s1 = await db_repos.chat_sessions.create(
+            {
+                "site_id": site_id,
+                "messages": [
+                    {"role": "user", "content": "a"},
+                    {"role": "assistant", "content": "b"},
+                ],
+            }
+        )
         created_ids.append(s1["id"])
         # Session 2: 4 messages, 120s duration
-        s2 = await db_repos.chat_sessions.create({
-            "site_id": site_id,
-            "messages": [
-                {"role": "user", "content": "a"},
-                {"role": "assistant", "content": "b"},
-                {"role": "user", "content": "c"},
-                {"role": "assistant", "content": "d"},
-            ],
-        })
+        s2 = await db_repos.chat_sessions.create(
+            {
+                "site_id": site_id,
+                "messages": [
+                    {"role": "user", "content": "a"},
+                    {"role": "assistant", "content": "b"},
+                    {"role": "user", "content": "c"},
+                    {"role": "assistant", "content": "d"},
+                ],
+            }
+        )
         created_ids.append(s2["id"])
         # Session 3: 1 message, still open (no ended_at)
-        s3 = await db_repos.chat_sessions.create({
-            "site_id": site_id,
-            "messages": [{"role": "user", "content": "hi"}],
-        })
+        s3 = await db_repos.chat_sessions.create(
+            {
+                "site_id": site_id,
+                "messages": [{"role": "user", "content": "hi"}],
+            }
+        )
         created_ids.append(s3["id"])
 
         # End s1 and s2 so duration is measurable
         await db_repos.chat_sessions.set_ended(s1["id"])
         await db_repos.chat_sessions.set_ended(s2["id"])
 
-        stats = await db_repos.chat_sessions.aggregate_overview(
-            site_id, base - timedelta(days=1)
-        )
+        stats = await db_repos.chat_sessions.aggregate_overview(site_id, base - timedelta(days=1))
         assert stats["total_sessions"] == 3
         assert stats["total_messages"] == 2 + 4 + 1
         # At least one ended session → avg duration should be >= 0 (exact value is flaky)
@@ -158,12 +180,66 @@ async def test_aggregate_overview_counts_at_db_layer(db_repos, test_site):
 
 
 @pytest.mark.asyncio
+async def test_list_by_site_since_respects_limit(db_repos, test_site):
+    """list_by_site_since must cap results at `limit` so analytics scans stay bounded."""
+    base = datetime.now(UTC)
+    created = []
+    try:
+        for i in range(3):
+            s = await db_repos.chat_sessions.create(
+                {
+                    "site_id": test_site["id"],
+                    "messages": [{"role": "user", "content": f"m{i}"}],
+                    "started_at": base - timedelta(minutes=i),
+                }
+            )
+            created.append(s["id"])
+        rows = await db_repos.chat_sessions.list_by_site_since(test_site["id"], base - timedelta(days=1), limit=2)
+        assert len(rows) == 2
+    finally:
+        for sid in created:
+            with contextlib.suppress(Exception):
+                await db_repos.chat_sessions.delete(sid)
+
+
+@pytest.mark.asyncio
+async def test_delete_older_than_removes_old_keeps_recent(db_repos, test_site):
+    """Retention cleanup must delete sessions older than the cutoff and keep newer ones."""
+    base = datetime.now(UTC)
+    old = await db_repos.chat_sessions.create(
+        {
+            "site_id": test_site["id"],
+            "messages": [],
+            "started_at": base - timedelta(days=120),
+        }
+    )
+    recent = await db_repos.chat_sessions.create(
+        {
+            "site_id": test_site["id"],
+            "messages": [],
+            "started_at": base - timedelta(days=1),
+        }
+    )
+    try:
+        deleted = await db_repos.chat_sessions.delete_older_than(base - timedelta(days=90))
+        assert deleted >= 1
+        assert await db_repos.chat_sessions.get_by_id(old["id"]) is None
+        assert await db_repos.chat_sessions.get_by_id(recent["id"]) is not None
+    finally:
+        for sid in (old["id"], recent["id"]):
+            with contextlib.suppress(Exception):
+                await db_repos.chat_sessions.delete(sid)
+
+
+@pytest.mark.asyncio
 async def test_add_token_usage_accumulates(db_repos, test_site):
     """Two calls to add_token_usage should cumulatively increment the columns."""
-    session = await db_repos.chat_sessions.create({
-        "site_id": test_site["id"],
-        "messages": [],
-    })
+    session = await db_repos.chat_sessions.create(
+        {
+            "site_id": test_site["id"],
+            "messages": [],
+        }
+    )
     sid = session["id"]
 
     ok = await db_repos.chat_sessions.add_token_usage(sid, 100, 50, 0.001)

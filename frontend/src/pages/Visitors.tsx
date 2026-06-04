@@ -14,8 +14,7 @@ const getVisitors = (siteId: string) =>
   api.get(`/memory/visitors?site_id=${siteId}`).then((r) => r.data);
 const getVisitorMemories = (visitorId: string, siteId: string) =>
   api.get(`/memory/visitor/${visitorId}?site_id=${siteId}`).then((r) => r.data);
-const deleteMemory = (id: string) =>
-  api.delete(`/memory/${id}`).then((r) => r.data);
+const deleteMemory = (id: string) => api.delete(`/memory/${id}`).then((r) => r.data);
 const deleteVisitorMemories = (visitorId: string, siteId: string) =>
   api.delete(`/memory/visitor/${visitorId}?site_id=${siteId}`).then((r) => r.data);
 
@@ -79,7 +78,7 @@ export default function Visitors() {
     if (sortBy === "memories") {
       result = [...result].sort(
         (a: { memory_count?: number }, b: { memory_count?: number }) =>
-          (b.memory_count || 0) - (a.memory_count || 0)
+          (b.memory_count || 0) - (a.memory_count || 0),
       );
     } else {
       result = [...result].sort((a: { last_updated?: string }, b: { last_updated?: string }) => {
@@ -98,7 +97,11 @@ export default function Visitors() {
 
   return (
     <div className="flex flex-col h-[calc(100dvh-7rem)] min-h-[28rem] lg:h-[calc(100dvh-5.5rem)] lg:min-h-[32rem]">
-      <PageHeader title={t("visitors.title")} subtitle={t("visitors.subtitle")} className="mb-4 shrink-0" />
+      <PageHeader
+        title={t("visitors.title")}
+        subtitle={t("visitors.subtitle")}
+        className="mb-4 shrink-0"
+      />
 
       {isLoading ? (
         <div className="flex-1 min-h-0">
@@ -227,37 +230,52 @@ export default function Visitors() {
 
                 <div className="flex-1 min-h-0 overflow-y-auto p-4">
                   {filteredMemories.length === 0 ? (
-                    <p className="text-sm text-gray-400 py-8 text-center">{t("common.noResults")}</p>
+                    <p className="text-sm text-gray-400 py-8 text-center">
+                      {t("common.noResults")}
+                    </p>
                   ) : (
                     <div className="space-y-2 max-w-4xl">
-                      {filteredMemories.map((mem: { id: string; category: string; key: string; confidence?: string; value: string }) => (
-                        <div key={mem.id} className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex flex-wrap items-center gap-2 mb-1">
-                                <span
-                                  className={`text-xs px-1.5 py-0.5 rounded ${categoryColors[mem.category] || "bg-gray-50 text-gray-600"}`}
-                                >
-                                  {mem.category}
-                                </span>
-                                <span className="text-xs font-mono text-gray-500">{mem.key}</span>
-                                {mem.confidence != null && (
-                                  <span className="text-xs text-gray-300">{mem.confidence}</span>
-                                )}
+                      {filteredMemories.map(
+                        (mem: {
+                          id: string;
+                          category: string;
+                          key: string;
+                          confidence?: string;
+                          value: string;
+                        }) => (
+                          <div
+                            key={mem.id}
+                            className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex flex-wrap items-center gap-2 mb-1">
+                                  <span
+                                    className={`text-xs px-1.5 py-0.5 rounded ${categoryColors[mem.category] || "bg-gray-50 text-gray-600"}`}
+                                  >
+                                    {mem.category}
+                                  </span>
+                                  <span className="text-xs font-mono text-gray-500">{mem.key}</span>
+                                  {mem.confidence != null && (
+                                    <span className="text-xs text-gray-300">{mem.confidence}</span>
+                                  )}
+                                </div>
+                                <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">
+                                  {mem.value}
+                                </p>
                               </div>
-                              <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">{mem.value}</p>
+                              <button
+                                type="button"
+                                onClick={() => deleteMemoryMutation.mutate(mem.id)}
+                                className="text-gray-300 hover:text-red-500 p-1.5 rounded-md hover:bg-red-50 shrink-0"
+                                aria-label={t("common.delete")}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => deleteMemoryMutation.mutate(mem.id)}
-                              className="text-gray-300 hover:text-red-500 p-1.5 rounded-md hover:bg-red-50 shrink-0"
-                              aria-label={t("common.delete")}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
                           </div>
-                        </div>
-                      ))}
+                        ),
+                      )}
                     </div>
                   )}
                 </div>

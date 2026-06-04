@@ -6,6 +6,11 @@ from providers.base import BaseLLMProvider
 
 
 class GeminiProvider(BaseLLMProvider):
+    # Tool/function calling is not wired through this SDK path yet — chat()
+    # always returns tool_calls: []. Declared explicitly so the agent runs in
+    # knowledge-only mode rather than advertising tools it can never invoke.
+    supports_tools = False
+
     def __init__(self, api_key: str, model: str = "gemini-1.5-flash"):
         genai.configure(api_key=api_key)
         self.model_name = model
@@ -66,6 +71,7 @@ class GeminiProvider(BaseLLMProvider):
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         import asyncio
+
         loop = asyncio.get_event_loop()
         results = []
         for text in texts:

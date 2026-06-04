@@ -2,16 +2,21 @@ import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from pydantic import BaseModel, Field
+
 from auth import TokenData, get_current_user
 from config import settings
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from logging_config import logger
-from pydantic import BaseModel
-
 from knowledge.crawler import WebCrawler
+from logging_config import logger
 from repositories import Repositories, create_repos, get_repos
 
 router = APIRouter(prefix="/api/crawl", tags=["crawl"])
+
+# Bounds on user-supplied crawl scope so a request can't schedule an unbounded
+# crawl (disk/CPU exhaustion). Generous ceilings — real crawls are far smaller.
+MAX_CRAWL_PAGES = 10000
+MAX_CRAWL_DEPTH = 50
 
 # Track running crawlers so we can stop/pause them
 _active_crawlers: dict[str, WebCrawler] = {}
@@ -23,6 +28,7 @@ _crawl_locks: dict[str, asyncio.Lock] = {}
 async def cleanup_stale_crawls_on_startup():
     """Called on server startup to reset any 'running'/'paused' crawls left from a previous process."""
     from repositories import create_repos
+
     repos = await create_repos()
     try:
         sites = await repos.sites.list_all()
@@ -34,11 +40,14 @@ async def cleanup_stale_crawls_on_startup():
                 jobs = await repos.crawl_jobs.list_by_site(site_id)
                 for job in jobs:
                     if job.get("status") in ("running", "paused"):
-                        await repos.crawl_jobs.update(job["id"], {
-                            "status": "failed",
-                            "error_log": "Auto-failed: server restarted while crawl was active",
-                            "finished_at": datetime.now(UTC),
-                        })
+                        await repos.crawl_jobs.update(
+                            job["id"],
+                            {
+                                "status": "failed",
+                                "error_log": "Auto-failed: server restarted while crawl was active",
+                                "finished_at": datetime.now(UTC),
+                            },
+                        )
     finally:
         await repos.close()
 
@@ -47,27 +56,29 @@ async def cleanup_stale_crawls_on_startup():
 # Request models
 # ============================================================
 
+
 class CrawlToggleRequest(BaseModel):
     enabled: bool
     auto_interval: int | None = None
-    max_pages: int | None = None
-    max_depth: int | None = None
+    max_pages: int | None = Field(default=None, ge=1, le=MAX_CRAWL_PAGES)
+    max_depth: int | None = Field(default=None, ge=0, le=MAX_CRAWL_DEPTH)
     exclude_patterns: str | None = None  # Newline-separated patterns
 
 
 class CrawlStartRequest(BaseModel):
     site_id: str
     url: str | None = None
-    max_pages: int | None = None
-    max_depth: int | None = None
+    max_pages: int | None = Field(default=None, ge=1, le=MAX_CRAWL_PAGES)
+    max_depth: int | None = Field(default=None, ge=0, le=MAX_CRAWL_DEPTH)
     force_recrawl: bool = False
     exclude_patterns: str | None = None
 
 
 class CrawlSettingsRequest(BaseModel):
     """Update crawl settings without toggling or starting."""
-    max_pages: int | None = None
-    max_depth: int | None = None
+
+    max_pages: int | None = Field(default=None, ge=1, le=MAX_CRAWL_PAGES)
+    max_depth: int | None = Field(default=None, ge=0, le=MAX_CRAWL_DEPTH)
     auto_interval: int | None = None
     exclude_patterns: str | None = None
     # Browser auth settings
@@ -91,6 +102,7 @@ def _parse_exclude_patterns(raw: str | None) -> list[str]:
 # ============================================================
 # 1. TOGGLE CRAWL — Enable / Disable
 # ============================================================
+
 
 @router.put("/toggle/{site_id}")
 async def toggle_crawl(
@@ -131,15 +143,22 @@ async def toggle_crawl(
 
         max_pages = data.max_pages or site.get("crawl_max_pages", 50)
         max_depth = data.max_depth if data.max_depth is not None else site.get("crawl_max_depth", 0)
-        exclude_raw = data.exclude_patterns if data.exclude_patterns is not None else site.get("crawl_exclude_patterns", "")
+        exclude_raw = (
+            data.exclude_patterns if data.exclude_patterns is not None else site.get("crawl_exclude_patterns", "")
+        )
 
-        job = await repos.crawl_jobs.create({
-            "site_id": site_id,
-            "start_url": crawl_url,
-        })
+        job = await repos.crawl_jobs.create(
+            {
+                "site_id": site_id,
+                "start_url": crawl_url,
+            }
+        )
         background_tasks.add_task(
             _run_crawl_with_tracking,
-            site_id, crawl_url, job["id"], max_pages,
+            site_id,
+            crawl_url,
+            job["id"],
+            max_pages,
             max_depth=max_depth,
             exclude_patterns=_parse_exclude_patterns(exclude_raw),
             use_browser=site.get("crawl_use_browser", False),
@@ -171,6 +190,7 @@ async def toggle_crawl(
 # 2. START CRAWL — Manual trigger
 # ============================================================
 
+
 async def _cleanup_stale_crawls(repos: Repositories, site_id: str) -> None:
     stale_minutes = settings.crawl_stale_timeout_minutes
     stale_cutoff = datetime.now(UTC) - timedelta(minutes=stale_minutes)
@@ -179,17 +199,16 @@ async def _cleanup_stale_crawls(repos: Repositories, site_id: str) -> None:
         started = job.get("started_at")
         if isinstance(started, str):
             started = datetime.fromisoformat(started)
-        if (
-            job.get("status") == "running"
-            and isinstance(started, datetime)
-            and started < stale_cutoff
-        ):
+        if job.get("status") == "running" and isinstance(started, datetime) and started < stale_cutoff:
             logger.warning("Auto-failing stale crawl job", job_id=job["id"], site_id=site_id)
-            await repos.crawl_jobs.update(job["id"], {
-                "status": "failed",
-                "error_log": f"Auto-failed: crawl exceeded {stale_minutes} minute timeout",
-                "finished_at": datetime.now(UTC),
-            })
+            await repos.crawl_jobs.update(
+                job["id"],
+                {
+                    "status": "failed",
+                    "error_log": f"Auto-failed: crawl exceeded {stale_minutes} minute timeout",
+                    "finished_at": datetime.now(UTC),
+                },
+            )
     site = await repos.sites.get_by_id(site_id)
     if site and site.get("crawl_status") == "running" and site_id not in _active_crawlers:
         await repos.sites.update(site_id, {"crawl_status": "idle"})
@@ -220,18 +239,25 @@ async def start_crawl(
         crawl_url = data.url or site["url"]
         max_pages = data.max_pages or site.get("crawl_max_pages", 50)
         max_depth = data.max_depth if data.max_depth is not None else site.get("crawl_max_depth", 0)
-        exclude_raw = data.exclude_patterns if data.exclude_patterns is not None else site.get("crawl_exclude_patterns", "")
+        exclude_raw = (
+            data.exclude_patterns if data.exclude_patterns is not None else site.get("crawl_exclude_patterns", "")
+        )
 
         await repos.sites.update(data.site_id, {"crawl_status": "running"})
 
-        job = await repos.crawl_jobs.create({
-            "site_id": data.site_id,
-            "start_url": crawl_url,
-        })
+        job = await repos.crawl_jobs.create(
+            {
+                "site_id": data.site_id,
+                "start_url": crawl_url,
+            }
+        )
 
     background_tasks.add_task(
         _run_crawl_with_tracking,
-        data.site_id, crawl_url, job["id"], max_pages,
+        data.site_id,
+        crawl_url,
+        job["id"],
+        max_pages,
         force_recrawl=data.force_recrawl,
         max_depth=max_depth,
         exclude_patterns=_parse_exclude_patterns(exclude_raw),
@@ -249,6 +275,7 @@ async def start_crawl(
 # ============================================================
 # 3. STOP CRAWL
 # ============================================================
+
 
 @router.post("/stop/{site_id}")
 async def stop_crawl(
@@ -276,6 +303,7 @@ async def stop_crawl(
 # ============================================================
 # 4. PAUSE / RESUME CRAWL
 # ============================================================
+
 
 @router.post("/pause/{site_id}")
 async def pause_crawl(
@@ -329,6 +357,7 @@ async def resume_crawl(
 # 5. SETTINGS — Update crawl settings without toggling/starting
 # ============================================================
 
+
 @router.put("/settings/{site_id}")
 async def update_crawl_settings(
     site_id: str,
@@ -352,10 +381,14 @@ async def update_crawl_settings(
         update_data["crawl_exclude_patterns"] = data.exclude_patterns
     # Browser auth settings
     for field in (
-        "crawl_use_browser", "crawl_login_url",
-        "crawl_login_username_selector", "crawl_login_password_selector",
-        "crawl_login_submit_selector", "crawl_login_username",
-        "crawl_login_password", "crawl_login_success_url",
+        "crawl_use_browser",
+        "crawl_login_url",
+        "crawl_login_username_selector",
+        "crawl_login_password_selector",
+        "crawl_login_submit_selector",
+        "crawl_login_username",
+        "crawl_login_password",
+        "crawl_login_success_url",
     ):
         val = getattr(data, field, None)
         if val is not None:
@@ -365,6 +398,7 @@ async def update_crawl_settings(
             # Encrypt the password before storing
             if field == "crawl_login_password":
                 from utils.crypto import encrypt_value
+
                 val = encrypt_value(val)
             update_data[field] = val
 
@@ -382,6 +416,7 @@ async def update_crawl_settings(
 # ============================================================
 # 6. STATUS — Get current crawl status
 # ============================================================
+
 
 @router.get("/status/{site_id}")
 async def get_crawl_status(
@@ -424,7 +459,9 @@ async def get_crawl_status(
         "crawl_login_password_selector": site.get("crawl_login_password_selector", ""),
         "crawl_login_submit_selector": site.get("crawl_login_submit_selector", ""),
         "crawl_login_username": site.get("crawl_login_username", ""),
-        "crawl_login_password": "********" if site.get("crawl_login_password") and site["crawl_login_password"] != "" else "",
+        "crawl_login_password": "********"
+        if site.get("crawl_login_password") and site["crawl_login_password"] != ""
+        else "",
         "crawl_login_success_url": site.get("crawl_login_success_url", ""),
     }
 
@@ -432,6 +469,7 @@ async def get_crawl_status(
 # ============================================================
 # 7. JOBS — Crawl history
 # ============================================================
+
 
 @router.get("/jobs/{site_id}")
 async def get_crawl_jobs(
@@ -471,6 +509,7 @@ async def get_crawl_job(
 # 8. CLEAR KNOWLEDGE — Delete all learned data
 # ============================================================
 
+
 @router.delete("/knowledge/{site_id}")
 async def clear_knowledge(
     site_id: str,
@@ -498,6 +537,7 @@ async def clear_knowledge(
 # ============================================================
 # 9. TEST BROWSER LOGIN
 # ============================================================
+
 
 @router.post("/test-login/{site_id}")
 async def test_browser_login(
@@ -540,6 +580,7 @@ async def test_browser_login(
 # ============================================================
 # Background task helper
 # ============================================================
+
 
 async def _run_crawl_with_tracking(
     site_id: str,
@@ -584,6 +625,7 @@ async def _run_crawl_with_tracking(
         try:
             from knowledge.browser_crawler import browser_login_and_extract_cookies
             from knowledge.crawler import _is_safe_public_url
+
             repos_init = await create_repos()
             try:
                 site = await repos_init.sites.get_by_id(site_id)
@@ -613,11 +655,14 @@ async def _run_crawl_with_tracking(
             logger.error(error_msg, site_id=site_id)
             repos_err = await create_repos()
             try:
-                await repos_err.crawl_jobs.update(job_id, {
-                    "status": "error",
-                    "error_log": error_msg,
-                    "finished_at": datetime.now(UTC),
-                })
+                await repos_err.crawl_jobs.update(
+                    job_id,
+                    {
+                        "status": "error",
+                        "error_log": error_msg,
+                        "finished_at": datetime.now(UTC),
+                    },
+                )
                 await repos_err.sites.update(site_id, {"crawl_status": "idle"})
             finally:
                 await repos_err.close()
@@ -643,11 +688,14 @@ async def _run_crawl_with_tracking(
             knowledge_data = await repos.knowledge.list_by_site(site_id, page=1, per_page=1)
             total_chunks = knowledge_data.get("total", 0)
 
-            await repos.sites.update(site_id, {
-                "crawl_status": "idle",
-                "last_crawled_at": datetime.now(UTC),
-                "knowledge_count": total_chunks,
-            })
+            await repos.sites.update(
+                site_id,
+                {
+                    "crawl_status": "idle",
+                    "last_crawled_at": datetime.now(UTC),
+                    "knowledge_count": total_chunks,
+                },
+            )
 
             # Continuous crawl check
             site = await repos.sites.get_by_id(site_id)
@@ -668,10 +716,12 @@ async def _run_crawl_with_tracking(
                     round=round_number,
                     max_rounds=max_rounds,
                 )
-                next_job = await repos.crawl_jobs.create({
-                    "site_id": site_id,
-                    "start_url": url,
-                })
+                next_job = await repos.crawl_jobs.create(
+                    {
+                        "site_id": site_id,
+                        "start_url": url,
+                    }
+                )
                 await repos.sites.update(site_id, {"crawl_status": "running"})
                 _active_crawlers.pop(site_id, None)
                 current_job_id = next_job["id"]
@@ -692,11 +742,14 @@ async def _run_crawl_with_tracking(
         except Exception as e:
             logger.error("Crawl failed", site_id=site_id, job_id=current_job_id, error=str(e))
             await repos.sites.update(site_id, {"crawl_status": "idle"})
-            await repos.crawl_jobs.update(current_job_id, {
-                "status": "failed",
-                "error_log": str(e),
-                "finished_at": datetime.now(UTC),
-            })
+            await repos.crawl_jobs.update(
+                current_job_id,
+                {
+                    "status": "failed",
+                    "error_log": str(e),
+                    "finished_at": datetime.now(UTC),
+                },
+            )
             break
         finally:
             _active_crawlers.pop(site_id, None)

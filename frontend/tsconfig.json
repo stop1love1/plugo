@@ -13,5 +13,5 @@
     "paths": { "@/*": ["src/*"] }
   },
   "include": ["src"],
-  "exclude": ["widget"]
+  "exclude": ["src/widget"]
 }

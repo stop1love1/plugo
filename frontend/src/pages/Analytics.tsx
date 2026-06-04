@@ -2,7 +2,16 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { TrendingUp, MessageSquare, Clock, Users, Download, Calendar, Info, type LucideIcon } from "lucide-react";
+import {
+  TrendingUp,
+  MessageSquare,
+  Clock,
+  Users,
+  Download,
+  Calendar,
+  Info,
+  type LucideIcon,
+} from "lucide-react";
 import api from "../lib/api";
 import { useLocale } from "../lib/useLocale";
 import { SkeletonCard, SkeletonChart } from "../components/Skeleton";
@@ -22,7 +31,17 @@ type ChartDay = { date: string; messages: number };
 type QuestionRow = { question: string; count: number };
 type ToolUsageRow = { name: string; calls: number; errors: number; enabled: boolean };
 
-function StatCard({ icon: Icon, label, value, color }: { icon: LucideIcon; label: string; value: string | number; color: string }) {
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  color,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string | number;
+  color: string;
+}) {
   return (
     <div className="bg-white p-5 rounded-xl border border-gray-200">
       <div className="flex items-center gap-3">
@@ -113,7 +132,10 @@ export default function Analytics() {
             ].map((opt) => (
               <button
                 key={opt.value}
-                onClick={() => { setDays(opt.value); setShowCustomRange(false); }}
+                onClick={() => {
+                  setDays(opt.value);
+                  setShowCustomRange(false);
+                }}
                 className={`px-3 py-1.5 text-xs font-medium ${
                   days === opt.value && !showCustomRange
                     ? "bg-primary-50 text-primary-700"
@@ -143,7 +165,10 @@ export default function Analytics() {
                   onChange={(e) => {
                     setCustomFrom(e.target.value);
                     if (e.target.value && customTo) {
-                      const diff = Math.ceil((new Date(customTo).getTime() - new Date(e.target.value).getTime()) / 86400000);
+                      const diff = Math.ceil(
+                        (new Date(customTo).getTime() - new Date(e.target.value).getTime()) /
+                          86400000,
+                      );
                       if (diff > 0) setDays(diff);
                     }
                   }}
@@ -156,14 +181,20 @@ export default function Analytics() {
                   onChange={(e) => {
                     setCustomTo(e.target.value);
                     if (customFrom && e.target.value) {
-                      const diff = Math.ceil((new Date(e.target.value).getTime() - new Date(customFrom).getTime()) / 86400000);
+                      const diff = Math.ceil(
+                        (new Date(e.target.value).getTime() - new Date(customFrom).getTime()) /
+                          86400000,
+                      );
                       if (diff > 0) setDays(diff);
                     }
                   }}
                   className="border border-gray-200 rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
-              <div className="flex items-center gap-1 text-xs text-gray-400" title="The API returns a rolling window of N days from today. The selected dates are used to calculate N.">
+              <div
+                className="flex items-center gap-1 text-xs text-gray-400"
+                title="The API returns a rolling window of N days from today. The selected dates are used to calculate N."
+              >
                 <Info className="w-3.5 h-3.5" />
                 <span>= last {days} days from today</span>
               </div>
@@ -182,71 +213,76 @@ export default function Analytics() {
       {/* Stat cards */}
       {overviewLoading ? (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
+          {Array.from({ length: 4 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
         </div>
       ) : null}
-      {!overviewLoading && <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard
-          icon={Users}
-          label={t("analytics.totalSessions")}
-          value={overview?.total_sessions ?? 0}
-          color="bg-blue-50 text-blue-600"
-        />
-        <StatCard
-          icon={MessageSquare}
-          label={t("analytics.totalMessages")}
-          value={overview?.total_messages ?? 0}
-          color="bg-purple-50 text-purple-600"
-        />
-        <StatCard
-          icon={TrendingUp}
-          label={t("analytics.avgMessages")}
-          value={overview?.avg_messages_per_session ?? 0}
-          color="bg-green-50 text-green-600"
-        />
-        <StatCard
-          icon={Clock}
-          label={t("analytics.avgDuration")}
-          value={formatDuration(overview?.avg_session_duration_seconds ?? 0)}
-          color="bg-orange-50 text-orange-600"
-        />
-      </div>}
+      {!overviewLoading && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <StatCard
+            icon={Users}
+            label={t("analytics.totalSessions")}
+            value={overview?.total_sessions ?? 0}
+            color="bg-blue-50 text-blue-600"
+          />
+          <StatCard
+            icon={MessageSquare}
+            label={t("analytics.totalMessages")}
+            value={overview?.total_messages ?? 0}
+            color="bg-purple-50 text-purple-600"
+          />
+          <StatCard
+            icon={TrendingUp}
+            label={t("analytics.avgMessages")}
+            value={overview?.avg_messages_per_session ?? 0}
+            color="bg-green-50 text-green-600"
+          />
+          <StatCard
+            icon={Clock}
+            label={t("analytics.avgDuration")}
+            value={formatDuration(overview?.avg_session_duration_seconds ?? 0)}
+            color="bg-orange-50 text-orange-600"
+          />
+        </div>
+      )}
 
       {/* Messages per day chart */}
       {chartLoading ? <SkeletonChart /> : null}
       {!chartLoading && (
-      <div className="bg-white p-6 rounded-xl border border-gray-200 mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold">{t("analytics.messagesPerDay")}</h3>
-          <div className="flex items-center gap-1 text-xs text-gray-400">
-            <Calendar className="w-3 h-3" />
-            {days} {t("analytics.last30d").split(" ")[1] || "days"}
+        <div className="bg-white p-6 rounded-xl border border-gray-200 mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold">{t("analytics.messagesPerDay")}</h3>
+            <div className="flex items-center gap-1 text-xs text-gray-400">
+              <Calendar className="w-3 h-3" />
+              {days} {t("analytics.last30d").split(" ")[1] || "days"}
+            </div>
+          </div>
+          <div className="h-64">
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData}>
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(v: string) => v.slice(5)}
+                  />
+                  <YAxis tick={{ fontSize: 11 }} />
+                  <Tooltip
+                    labelFormatter={(v) => `Date: ${v}`}
+                    formatter={(v) => [v as number, "Messages"]}
+                  />
+                  <Bar dataKey="messages" fill="#6366f1" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+                {t("analytics.noData")}
+              </div>
+            )}
           </div>
         </div>
-        <div className="h-64">
-          {chartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <XAxis
-                  dataKey="date"
-                  tick={{ fontSize: 11 }}
-                  tickFormatter={(v: string) => v.slice(5)}
-                />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip
-                  labelFormatter={(v) => `Date: ${v}`}
-                  formatter={(v) => [v as number, "Messages"]}
-                />
-                <Bar dataKey="messages" fill="#6366f1" radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex items-center justify-center h-full text-gray-400 text-sm">
-              {t("analytics.noData")}
-            </div>
-          )}
-        </div>
-      </div>)}
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Popular questions */}
@@ -257,7 +293,10 @@ export default function Analytics() {
           ) : (
             <div className="space-y-2">
               {questions.map((q, i: number) => (
-                <div key={`${q.question}-${i}`} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                <div
+                  key={`${q.question}-${i}`}
+                  className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0"
+                >
                   <p className="text-sm text-gray-700 truncate flex-1">{q.question}</p>
                   <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full ml-2 shrink-0">
                     {q.count}x
@@ -276,7 +315,10 @@ export default function Analytics() {
           ) : (
             <div className="space-y-2">
               {knowledgeGaps.map((q, i: number) => (
-                <div key={`${q.question}-${i}`} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                <div
+                  key={`${q.question}-${i}`}
+                  className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0"
+                >
                   <p className="text-sm text-gray-700 truncate flex-1">{q.question}</p>
                   <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full ml-2 shrink-0">
                     {q.count}x
@@ -315,7 +357,9 @@ export default function Analytics() {
                       )}
                     </td>
                     <td className="px-4 py-2 text-center">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${tool.enabled ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full ${tool.enabled ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}
+                      >
                         {tool.enabled ? "Active" : "Disabled"}
                       </span>
                     </td>

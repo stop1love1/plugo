@@ -1,8 +1,9 @@
 import uuid
 from datetime import UTC, datetime
 
-from database import Base
 from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+
+from database import Base
 
 
 class KnowledgeChunk(Base):

@@ -1,14 +1,14 @@
 import json
 
-from auth import TokenData, get_current_user
 from fastapi import APIRouter, Depends, HTTPException
-from logging_config import logger
 from pydantic import BaseModel
-from utils.crypto import decrypt_value, encrypt_value
 
 from agent.tools import tool_executor
+from auth import TokenData, get_current_user
 from knowledge.crawler import _is_safe_public_url
+from logging_config import logger
 from repositories import Repositories, get_repos
+from utils.crypto import decrypt_value, encrypt_value
 
 router = APIRouter(prefix="/api/tools", tags=["tools"])
 
@@ -51,7 +51,9 @@ async def validate_tool_url(url: str) -> tuple[bool, str]:
 
 
 @router.get("")
-async def list_tools(site_id: str, repos: Repositories = Depends(get_repos), _user: TokenData = Depends(get_current_user)):
+async def list_tools(
+    site_id: str, repos: Repositories = Depends(get_repos), _user: TokenData = Depends(get_current_user)
+):
     tools = await repos.tools.list_by_site(site_id)
     for tool in tools:
         if tool.get("auth_value"):
@@ -69,7 +71,9 @@ async def list_tools(site_id: str, repos: Repositories = Depends(get_repos), _us
 
 
 @router.post("")
-async def create_tool(data: ToolCreate, repos: Repositories = Depends(get_repos), user: TokenData = Depends(get_current_user)):
+async def create_tool(
+    data: ToolCreate, repos: Repositories = Depends(get_repos), user: TokenData = Depends(get_current_user)
+):
     safe, reason = await validate_tool_url(data.url)
     if not safe:
         raise HTTPException(status_code=400, detail=f"URL rejected: {reason}")
@@ -78,21 +82,28 @@ async def create_tool(data: ToolCreate, repos: Repositories = Depends(get_repos)
         tool_data["auth_value"] = encrypt_value(tool_data["auth_value"])
     tool = await repos.tools.create(tool_data)
     try:
-        await repos.audit_logs.create({
-            "user_id": user.sub,
-            "username": user.sub,
-            "action": "create",
-            "resource_type": "tool",
-            "resource_id": tool["id"],
-            "details": json.dumps({"name": data.name, "site_id": data.site_id}),
-        })
+        await repos.audit_logs.create(
+            {
+                "user_id": user.sub,
+                "username": user.sub,
+                "action": "create",
+                "resource_type": "tool",
+                "resource_id": tool["id"],
+                "details": json.dumps({"name": data.name, "site_id": data.site_id}),
+            }
+        )
     except Exception as e:
         logger.warning("Failed to create audit log", error=str(e))
     return {"id": tool["id"], "message": "Tool created"}
 
 
 @router.put("/{tool_id}")
-async def update_tool(tool_id: str, data: ToolUpdate, repos: Repositories = Depends(get_repos), user: TokenData = Depends(get_current_user)):
+async def update_tool(
+    tool_id: str,
+    data: ToolUpdate,
+    repos: Repositories = Depends(get_repos),
+    user: TokenData = Depends(get_current_user),
+):
     if data.url is not None:
         safe, reason = await validate_tool_url(data.url)
         if not safe:
@@ -107,40 +118,51 @@ async def update_tool(tool_id: str, data: ToolUpdate, repos: Repositories = Depe
         # Exclude sensitive fields from audit details
         audit_data = data.model_dump(exclude_none=True)
         audit_data.pop("auth_value", None)
-        await repos.audit_logs.create({
-            "user_id": user.sub,
-            "username": user.sub,
-            "action": "update",
-            "resource_type": "tool",
-            "resource_id": tool_id,
-            "details": json.dumps(audit_data),
-        })
+        await repos.audit_logs.create(
+            {
+                "user_id": user.sub,
+                "username": user.sub,
+                "action": "update",
+                "resource_type": "tool",
+                "resource_id": tool_id,
+                "details": json.dumps(audit_data),
+            }
+        )
     except Exception as e:
         logger.warning("Failed to create audit log", error=str(e))
     return {"message": "Tool updated"}
 
 
 @router.delete("/{tool_id}")
-async def delete_tool(tool_id: str, repos: Repositories = Depends(get_repos), user: TokenData = Depends(get_current_user)):
+async def delete_tool(
+    tool_id: str, repos: Repositories = Depends(get_repos), user: TokenData = Depends(get_current_user)
+):
     ok = await repos.tools.delete(tool_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Tool not found")
     try:
-        await repos.audit_logs.create({
-            "user_id": user.sub,
-            "username": user.sub,
-            "action": "delete",
-            "resource_type": "tool",
-            "resource_id": tool_id,
-            "details": json.dumps({"tool_id": tool_id}),
-        })
+        await repos.audit_logs.create(
+            {
+                "user_id": user.sub,
+                "username": user.sub,
+                "action": "delete",
+                "resource_type": "tool",
+                "resource_id": tool_id,
+                "details": json.dumps({"tool_id": tool_id}),
+            }
+        )
     except Exception as e:
         logger.warning("Failed to create audit log", error=str(e))
     return {"message": "Tool deleted"}
 
 
 @router.post("/{tool_id}/test")
-async def test_tool(tool_id: str, data: ToolTestRequest, repos: Repositories = Depends(get_repos), _user: TokenData = Depends(get_current_user)):
+async def test_tool(
+    tool_id: str,
+    data: ToolTestRequest,
+    repos: Repositories = Depends(get_repos),
+    _user: TokenData = Depends(get_current_user),
+):
     tool = await repos.tools.get_by_id(tool_id)
     if not tool:
         raise HTTPException(status_code=404, detail="Tool not found")
@@ -157,9 +179,7 @@ async def test_tool(tool_id: str, data: ToolTestRequest, repos: Repositories = D
         try:
             auth_value = decrypt_value(auth_value)
         except ValueError as e:
-            logger.warning(
-                "Tool auth_value decryption failed during test", tool_id=tool_id, error=str(e)
-            )
+            logger.warning("Tool auth_value decryption failed during test", tool_id=tool_id, error=str(e))
             raise HTTPException(
                 status_code=500,
                 detail="Tool credential cannot be decrypted — re-enter the auth value.",

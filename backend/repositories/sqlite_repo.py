@@ -33,14 +33,23 @@ from repositories.base import (
 
 def _site_to_dict(s: Site) -> dict:
     return {
-        "id": s.id, "name": s.name, "url": s.url, "token": s.token,
-        "llm_provider": s.llm_provider, "llm_model": s.llm_model,
-        "primary_color": s.primary_color, "greeting": s.greeting,
-        "position": s.position, "widget_title": s.widget_title or "",
-        "dark_mode": s.dark_mode or "auto", "show_branding": s.show_branding if s.show_branding is not None else True,
-        "bot_avatar": s.bot_avatar or "", "header_subtitle": s.header_subtitle or "",
+        "id": s.id,
+        "name": s.name,
+        "url": s.url,
+        "token": s.token,
+        "llm_provider": s.llm_provider,
+        "llm_model": s.llm_model,
+        "primary_color": s.primary_color,
+        "greeting": s.greeting,
+        "position": s.position,
+        "widget_title": s.widget_title or "",
+        "dark_mode": s.dark_mode or "auto",
+        "show_branding": s.show_branding if s.show_branding is not None else True,
+        "bot_avatar": s.bot_avatar or "",
+        "header_subtitle": s.header_subtitle or "",
         "input_placeholder": s.input_placeholder or "",
-        "auto_open_delay": s.auto_open_delay or 0, "bubble_size": s.bubble_size or "medium",
+        "auto_open_delay": s.auto_open_delay or 0,
+        "bubble_size": s.bubble_size or "medium",
         "allowed_domains": s.allowed_domains or "",
         "system_prompt": s.system_prompt or "",
         "bot_rules": s.bot_rules or "",
@@ -74,19 +83,30 @@ def _site_to_dict(s: Site) -> dict:
 
 def _chunk_to_dict(c: KnowledgeChunk) -> dict:
     return {
-        "id": c.id, "site_id": c.site_id, "source_url": c.source_url,
-        "source_type": c.source_type, "title": c.title, "content": c.content,
-        "chunk_index": c.chunk_index, "embedding_id": c.embedding_id,
+        "id": c.id,
+        "site_id": c.site_id,
+        "source_url": c.source_url,
+        "source_type": c.source_type,
+        "title": c.title,
+        "content": c.content,
+        "chunk_index": c.chunk_index,
+        "embedding_id": c.embedding_id,
         "crawled_at": c.crawled_at.isoformat() if c.crawled_at else None,
     }
 
 
 def _tool_to_dict(t: Tool) -> dict:
     return {
-        "id": t.id, "site_id": t.site_id, "name": t.name,
-        "description": t.description, "method": t.method, "url": t.url,
-        "params_schema": t.params_schema, "headers": t.headers,
-        "auth_type": t.auth_type, "auth_value": t.auth_value,
+        "id": t.id,
+        "site_id": t.site_id,
+        "name": t.name,
+        "description": t.description,
+        "method": t.method,
+        "url": t.url,
+        "params_schema": t.params_schema,
+        "headers": t.headers,
+        "auth_type": t.auth_type,
+        "auth_value": t.auth_value,
         "enabled": t.enabled,
         "created_at": t.created_at.isoformat() if t.created_at else None,
     }
@@ -100,8 +120,11 @@ def _session_to_dict(s: ChatSession) -> dict:
             first_msg = (msg.get("content") or "")[:200]
             break
     return {
-        "id": s.id, "site_id": s.site_id, "visitor_id": s.visitor_id,
-        "page_url": s.page_url, "messages": messages,
+        "id": s.id,
+        "site_id": s.site_id,
+        "visitor_id": s.visitor_id,
+        "page_url": s.page_url,
+        "messages": messages,
         "message_count": len(messages),
         "first_message": first_msg,
         "started_at": s.started_at.isoformat() if s.started_at else None,
@@ -114,8 +137,11 @@ def _session_to_dict(s: ChatSession) -> dict:
 
 def _job_to_dict(j: CrawlJob) -> dict:
     return {
-        "id": j.id, "site_id": j.site_id, "status": j.status,
-        "start_url": j.start_url, "pages_found": j.pages_found,
+        "id": j.id,
+        "site_id": j.site_id,
+        "status": j.status,
+        "start_url": j.start_url,
+        "pages_found": j.pages_found,
         "pages_done": j.pages_done,
         "pages_skipped": j.pages_skipped or 0,
         "pages_failed": j.pages_failed or 0,
@@ -130,9 +156,14 @@ def _job_to_dict(j: CrawlJob) -> dict:
 
 def _memory_to_dict(m: VisitorMemory) -> dict:
     return {
-        "id": m.id, "visitor_id": m.visitor_id, "site_id": m.site_id,
-        "category": m.category, "key": m.key, "value": m.value,
-        "confidence": m.confidence, "source_session_id": m.source_session_id,
+        "id": m.id,
+        "visitor_id": m.visitor_id,
+        "site_id": m.site_id,
+        "category": m.category,
+        "key": m.key,
+        "value": m.value,
+        "confidence": m.confidence,
+        "source_session_id": m.source_session_id,
         "created_at": m.created_at.isoformat() if m.created_at else None,
         "updated_at": m.updated_at.isoformat() if m.updated_at else None,
     }
@@ -140,7 +171,9 @@ def _memory_to_dict(m: VisitorMemory) -> dict:
 
 def _summary_to_dict(s: ConversationSummary) -> dict:
     return {
-        "id": s.id, "session_id": s.session_id, "site_id": s.site_id,
+        "id": s.id,
+        "session_id": s.session_id,
+        "site_id": s.site_id,
         "summary_text": s.summary_text,
         "message_count_summarized": s.message_count_summarized,
         "total_message_count": s.total_message_count,
@@ -199,6 +232,7 @@ class SQLiteSiteRepo(BaseSiteRepo):
             return None
         from logging_config import logger
         from utils.crypto import decrypt_value
+
         try:
             return decrypt_value(site.crawl_login_password)
         except ValueError as e:
@@ -236,13 +270,14 @@ class SQLiteKnowledgeRepo(BaseKnowledgeRepo):
             combined = base_filter
 
         result = await self.db.execute(
-            select(KnowledgeChunk).where(combined)
-            .order_by(KnowledgeChunk.crawled_at.desc()).offset(offset).limit(per_page)
+            select(KnowledgeChunk)
+            .where(combined)
+            .order_by(KnowledgeChunk.crawled_at.desc())
+            .offset(offset)
+            .limit(per_page)
         )
         chunks = [_chunk_to_dict(c) for c in result.scalars().all()]
-        count_result = await self.db.execute(
-            select(func.count()).where(combined)
-        )
+        count_result = await self.db.execute(select(func.count()).where(combined))
         total = count_result.scalar()
         return {"chunks": chunks, "total": total, "page": page, "per_page": per_page}
 
@@ -310,18 +345,15 @@ class SQLiteKnowledgeRepo(BaseKnowledgeRepo):
         if not chunk_ids:
             return 0
         from sqlalchemy import delete as sa_delete
-        result = await self.db.execute(
-            sa_delete(KnowledgeChunk).where(KnowledgeChunk.id.in_(chunk_ids))
-        )
+
+        result = await self.db.execute(sa_delete(KnowledgeChunk).where(KnowledgeChunk.id.in_(chunk_ids)))
         await self.db.commit()
         return result.rowcount
 
     async def get_many(self, chunk_ids: list[str]) -> list[dict]:
         if not chunk_ids:
             return []
-        result = await self.db.execute(
-            select(KnowledgeChunk).where(KnowledgeChunk.id.in_(chunk_ids))
-        )
+        result = await self.db.execute(select(KnowledgeChunk).where(KnowledgeChunk.id.in_(chunk_ids)))
         return [_chunk_to_dict(c) for c in result.scalars().all()]
 
     async def list_crawled_urls(self, site_id: str) -> list[dict]:
@@ -352,8 +384,9 @@ class SQLiteKnowledgeRepo(BaseKnowledgeRepo):
     async def list_content_hashes(self, site_id: str) -> set[str]:
         """Return all content hashes for a site (for deduplication)."""
         result = await self.db.execute(
-            select(KnowledgeChunk.content_hash)
-            .where(KnowledgeChunk.site_id == site_id, KnowledgeChunk.content_hash.isnot(None))
+            select(KnowledgeChunk.content_hash).where(
+                KnowledgeChunk.site_id == site_id, KnowledgeChunk.content_hash.isnot(None)
+            )
         )
         return {row[0] for row in result.all() if row[0]}
 
@@ -367,18 +400,17 @@ class SQLiteKnowledgeRepo(BaseKnowledgeRepo):
 
     async def delete_by_url(self, site_id: str, source_url: str) -> int:
         from sqlalchemy import delete as sa_delete
+
         result = await self.db.execute(
-            sa_delete(KnowledgeChunk)
-            .where(KnowledgeChunk.site_id == site_id, KnowledgeChunk.source_url == source_url)
+            sa_delete(KnowledgeChunk).where(KnowledgeChunk.site_id == site_id, KnowledgeChunk.source_url == source_url)
         )
         await self.db.commit()
         return result.rowcount
 
     async def delete_all_by_site(self, site_id: str) -> int:
         from sqlalchemy import delete as sa_delete
-        result = await self.db.execute(
-            sa_delete(KnowledgeChunk).where(KnowledgeChunk.site_id == site_id)
-        )
+
+        result = await self.db.execute(sa_delete(KnowledgeChunk).where(KnowledgeChunk.site_id == site_id))
         await self.db.commit()
         return result.rowcount
 
@@ -400,15 +432,11 @@ class SQLiteToolRepo(BaseToolRepo):
         return _tool_to_dict(tool) if tool else None
 
     async def list_by_site(self, site_id: str) -> list[dict]:
-        result = await self.db.execute(
-            select(Tool).where(Tool.site_id == site_id).order_by(Tool.created_at.desc())
-        )
+        result = await self.db.execute(select(Tool).where(Tool.site_id == site_id).order_by(Tool.created_at.desc()))
         return [_tool_to_dict(t) for t in result.scalars().all()]
 
     async def list_enabled_by_site(self, site_id: str) -> list[dict]:
-        result = await self.db.execute(
-            select(Tool).where(Tool.site_id == site_id, Tool.enabled)
-        )
+        result = await self.db.execute(select(Tool).where(Tool.site_id == site_id, Tool.enabled))
         return [_tool_to_dict(t) for t in result.scalars().all()]
 
     async def update(self, tool_id: str, data: dict) -> dict | None:
@@ -449,19 +477,35 @@ class SQLiteChatSessionRepo(BaseChatSessionRepo):
     async def list_by_site(self, site_id: str, page: int = 1, per_page: int = 20) -> list[dict]:
         offset = (page - 1) * per_page
         result = await self.db.execute(
-            select(ChatSession).where(ChatSession.site_id == site_id)
-            .order_by(ChatSession.started_at.desc()).offset(offset).limit(per_page)
+            select(ChatSession)
+            .where(ChatSession.site_id == site_id)
+            .order_by(ChatSession.started_at.desc())
+            .offset(offset)
+            .limit(per_page)
         )
         return [_session_to_dict(s) for s in result.scalars().all()]
 
-    async def list_by_site_since(self, site_id: str, since: datetime) -> list[dict]:
-        result = await self.db.execute(
-            select(ChatSession).where(
+    async def list_by_site_since(self, site_id: str, since: datetime, limit: int | None = None) -> list[dict]:
+        query = (
+            select(ChatSession)
+            .where(
                 ChatSession.site_id == site_id,
                 ChatSession.started_at >= since,
-            ).order_by(ChatSession.started_at.desc())
+            )
+            .order_by(ChatSession.started_at.desc())
         )
+        if limit is not None:
+            query = query.limit(limit)
+        result = await self.db.execute(query)
         return [_session_to_dict(s) for s in result.scalars().all()]
+
+    async def delete_older_than(self, cutoff: datetime) -> int:
+        """Delete sessions started before `cutoff`. Returns the number removed."""
+        from sqlalchemy import delete as sa_delete
+
+        result = await self.db.execute(sa_delete(ChatSession).where(ChatSession.started_at < cutoff))
+        await self.db.commit()
+        return result.rowcount or 0
 
     async def update_messages(self, session_id: str, messages: list[dict]) -> bool:
         session = await self.db.get(ChatSession, session_id)
@@ -501,10 +545,7 @@ class SQLiteChatSessionRepo(BaseChatSessionRepo):
         # Average duration (seconds) only over sessions that have ended.
         dur_row = await self.db.execute(
             select(
-                func.avg(
-                    (func.julianday(ChatSession.ended_at) - func.julianday(ChatSession.started_at))
-                    * 86400.0
-                )
+                func.avg((func.julianday(ChatSession.ended_at) - func.julianday(ChatSession.started_at)) * 86400.0)
             ).where(
                 ChatSession.site_id == site_id,
                 ChatSession.started_at >= since,
@@ -516,11 +557,7 @@ class SQLiteChatSessionRepo(BaseChatSessionRepo):
         # Total messages — try json_array_length first, fall back to Python summation.
         try:
             msg_row = await self.db.execute(
-                select(
-                    func.coalesce(
-                        func.sum(func.json_array_length(ChatSession.messages)), 0
-                    )
-                ).where(
+                select(func.coalesce(func.sum(func.json_array_length(ChatSession.messages)), 0)).where(
                     ChatSession.site_id == site_id,
                     ChatSession.started_at >= since,
                 )
@@ -537,10 +574,7 @@ class SQLiteChatSessionRepo(BaseChatSessionRepo):
                     ChatSession.started_at >= since,
                 )
             )
-            total_messages = sum(
-                len(msgs) if isinstance(msgs, list) else 0
-                for (msgs,) in fallback_row.all()
-            )
+            total_messages = sum(len(msgs) if isinstance(msgs, list) else 0 for (msgs,) in fallback_row.all())
 
         return {
             "total_sessions": int(total_sessions or 0),
@@ -548,11 +582,10 @@ class SQLiteChatSessionRepo(BaseChatSessionRepo):
             "avg_session_duration_seconds": float(avg_duration or 0.0),
         }
 
-    async def add_token_usage(
-        self, session_id: str, in_tokens: int, out_tokens: int, cost_usd: float
-    ) -> bool:
+    async def add_token_usage(self, session_id: str, in_tokens: int, out_tokens: int, cost_usd: float) -> bool:
         """Atomic increment via UPDATE ... SET col = col + :x — no read-modify-write."""
         from sqlalchemy import update as sa_update
+
         result = await self.db.execute(
             sa_update(ChatSession)
             .where(ChatSession.id == session_id)
@@ -584,8 +617,7 @@ class SQLiteCrawlJobRepo(BaseCrawlJobRepo):
 
     async def list_by_site(self, site_id: str) -> list[dict]:
         result = await self.db.execute(
-            select(CrawlJob).where(CrawlJob.site_id == site_id)
-            .order_by(CrawlJob.started_at.desc())
+            select(CrawlJob).where(CrawlJob.site_id == site_id).order_by(CrawlJob.started_at.desc())
         )
         return [_job_to_dict(j) for j in result.scalars().all()]
 
@@ -602,8 +634,10 @@ class SQLiteCrawlJobRepo(BaseCrawlJobRepo):
 # --- User ---
 def _user_to_dict(u: User) -> dict:
     return {
-        "id": u.id, "username": u.username,
-        "password_hash": u.password_hash, "role": u.role,
+        "id": u.id,
+        "username": u.username,
+        "password_hash": u.password_hash,
+        "role": u.role,
         "created_at": u.created_at.isoformat() if u.created_at else None,
     }
 
@@ -634,7 +668,15 @@ class SQLiteUserRepo(BaseUserRepo):
 
     async def list_all(self) -> list[dict]:
         result = await self.db.execute(select(User).order_by(User.created_at.desc()))
-        return [{"id": u.id, "username": u.username, "role": u.role, "created_at": u.created_at.isoformat() if u.created_at else None} for u in result.scalars().all()]
+        return [
+            {
+                "id": u.id,
+                "username": u.username,
+                "role": u.role,
+                "created_at": u.created_at.isoformat() if u.created_at else None,
+            }
+            for u in result.scalars().all()
+        ]
 
     async def update_role(self, user_id: str, role: str) -> dict | None:
         user = await self.db.get(User, user_id)
@@ -642,7 +684,12 @@ class SQLiteUserRepo(BaseUserRepo):
             return None
         user.role = role
         await self.db.commit()
-        return {"id": user.id, "username": user.username, "role": user.role, "created_at": user.created_at.isoformat() if user.created_at else None}
+        return {
+            "id": user.id,
+            "username": user.username,
+            "role": user.role,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+        }
 
     async def delete(self, user_id: str) -> bool:
         user = await self.db.get(User, user_id)
@@ -694,9 +741,7 @@ class SQLiteVisitorMemoryRepo(BaseVisitorMemoryRepo):
             await self.db.commit()
             return _memory_to_dict(existing)
         else:
-            memory = VisitorMemory(
-                visitor_id=visitor_id, site_id=site_id, key=key, **data
-            )
+            memory = VisitorMemory(visitor_id=visitor_id, site_id=site_id, key=key, **data)
             self.db.add(memory)
             await self.db.commit()
             return _memory_to_dict(memory)
@@ -726,9 +771,7 @@ class SQLiteVisitorMemoryRepo(BaseVisitorMemoryRepo):
 
     async def list_by_site(self, site_id: str) -> list[dict]:
         result = await self.db.execute(
-            select(VisitorMemory)
-            .where(VisitorMemory.site_id == site_id)
-            .order_by(VisitorMemory.updated_at.desc())
+            select(VisitorMemory).where(VisitorMemory.site_id == site_id).order_by(VisitorMemory.updated_at.desc())
         )
         return [_memory_to_dict(m) for m in result.scalars().all()]
 
@@ -745,16 +788,12 @@ class SQLiteConversationSummaryRepo(BaseConversationSummaryRepo):
         return _summary_to_dict(summary)
 
     async def get_by_session(self, session_id: str) -> dict | None:
-        result = await self.db.execute(
-            select(ConversationSummary).where(ConversationSummary.session_id == session_id)
-        )
+        result = await self.db.execute(select(ConversationSummary).where(ConversationSummary.session_id == session_id))
         s = result.scalar_one_or_none()
         return _summary_to_dict(s) if s else None
 
     async def upsert_by_session(self, session_id: str, data: dict) -> dict:
-        result = await self.db.execute(
-            select(ConversationSummary).where(ConversationSummary.session_id == session_id)
-        )
+        result = await self.db.execute(select(ConversationSummary).where(ConversationSummary.session_id == session_id))
         existing = result.scalar_one_or_none()
         if existing:
             for k, v in data.items():
@@ -770,9 +809,7 @@ class SQLiteConversationSummaryRepo(BaseConversationSummaryRepo):
             return _summary_to_dict(summary)
 
     async def delete(self, summary_id: str) -> bool:
-        result = await self.db.execute(
-            select(ConversationSummary).where(ConversationSummary.id == summary_id)
-        )
+        result = await self.db.execute(select(ConversationSummary).where(ConversationSummary.id == summary_id))
         s = result.scalar_one_or_none()
         if s:
             await self.db.delete(s)
@@ -790,13 +827,35 @@ class SQLiteAuditLogRepo(BaseAuditLogRepo):
         log = AuditLog(**data)
         self.db.add(log)
         await self.db.commit()
-        return {"id": log.id, "user_id": log.user_id, "username": log.username, "action": log.action, "resource_type": log.resource_type, "resource_id": log.resource_id, "details": log.details, "created_at": log.created_at.isoformat() if log.created_at else None}
+        return {
+            "id": log.id,
+            "user_id": log.user_id,
+            "username": log.username,
+            "action": log.action,
+            "resource_type": log.resource_type,
+            "resource_id": log.resource_id,
+            "details": log.details,
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+        }
 
-    async def list_by_site(self, page: int = 1, per_page: int = 50) -> dict:
+    async def list_by_site(
+        self,
+        page: int = 1,
+        per_page: int = 50,
+        action: str | None = None,
+        resource_type: str | None = None,
+    ) -> dict:
         offset = (page - 1) * per_page
-        result = await self.db.execute(
-            select(AuditLog).order_by(AuditLog.created_at.desc()).offset(offset).limit(per_page)
-        )
+        filters = []
+        if action:
+            filters.append(AuditLog.action == action)
+        if resource_type:
+            filters.append(AuditLog.resource_type == resource_type)
+
+        query = select(AuditLog)
+        if filters:
+            query = query.where(*filters)
+        result = await self.db.execute(query.order_by(AuditLog.created_at.desc()).offset(offset).limit(per_page))
         logs = [
             {
                 "id": row.id,
@@ -810,7 +869,10 @@ class SQLiteAuditLogRepo(BaseAuditLogRepo):
             }
             for row in result.scalars().all()
         ]
-        count_result = await self.db.execute(select(func.count()).select_from(AuditLog))
+        count_query = select(func.count()).select_from(AuditLog)
+        if filters:
+            count_query = count_query.where(*filters)
+        count_result = await self.db.execute(count_query)
         total = count_result.scalar()
         return {"logs": logs, "total": total, "page": page, "per_page": per_page}
 
@@ -866,8 +928,11 @@ class SQLiteLLMKeyRepo(BaseLLMKeyRepo):
 # --- Flow ---
 def _flow_to_dict(f: Flow) -> dict:
     return {
-        "id": f.id, "site_id": f.site_id, "name": f.name,
-        "description": f.description or "", "requires_login": f.requires_login,
+        "id": f.id,
+        "site_id": f.site_id,
+        "name": f.name,
+        "description": f.description or "",
+        "requires_login": f.requires_login,
         "is_enabled": f.is_enabled,
         "created_at": f.created_at.isoformat() if f.created_at else None,
         "updated_at": f.updated_at.isoformat() if f.updated_at else None,
@@ -876,9 +941,13 @@ def _flow_to_dict(f: Flow) -> dict:
 
 def _step_to_dict(s: FlowStep) -> dict:
     return {
-        "id": s.id, "flow_id": s.flow_id, "step_order": s.step_order,
-        "title": s.title, "description": s.description or "",
-        "url": s.url, "screenshot_url": s.screenshot_url,
+        "id": s.id,
+        "flow_id": s.flow_id,
+        "step_order": s.step_order,
+        "title": s.title,
+        "description": s.description or "",
+        "url": s.url,
+        "screenshot_url": s.screenshot_url,
         "created_at": s.created_at.isoformat() if s.created_at else None,
     }
 
@@ -899,9 +968,7 @@ class SQLiteFlowRepo(BaseFlowRepo):
         return _flow_to_dict(flow) if flow else None
 
     async def list_by_site(self, site_id: str) -> list[dict]:
-        result = await self.db.execute(
-            select(Flow).where(Flow.site_id == site_id).order_by(Flow.created_at.desc())
-        )
+        result = await self.db.execute(select(Flow).where(Flow.site_id == site_id).order_by(Flow.created_at.desc()))
         return [_flow_to_dict(f) for f in result.scalars().all()]
 
     async def update(self, flow_id: str, data: dict) -> dict | None:

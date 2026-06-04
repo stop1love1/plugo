@@ -9,6 +9,8 @@ _EMBEDDING_MODELS = {"text-embedding-ada-002", "text-embedding-3-small", "text-e
 
 
 class OpenAIProvider(BaseLLMProvider):
+    supports_tools = True  # OpenAI function calling is implemented in chat() below.
+
     def is_embedding_model(self) -> bool:
         return self.model in _EMBEDDING_MODELS or "embed" in self.model
 
@@ -112,11 +114,13 @@ class OpenAIProvider(BaseLLMProvider):
         result = {"content": content, "tool_calls": []}
         if choice.message.tool_calls:
             for tc in choice.message.tool_calls:
-                result["tool_calls"].append({
-                    "id": tc.id,
-                    "name": tc.function.name,
-                    "arguments": json.loads(tc.function.arguments),
-                })
+                result["tool_calls"].append(
+                    {
+                        "id": tc.id,
+                        "name": tc.function.name,
+                        "arguments": json.loads(tc.function.arguments),
+                    }
+                )
         result["stop_reason"] = choice.finish_reason
         return result
 

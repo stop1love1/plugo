@@ -7,7 +7,6 @@ and summarize long conversations to reduce token usage.
 import json
 
 from logging_config import logger
-
 from providers.base import BaseLLMProvider
 
 
@@ -81,12 +80,14 @@ Return ONLY a valid JSON array, no other text."""
                     and "value" in item
                     and item["category"] in ("identity", "preference", "issue", "context")
                 ):
-                    valid.append({
-                        "category": item["category"],
-                        "key": item["key"],
-                        "value": item["value"],
-                        "confidence": item.get("confidence", "medium"),
-                    })
+                    valid.append(
+                        {
+                            "category": item["category"],
+                            "key": item["key"],
+                            "value": item["value"],
+                            "confidence": item.get("confidence", "medium"),
+                        }
+                    )
             return valid
 
         except (json.JSONDecodeError, KeyError, TypeError) as e:

@@ -41,9 +41,7 @@ async def _cmd_reindex(site_id: str) -> int:
             print(f"  {done}/{total} ({pct:.1f}%)", flush=True)
 
         result = await _reindex_site(site_id, repos, progress_cb=_progress)
-        print(
-            f"[done] reindexed {result['chunks_reindexed']} chunks in {result['elapsed_seconds']}s"
-        )
+        print(f"[done] reindexed {result['chunks_reindexed']} chunks in {result['elapsed_seconds']}s")
         return 0
     finally:
         await repos.close()

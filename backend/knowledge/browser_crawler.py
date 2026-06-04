@@ -48,12 +48,14 @@ async def browser_login_and_extract_cookies(
         timeout_ms=timeout_ms,
     )
     if sys.platform == "win32":
+
         def _runner():
             loop = asyncio.ProactorEventLoop()
             try:
                 return loop.run_until_complete(_browser_login_impl(**kwargs))
             finally:
                 loop.close()
+
         return await asyncio.to_thread(_runner)
     return await _browser_login_impl(**kwargs)
 
@@ -118,9 +120,7 @@ async def _browser_login_impl(
                     continue
 
             if not username_filled:
-                raise BrowserLoginError(
-                    f"Could not find username field. Tried selectors: {username_selector}"
-                )
+                raise BrowserLoginError(f"Could not find username field. Tried selectors: {username_selector}")
 
             # Check if password field is already visible (single-page login)
             password_visible = False
@@ -142,11 +142,16 @@ async def _browser_login_impl(
                 next_clicked = False
                 # Try the configured submit selector first, then common "Next"/"Continue" buttons
                 next_selectors = [s.strip() for s in submit_selector.split(",") if s.strip()]
-                next_selectors.extend([
-                    "button:has-text('Next')", "button:has-text('Continue')",
-                    "button:has-text('next')", "button:has-text('continue')",
-                    "input[type='submit']", "button[type='submit']",
-                ])
+                next_selectors.extend(
+                    [
+                        "button:has-text('Next')",
+                        "button:has-text('Continue')",
+                        "button:has-text('next')",
+                        "button:has-text('continue')",
+                        "input[type='submit']",
+                        "button[type='submit']",
+                    ]
+                )
                 for sel in next_selectors:
                     try:
                         locator = page.locator(sel).first
@@ -159,9 +164,7 @@ async def _browser_login_impl(
                         continue
 
                 if not next_clicked:
-                    raise BrowserLoginError(
-                        "Multi-step login: could not find Next/Continue button after username step"
-                    )
+                    raise BrowserLoginError("Multi-step login: could not find Next/Continue button after username step")
 
                 # Wait for the password field to appear
                 await asyncio.sleep(1)
@@ -184,9 +187,7 @@ async def _browser_login_impl(
                     continue
 
             if not password_filled:
-                raise BrowserLoginError(
-                    f"Could not find password field. Tried selectors: {password_selector}"
-                )
+                raise BrowserLoginError(f"Could not find password field. Tried selectors: {password_selector}")
 
             # Click submit
             submit_clicked = False
@@ -205,9 +206,7 @@ async def _browser_login_impl(
                     continue
 
             if not submit_clicked:
-                raise BrowserLoginError(
-                    f"Could not find submit button. Tried selectors: {submit_selector}"
-                )
+                raise BrowserLoginError(f"Could not find submit button. Tried selectors: {submit_selector}")
 
             # Wait for login to complete
             if success_url:
@@ -243,12 +242,14 @@ async def _browser_login_impl(
             raw_cookies = await context.cookies()
             cookie_list = []
             for cookie in raw_cookies:
-                cookie_list.append({
-                    "name": cookie["name"],
-                    "value": cookie["value"],
-                    "domain": cookie.get("domain", ""),
-                    "path": cookie.get("path", "/"),
-                })
+                cookie_list.append(
+                    {
+                        "name": cookie["name"],
+                        "value": cookie["value"],
+                        "domain": cookie.get("domain", ""),
+                        "path": cookie.get("path", "/"),
+                    }
+                )
 
             logger.info(
                 "Browser crawl: extracted cookies",
@@ -320,6 +321,8 @@ async def test_browser_login(
         logger.error("test_browser_login unexpected error", error=repr(e))
         return {
             "success": False,
-            "message": f"Unexpected error: {type(e).__name__}: {e!s}" if str(e) else f"Unexpected error: {type(e).__name__}: {e!r}",
+            "message": f"Unexpected error: {type(e).__name__}: {e!s}"
+            if str(e)
+            else f"Unexpected error: {type(e).__name__}: {e!r}",
             "time_seconds": elapsed,
         }

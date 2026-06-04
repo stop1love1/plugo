@@ -55,7 +55,11 @@
     "default": "60/minute",
     "chat": "30/minute",
     "crawl": "5/minute",
+    "auth": "5/minute",
     "sse_concurrent": 10
+  },
+  "session": {
+    "retention_days": 90
   },
   "agent": {
     "system_prompt": "",

@@ -2,14 +2,14 @@ import json
 import time
 import uuid
 
-from auth import TokenData, get_current_user
-from config import settings
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse
-from logging_config import logger
 from pydantic import BaseModel, Field
 
 from agent.rag import rag_engine
+from auth import TokenData, get_current_user
+from config import settings
+from logging_config import logger
 from providers.factory import get_llm_provider
 from repositories import Repositories, create_repos, get_repos
 
@@ -49,6 +49,7 @@ async def list_knowledge(
 
 # NOTE: Static path routes (/urls, /url/*, /bulk-delete) MUST be defined
 # BEFORE dynamic path routes (/{chunk_id}) to avoid FastAPI route conflicts.
+
 
 @router.get("/urls")
 async def list_crawled_urls(
@@ -129,7 +130,15 @@ async def update_chunk(
             await rag_engine.delete_chunks(chunk["site_id"], [chunk.get("embedding_id") or chunk["id"]])
             await rag_engine.add_chunks(
                 chunk["site_id"],
-                [{"id": chunk_id, "content": updated["content"], "source_url": chunk.get("source_url", ""), "title": updated.get("title", chunk.get("title", "")), "chunk_index": 0}],
+                [
+                    {
+                        "id": chunk_id,
+                        "content": updated["content"],
+                        "source_url": chunk.get("source_url", ""),
+                        "title": updated.get("title", chunk.get("title", "")),
+                        "chunk_index": 0,
+                    }
+                ],
                 embeddings,
             )
         except Exception as e:
@@ -167,14 +176,16 @@ async def bulk_delete_chunks(
         await repos.knowledge.delete_many(chunk_ids_to_delete)
     deleted = len(chunks)
     try:
-        await repos.audit_logs.create({
-            "user_id": user.sub,
-            "username": user.sub,
-            "action": "delete",
-            "resource_type": "knowledge",
-            "resource_id": None,
-            "details": json.dumps({"deleted_count": deleted, "chunk_ids": data.chunk_ids[:10]}),
-        })
+        await repos.audit_logs.create(
+            {
+                "user_id": user.sub,
+                "username": user.sub,
+                "action": "delete",
+                "resource_type": "knowledge",
+                "resource_id": None,
+                "details": json.dumps({"deleted_count": deleted, "chunk_ids": data.chunk_ids[:10]}),
+            }
+        )
     except Exception as e:
         logger.warning("Failed to create audit log", error=str(e))
     return {"deleted": deleted}
@@ -208,12 +219,16 @@ async def delete_by_url(
     await repos.sites.update(data.site_id, {"knowledge_count": knowledge_data.get("total", 0)})
 
     try:
-        await repos.audit_logs.create({
-            "user_id": user.sub, "username": user.sub,
-            "action": "delete", "resource_type": "knowledge",
-            "resource_id": None,
-            "details": json.dumps({"source_url": data.source_url, "deleted_count": deleted}),
-        })
+        await repos.audit_logs.create(
+            {
+                "user_id": user.sub,
+                "username": user.sub,
+                "action": "delete",
+                "resource_type": "knowledge",
+                "resource_id": None,
+                "details": json.dumps({"source_url": data.source_url, "deleted_count": deleted}),
+            }
+        )
     except Exception as e:
         logger.warning("Failed to create audit log", error=str(e))
 
@@ -258,10 +273,12 @@ async def recrawl_url(
         await rag_engine.delete_chunks(data.site_id, embedding_ids)
         await repos.knowledge.delete_by_url(data.site_id, data.source_url)
 
-    job = await repos.crawl_jobs.create({
-        "site_id": data.site_id,
-        "start_url": data.source_url,
-    })
+    job = await repos.crawl_jobs.create(
+        {
+            "site_id": data.site_id,
+            "start_url": data.source_url,
+        }
+    )
 
     background_tasks.add_task(_run_recrawl, data.site_id, data.source_url, job["id"])
 
@@ -301,9 +318,7 @@ async def _reindex_site(
     chunks: list[dict] = []
     page_num = 1
     while True:
-        page = await repos.knowledge.list_by_site(
-            site_id, page=page_num, per_page=REINDEX_FETCH_PAGE_SIZE
-        )
+        page = await repos.knowledge.list_by_site(site_id, page=page_num, per_page=REINDEX_FETCH_PAGE_SIZE)
         page_chunks = page.get("chunks", []) or []
         if not page_chunks:
             break
@@ -383,19 +398,23 @@ async def reindex_site(
     result = await _reindex_site(site_id, repos)
 
     try:
-        await repos.audit_logs.create({
-            "user_id": user.sub,
-            "username": user.sub,
-            "action": "reindex",
-            "resource_type": "knowledge",
-            "resource_id": site_id,
-            "details": json.dumps({
-                "site_id": site_id,
-                "chunks_reindexed": result["chunks_reindexed"],
-                "embedding_provider": settings.embedding_provider,
-                "embedding_model": settings.embedding_model,
-            }),
-        })
+        await repos.audit_logs.create(
+            {
+                "user_id": user.sub,
+                "username": user.sub,
+                "action": "reindex",
+                "resource_type": "knowledge",
+                "resource_id": site_id,
+                "details": json.dumps(
+                    {
+                        "site_id": site_id,
+                        "chunks_reindexed": result["chunks_reindexed"],
+                        "embedding_provider": settings.embedding_provider,
+                        "embedding_model": settings.embedding_model,
+                    }
+                ),
+            }
+        )
     except Exception as e:
         logger.warning("Failed to create reindex audit log", error=str(e))
 
@@ -423,31 +442,43 @@ async def add_manual_chunk(
         embeddings = await embed_provider.embed([data.content])
         await rag_engine.add_chunks(
             data.site_id,
-            [{"id": chunk_id, "content": data.content, "source_url": data.source_url or "", "title": data.title, "chunk_index": 0}],
+            [
+                {
+                    "id": chunk_id,
+                    "content": data.content,
+                    "source_url": data.source_url or "",
+                    "title": data.title,
+                    "chunk_index": 0,
+                }
+            ],
             embeddings,
         )
         embedding_ok = True
     except Exception as e:
         logger.warning("Failed to generate embeddings for manual chunk", error=str(e), chunk_id=chunk_id)
 
-    await repos.knowledge.create({
-        "id": chunk_id,
-        "site_id": data.site_id,
-        "source_url": data.source_url,
-        "source_type": "manual",
-        "title": data.title,
-        "content": data.content,
-        "embedding_id": chunk_id,
-    })
+    await repos.knowledge.create(
+        {
+            "id": chunk_id,
+            "site_id": data.site_id,
+            "source_url": data.source_url,
+            "source_type": "manual",
+            "title": data.title,
+            "content": data.content,
+            "embedding_id": chunk_id,
+        }
+    )
     try:
-        await repos.audit_logs.create({
-            "user_id": user.sub,
-            "username": user.sub,
-            "action": "create",
-            "resource_type": "knowledge",
-            "resource_id": chunk_id,
-            "details": json.dumps({"title": data.title, "site_id": data.site_id}),
-        })
+        await repos.audit_logs.create(
+            {
+                "user_id": user.sub,
+                "username": user.sub,
+                "action": "create",
+                "resource_type": "knowledge",
+                "resource_id": chunk_id,
+                "details": json.dumps({"title": data.title, "site_id": data.site_id}),
+            }
+        )
     except Exception as e:
         logger.warning("Failed to create audit log", error=str(e))
     return {
@@ -481,7 +512,9 @@ async def upload_file(
     # Validate file size
     content = await file.read()
     if len(content) > MAX_UPLOAD_SIZE:
-        raise HTTPException(status_code=400, detail=f"File too large. Maximum size: {MAX_UPLOAD_SIZE // (1024*1024)}MB")
+        raise HTTPException(
+            status_code=400, detail=f"File too large. Maximum size: {MAX_UPLOAD_SIZE // (1024 * 1024)}MB"
+        )
 
     # Extract text
     try:
@@ -514,17 +547,19 @@ async def upload_file(
     # Store in database (bulk)
     db_chunks = []
     for chunk in chunks:
-        db_chunks.append({
-            "id": chunk["id"],
-            "site_id": site_id,
-            "source_url": source_url,
-            "source_type": "upload",
-            "title": filename,
-            "content": chunk["content"],
-            "chunk_index": chunk.get("chunk_index", 0),
-            "content_hash": chunk.get("content_hash", ""),
-            "embedding_id": chunk["id"],
-        })
+        db_chunks.append(
+            {
+                "id": chunk["id"],
+                "site_id": site_id,
+                "source_url": source_url,
+                "source_type": "upload",
+                "title": filename,
+                "content": chunk["content"],
+                "chunk_index": chunk.get("chunk_index", 0),
+                "content_hash": chunk.get("content_hash", ""),
+                "embedding_id": chunk["id"],
+            }
+        )
     await repos.knowledge.create_many(db_chunks)
 
     return {

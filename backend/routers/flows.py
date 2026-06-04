@@ -3,13 +3,13 @@
 import os
 import uuid
 
-from auth import TokenData, get_current_user
-from config import settings
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from logging_config import logger
 from pydantic import BaseModel, Field
 
 from agent.rag import rag_engine
+from auth import TokenData, get_current_user
+from config import settings
+from logging_config import logger
 from providers.factory import get_llm_provider
 from repositories import Repositories, get_repos
 
@@ -23,6 +23,7 @@ ALLOWED_SCREENSHOT_CONTENT_TYPES = {"image/jpeg", "image/png", "image/gif", "ima
 # ============================================================
 # Request models
 # ============================================================
+
 
 class FlowCreate(BaseModel):
     site_id: str
@@ -58,6 +59,7 @@ class ReorderStepsRequest(BaseModel):
 # ============================================================
 # Flow CRUD
 # ============================================================
+
 
 @router.get("")
 async def list_flows(
@@ -143,6 +145,7 @@ async def delete_flow(
 # ============================================================
 # Flow Steps CRUD
 # ============================================================
+
 
 @router.post("/{flow_id}/steps")
 async def add_step(
@@ -274,6 +277,7 @@ async def reorder_steps(
 # Screenshot upload
 # ============================================================
 
+
 @router.post("/steps/{step_id}/screenshot")
 async def upload_screenshot(
     step_id: str,
@@ -288,9 +292,14 @@ async def upload_screenshot(
     # Validate file format
     ext = os.path.splitext(file.filename or "image.png")[1].lower() or ".png"
     if ext not in ALLOWED_SCREENSHOT_EXTENSIONS:
-        raise HTTPException(status_code=400, detail=f"Invalid file type. Allowed: {', '.join(sorted(ALLOWED_SCREENSHOT_EXTENSIONS))}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid file type. Allowed: {', '.join(sorted(ALLOWED_SCREENSHOT_EXTENSIONS))}"
+        )
     if file.content_type and file.content_type not in ALLOWED_SCREENSHOT_CONTENT_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid content type. Allowed: {', '.join(sorted(ALLOWED_SCREENSHOT_CONTENT_TYPES))}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid content type. Allowed: {', '.join(sorted(ALLOWED_SCREENSHOT_CONTENT_TYPES))}",
+        )
 
     content = await file.read()
     if len(content) > 5 * 1024 * 1024:
@@ -319,6 +328,7 @@ async def serve_screenshot(
 ):
     """Serve uploaded screenshot files."""
     from fastapi.responses import FileResponse
+
     # Sanitize inputs to prevent path traversal
     safe_flow_id = os.path.basename(flow_id)
     safe_filename = os.path.basename(filename)
@@ -336,6 +346,7 @@ async def serve_screenshot(
 # ============================================================
 # Sync to RAG
 # ============================================================
+
 
 @router.post("/{flow_id}/sync")
 async def sync_flow(
@@ -358,6 +369,7 @@ async def sync_flow(
 # ============================================================
 # Internal helpers
 # ============================================================
+
 
 async def _sync_flow_to_rag(flow: dict, steps: list[dict], repos: Repositories):
     """Convert a flow into a structured text chunk and embed it into RAG."""
@@ -387,13 +399,19 @@ async def _sync_flow_to_rag(flow: dict, steps: list[dict], repos: Repositories):
     try:
         embed_provider = get_llm_provider(settings.embedding_provider, settings.embedding_model)
         embeddings = await embed_provider.embed([content])
-        await rag_engine.add_chunks(site_id, [{
-            "id": chunk_id,
-            "content": content,
-            "source_url": source_url,
-            "title": f"Flow: {flow['name']}",
-            "chunk_index": 0,
-        }], embeddings)
+        await rag_engine.add_chunks(
+            site_id,
+            [
+                {
+                    "id": chunk_id,
+                    "content": content,
+                    "source_url": source_url,
+                    "title": f"Flow: {flow['name']}",
+                    "chunk_index": 0,
+                }
+            ],
+            embeddings,
+        )
     except Exception as e:
         logger.warning("Failed to embed flow", flow_id=flow["id"], error=str(e))
         return
@@ -406,12 +424,14 @@ async def _sync_flow_to_rag(flow: dict, steps: list[dict], repos: Repositories):
         await repos.knowledge.delete_by_url(site_id, source_url)
 
     # Persist new knowledge record
-    await repos.knowledge.create({
-        "id": chunk_id,
-        "site_id": site_id,
-        "source_url": source_url,
-        "source_type": "flow",
-        "title": f"Flow: {flow['name']}",
-        "content": content,
-        "embedding_id": chunk_id,
-    })
+    await repos.knowledge.create(
+        {
+            "id": chunk_id,
+            "site_id": site_id,
+            "source_url": source_url,
+            "source_type": "flow",
+            "title": f"Flow: {flow['name']}",
+            "content": content,
+            "embedding_id": chunk_id,
+        }
+    )

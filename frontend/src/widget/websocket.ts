@@ -88,7 +88,7 @@ export class PlugoWebSocket {
             site_token: this.siteToken,
             session_id: this.sessionId,
             visitor_id: this.visitorId,
-          })
+          }),
         );
       };
 
@@ -165,11 +165,29 @@ export class PlugoWebSocket {
         JSON.stringify({
           message,
           pageContext,
-        })
+        }),
       );
       return true;
     }
     return false;
+  }
+
+  /**
+   * Manually re-establish the connection after it gave up (exhausted automatic
+   * retries) or was intentionally closed. Resets the retry budget and dials
+   * again so a "Reconnect" affordance in the UI can recover a dead socket.
+   */
+  reconnect() {
+    const live =
+      this.ws?.readyState === WebSocket.OPEN || this.ws?.readyState === WebSocket.CONNECTING;
+    if (live) return;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.reconnectAttempts = 0;
+    this.intentionalClose = false;
+    this.connect();
   }
 
   disconnect() {

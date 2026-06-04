@@ -4,10 +4,29 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { getSite } from "../lib/api";
 import {
-  Globe, Play, Square, RefreshCw, CheckCircle, XCircle,
-  Clock, Database, Trash2, Power, PowerOff, Settings2,
-  ChevronDown, ChevronUp, Terminal, Link, FileText, AlertTriangle,
-  Pause, SkipForward, Filter, Layers, Zap,
+  Globe,
+  Play,
+  Square,
+  RefreshCw,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Database,
+  Trash2,
+  Power,
+  PowerOff,
+  Settings2,
+  ChevronDown,
+  ChevronUp,
+  Terminal,
+  Link,
+  FileText,
+  AlertTriangle,
+  Pause,
+  SkipForward,
+  Filter,
+  Layers,
+  Zap,
 } from "lucide-react";
 import api from "../lib/api";
 import { useLocale } from "../lib/useLocale";
@@ -15,24 +34,32 @@ import { OnboardingChecklist } from "../components/OnboardingChecklist";
 import { pushNotification } from "../lib/notifications";
 
 // API calls
-const toggleCrawl = (siteId: string, data: { enabled: boolean; max_pages?: number; auto_interval?: number; max_depth?: number; exclude_patterns?: string }) =>
-  api.put(`/crawl/toggle/${siteId}`, data).then((r) => r.data);
-const startCrawl = (data: { site_id: string; url?: string; max_pages?: number; max_depth?: number; force_recrawl?: boolean; exclude_patterns?: string }) =>
-  api.post("/crawl/start", data).then((r) => r.data);
-const stopCrawl = (siteId: string) =>
-  api.post(`/crawl/stop/${siteId}`).then((r) => r.data);
-const pauseCrawl = (siteId: string) =>
-  api.post(`/crawl/pause/${siteId}`).then((r) => r.data);
-const resumeCrawl = (siteId: string) =>
-  api.post(`/crawl/resume/${siteId}`).then((r) => r.data);
-const getCrawlStatus = (siteId: string) =>
-  api.get(`/crawl/status/${siteId}`).then((r) => r.data);
-const getCrawlJobs = (siteId: string) =>
-  api.get(`/crawl/jobs/${siteId}`).then((r) => r.data);
+const toggleCrawl = (
+  siteId: string,
+  data: {
+    enabled: boolean;
+    max_pages?: number;
+    auto_interval?: number;
+    max_depth?: number;
+    exclude_patterns?: string;
+  },
+) => api.put(`/crawl/toggle/${siteId}`, data).then((r) => r.data);
+const startCrawl = (data: {
+  site_id: string;
+  url?: string;
+  max_pages?: number;
+  max_depth?: number;
+  force_recrawl?: boolean;
+  exclude_patterns?: string;
+}) => api.post("/crawl/start", data).then((r) => r.data);
+const stopCrawl = (siteId: string) => api.post(`/crawl/stop/${siteId}`).then((r) => r.data);
+const pauseCrawl = (siteId: string) => api.post(`/crawl/pause/${siteId}`).then((r) => r.data);
+const resumeCrawl = (siteId: string) => api.post(`/crawl/resume/${siteId}`).then((r) => r.data);
+const getCrawlStatus = (siteId: string) => api.get(`/crawl/status/${siteId}`).then((r) => r.data);
+const getCrawlJobs = (siteId: string) => api.get(`/crawl/jobs/${siteId}`).then((r) => r.data);
 const clearKnowledge = (siteId: string) =>
   api.delete(`/crawl/knowledge/${siteId}`).then((r) => r.data);
-const getCrawlLogs = (jobId: string) =>
-  api.get(`/crawl/job/${jobId}/logs`).then((r) => r.data);
+const getCrawlLogs = (jobId: string) => api.get(`/crawl/job/${jobId}/logs`).then((r) => r.data);
 const updateCrawlSettings = (siteId: string, data: Record<string, unknown>) =>
   api.put(`/crawl/settings/${siteId}`, data).then((r) => r.data);
 
@@ -83,9 +110,11 @@ export default function Setup() {
   // Sync settings from server
   useEffect(() => {
     if (crawlStatus) {
-      if (crawlStatus.crawl_auto_interval !== undefined) setAutoInterval(crawlStatus.crawl_auto_interval);
+      if (crawlStatus.crawl_auto_interval !== undefined)
+        setAutoInterval(crawlStatus.crawl_auto_interval);
       if (crawlStatus.crawl_max_depth !== undefined) setMaxDepth(crawlStatus.crawl_max_depth);
-      if (crawlStatus.crawl_exclude_patterns !== undefined) setExcludePatterns(crawlStatus.crawl_exclude_patterns);
+      if (crawlStatus.crawl_exclude_patterns !== undefined)
+        setExcludePatterns(crawlStatus.crawl_exclude_patterns);
       if (crawlStatus.crawl_max_pages !== undefined) setMaxPages(crawlStatus.crawl_max_pages);
     }
   }, [
@@ -133,7 +162,9 @@ export default function Setup() {
   }, [crawlStatus?.crawl_status, crawlStatus?.knowledge_count, t, refetchJobs]);
 
   // Find the running/paused job
-  const activeJob = jobs.find((j: { status: string }) => j.status === "running" || j.status === "paused");
+  const activeJob = jobs.find(
+    (j: { status: string }) => j.status === "running" || j.status === "paused",
+  );
 
   // Determine which job to show logs for
   const activeLogJobId = activeJob?.id || selectedLogJobId;
@@ -142,7 +173,8 @@ export default function Setup() {
     queryKey: ["crawl-logs", activeLogJobId],
     queryFn: () => getCrawlLogs(activeLogJobId!),
     enabled: !!activeLogJobId,
-    refetchInterval: activeJob?.id === activeLogJobId && activeJob?.status === "running" ? 2000 : false,
+    refetchInterval:
+      activeJob?.id === activeLogJobId && activeJob?.status === "running" ? 2000 : false,
   });
 
   // Auto-scroll log container
@@ -243,18 +275,25 @@ export default function Setup() {
   const isActive = isRunning || isPaused;
   const isEnabled = crawlStatus?.crawl_enabled ?? false;
 
-  const progressPercent = activeJob && maxPages > 0
-    ? Math.min(100, Math.round((activeJob.pages_done / maxPages) * 100))
-    : 0;
+  const progressPercent =
+    activeJob && maxPages > 0
+      ? Math.min(100, Math.round((activeJob.pages_done / maxPages) * 100))
+      : 0;
 
   const statusIcon = (status: string) => {
     switch (status) {
-      case "completed": return <CheckCircle className="w-4 h-4 text-green-500" />;
-      case "failed": return <XCircle className="w-4 h-4 text-red-500" />;
-      case "running": return <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />;
-      case "paused": return <Pause className="w-4 h-4 text-amber-500" />;
-      case "stopped": return <Square className="w-4 h-4 text-yellow-500" />;
-      default: return <Clock className="w-4 h-4 text-gray-400" />;
+      case "completed":
+        return <CheckCircle className="w-4 h-4 text-green-500" />;
+      case "failed":
+        return <XCircle className="w-4 h-4 text-red-500" />;
+      case "running":
+        return <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />;
+      case "paused":
+        return <Pause className="w-4 h-4 text-amber-500" />;
+      case "stopped":
+        return <Square className="w-4 h-4 text-yellow-500" />;
+      default:
+        return <Clock className="w-4 h-4 text-gray-400" />;
     }
   };
 
@@ -278,8 +317,12 @@ export default function Setup() {
           <span className="text-cyan-300 flex-1">{log.action}</span>
         ) : (
           <>
-            <span className="text-gray-300 truncate flex-1" title={`${log.url}\n${log.title || ""}`}>
-              {log.title ? `${log.title} — ` : ""}{log.url}
+            <span
+              className="text-gray-300 truncate flex-1"
+              title={`${log.url}\n${log.title || ""}`}
+            >
+              {log.title ? `${log.title} — ` : ""}
+              {log.url}
             </span>
             {log.status === "success" && log.chunks > 0 && (
               <span className="text-blue-400 shrink-0">{log.chunks} chunks</span>
@@ -379,9 +422,7 @@ export default function Setup() {
                 <option value={168}>{t("setup.intervalWeekly")}</option>
               </select>
               {autoInterval > 0 && (
-                <span className="text-xs text-gray-500">
-                  {t("setup.autoIntervalDesc")}
-                </span>
+                <span className="text-xs text-gray-500">{t("setup.autoIntervalDesc")}</span>
               )}
             </div>
           </div>
@@ -484,23 +525,36 @@ export default function Setup() {
             {/* Current URL indicator */}
             {crawlStatus?.current_url && (
               <div className="flex items-center gap-2 mb-2 px-1">
-                <Link className={`w-3.5 h-3.5 shrink-0 ${isPaused ? "text-amber-500" : "text-blue-500 animate-pulse"}`} />
-                <span className={`text-xs truncate ${isPaused ? "text-amber-600" : "text-blue-600"}`} title={crawlStatus.current_url}>
-                  {isPaused ? t("setup.pausedAt") : t("setup.crawlingNow")}: {crawlStatus.current_url}
+                <Link
+                  className={`w-3.5 h-3.5 shrink-0 ${isPaused ? "text-amber-500" : "text-blue-500 animate-pulse"}`}
+                />
+                <span
+                  className={`text-xs truncate ${isPaused ? "text-amber-600" : "text-blue-600"}`}
+                  title={crawlStatus.current_url}
+                >
+                  {isPaused ? t("setup.pausedAt") : t("setup.crawlingNow")}:{" "}
+                  {crawlStatus.current_url}
                 </span>
               </div>
             )}
 
             {/* Progress bar */}
             <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
-              <span>{t("setup.crawlProgress")}{isPaused ? ` (${t("setup.paused")})` : ""}</span>
+              <span>
+                {t("setup.crawlProgress")}
+                {isPaused ? ` (${t("setup.paused")})` : ""}
+              </span>
               <span>
                 {activeJob?.pages_done ?? 0} / {maxPages} {t("setup.pages")}
                 {activeJob?.pages_skipped > 0 && (
-                  <span className="text-yellow-500 ml-2">({activeJob.pages_skipped} {t("setup.skipped")})</span>
+                  <span className="text-yellow-500 ml-2">
+                    ({activeJob.pages_skipped} {t("setup.skipped")})
+                  </span>
                 )}
                 {activeJob?.pages_failed > 0 && (
-                  <span className="text-red-500 ml-2">({activeJob.pages_failed} {t("setup.failed")})</span>
+                  <span className="text-red-500 ml-2">
+                    ({activeJob.pages_failed} {t("setup.failed")})
+                  </span>
                 )}
               </span>
             </div>
@@ -514,16 +568,24 @@ export default function Setup() {
               <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
                 <span className="flex items-center gap-1">
                   <Clock className="w-3 h-3" />
-                  {t("setup.elapsed")}: {(() => {
-                    const elapsed = Math.max(0, Math.floor((now - new Date(activeJob.started_at).getTime()) / 1000));
+                  {t("setup.elapsed")}:{" "}
+                  {(() => {
+                    const elapsed = Math.max(
+                      0,
+                      Math.floor((now - new Date(activeJob.started_at).getTime()) / 1000),
+                    );
                     const mins = Math.floor(elapsed / 60);
                     const secs = elapsed % 60;
                     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
                   })()}
                 </span>
                 <span>
-                  {t("setup.speed")}: {(() => {
-                    const elapsedMin = Math.max(0, (now - new Date(activeJob.started_at).getTime()) / 60000);
+                  {t("setup.speed")}:{" "}
+                  {(() => {
+                    const elapsedMin = Math.max(
+                      0,
+                      (now - new Date(activeJob.started_at).getTime()) / 60000,
+                    );
                     if (elapsedMin < 0.1) return t("setup.calculating");
                     return `${(activeJob.pages_done / elapsedMin).toFixed(1)} ${t("setup.pagesPerMin")}`;
                   })()}
@@ -547,8 +609,14 @@ export default function Setup() {
               className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-2"
             >
               <Terminal className="w-4 h-4" />
-              <span className="font-medium">{t("setup.crawlLog")} ({logData.logs.length} {t("setup.entries")})</span>
-              {logsExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              <span className="font-medium">
+                {t("setup.crawlLog")} ({logData.logs.length} {t("setup.entries")})
+              </span>
+              {logsExpanded ? (
+                <ChevronUp className="w-4 h-4" />
+              ) : (
+                <ChevronDown className="w-4 h-4" />
+              )}
             </button>
             {logsExpanded && (
               <div
@@ -556,9 +624,7 @@ export default function Setup() {
                 className="bg-gray-900 rounded-lg p-4 max-h-80 overflow-y-auto font-mono text-xs"
               >
                 {logData.logs.map((log: LogEntry, i: number) => (
-                  <div key={`${log.timestamp}-${log.url || i}`}>
-                    {renderLogEntry(log)}
-                  </div>
+                  <div key={`${log.timestamp}-${log.url || i}`}>{renderLogEntry(log)}</div>
                 ))}
               </div>
             )}
@@ -582,9 +648,7 @@ export default function Setup() {
           <span className="text-[10px] text-gray-400 shrink-0">{t("setup.autoTarget")}</span>
         </div>
 
-        <p className="text-sm text-gray-500 mb-4">
-          {t("setup.manualActionsDesc")}
-        </p>
+        <p className="text-sm text-gray-500 mb-4">{t("setup.manualActionsDesc")}</p>
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -662,7 +726,9 @@ export default function Setup() {
                     className="w-20 border border-gray-300 rounded-lg px-2 py-1 text-sm text-center outline-none"
                   />
                   <span className="text-xs text-gray-400">
-                    {maxDepth === 0 ? t("setup.depthUnlimited") : `${maxDepth} ${t("setup.depthLevels")}`}
+                    {maxDepth === 0
+                      ? t("setup.depthUnlimited")
+                      : `${maxDepth} ${t("setup.depthLevels")}`}
                   </span>
                 </div>
               </div>
@@ -707,16 +773,21 @@ export default function Setup() {
                     className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                   />
                   <Globe className="w-4 h-4 text-blue-500" />
-                  <span className="text-sm font-medium text-gray-700">Browser Authentication (Playwright)</span>
+                  <span className="text-sm font-medium text-gray-700">
+                    Browser Authentication (Playwright)
+                  </span>
                 </label>
                 <p className="text-xs text-gray-400 mb-3">
-                  For websites that require login (Laravel, Django, Rails...). Bot will login via browser, extract cookies, then crawl.
+                  For websites that require login (Laravel, Django, Rails...). Bot will login via
+                  browser, extract cookies, then crawl.
                 </p>
 
                 {crawlStatus?.crawl_use_browser && (
                   <div className="space-y-3 pl-6 border-l-2 border-blue-100">
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Login URL *</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Login URL *
+                      </label>
                       <input
                         defaultValue={crawlStatus?.crawl_login_url || ""}
                         onBlur={(e) => saveSettings({ crawl_login_url: e.target.value })}
@@ -726,7 +797,9 @@ export default function Setup() {
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Username/Email</label>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                          Username/Email
+                        </label>
                         <input
                           defaultValue={crawlStatus?.crawl_login_username || ""}
                           onBlur={(e) => saveSettings({ crawl_login_username: e.target.value })}
@@ -735,7 +808,9 @@ export default function Setup() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Password</label>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                          Password
+                        </label>
                         <input
                           type="password"
                           defaultValue={crawlStatus?.crawl_login_password || ""}
@@ -746,38 +821,63 @@ export default function Setup() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Username Field Selector</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Username Field Selector
+                      </label>
                       <input
-                        defaultValue={crawlStatus?.crawl_login_username_selector || "input[name='email'], input[name='username'], input[type='email']"}
-                        onBlur={(e) => saveSettings({ crawl_login_username_selector: e.target.value })}
+                        defaultValue={
+                          crawlStatus?.crawl_login_username_selector ||
+                          "input[name='email'], input[name='username'], input[type='email']"
+                        }
+                        onBlur={(e) =>
+                          saveSettings({ crawl_login_username_selector: e.target.value })
+                        }
                         className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary-500 font-mono text-xs"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Password Field Selector</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Password Field Selector
+                      </label>
                       <input
-                        defaultValue={crawlStatus?.crawl_login_password_selector || "input[name='password'], input[type='password']"}
-                        onBlur={(e) => saveSettings({ crawl_login_password_selector: e.target.value })}
+                        defaultValue={
+                          crawlStatus?.crawl_login_password_selector ||
+                          "input[name='password'], input[type='password']"
+                        }
+                        onBlur={(e) =>
+                          saveSettings({ crawl_login_password_selector: e.target.value })
+                        }
                         className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary-500 font-mono text-xs"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Submit Button Selector</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Submit Button Selector
+                      </label>
                       <input
-                        defaultValue={crawlStatus?.crawl_login_submit_selector || "button[type='submit'], input[type='submit']"}
-                        onBlur={(e) => saveSettings({ crawl_login_submit_selector: e.target.value })}
+                        defaultValue={
+                          crawlStatus?.crawl_login_submit_selector ||
+                          "button[type='submit'], input[type='submit']"
+                        }
+                        onBlur={(e) =>
+                          saveSettings({ crawl_login_submit_selector: e.target.value })
+                        }
                         className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary-500 font-mono text-xs"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Success URL (optional)</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Success URL (optional)
+                      </label>
                       <input
                         defaultValue={crawlStatus?.crawl_login_success_url || ""}
                         onBlur={(e) => saveSettings({ crawl_login_success_url: e.target.value })}
                         placeholder="/dashboard or leave empty"
                         className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary-500"
                       />
-                      <p className="text-xs text-gray-400 mt-1">URL pattern to verify login was successful</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        URL pattern to verify login was successful
+                      </p>
                     </div>
                     <button
                       type="button"
@@ -897,71 +997,84 @@ export default function Setup() {
             <Database className="w-5 h-5" /> {t("setup.crawlHistory")}
           </h3>
           <div className="space-y-1">
-            {jobs.map((job: { id: string; status: string; pages_done: number; pages_skipped?: number; pages_failed?: number; chunks_created?: number; started_at?: string }) => {
-              const isSelected = selectedLogJobId === job.id;
-              const isJobActive = job.status === "running" || job.status === "paused";
-              return (
-                <div key={job.id}>
-                  <button
-                    onClick={() => {
-                      if (isJobActive) return;
-                      setSelectedLogJobId(isSelected ? null : job.id);
-                      setLogsExpanded(true);
-                    }}
-                    className={`w-full flex items-center justify-between py-2 px-3 rounded-lg transition-colors ${
-                      isSelected
-                        ? "bg-gray-100 border border-gray-200"
-                        : "hover:bg-gray-50 border border-transparent"
-                    } ${isJobActive ? "cursor-default" : "cursor-pointer"}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      {statusIcon(job.status)}
-                      <div className="text-left">
-                        <span className="text-sm font-medium capitalize">{job.status}</span>
-                        <span className="text-xs text-gray-400 ml-2">
-                          {job.pages_done} {t("setup.pages")}
-                          {job.chunks_created ? ` · ${job.chunks_created} chunks` : ""}
-                          {job.pages_failed ? (
-                            <span className="text-red-400 ml-1">· {job.pages_failed} {t("setup.failed")}</span>
-                          ) : null}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400">
-                        {job.started_at ? new Date(job.started_at).toLocaleString() : ""}
-                      </span>
-                      {!isJobActive && (
+            {jobs.map(
+              (job: {
+                id: string;
+                status: string;
+                pages_done: number;
+                pages_skipped?: number;
+                pages_failed?: number;
+                chunks_created?: number;
+                started_at?: string;
+              }) => {
+                const isSelected = selectedLogJobId === job.id;
+                const isJobActive = job.status === "running" || job.status === "paused";
+                return (
+                  <div key={job.id}>
+                    <button
+                      onClick={() => {
+                        if (isJobActive) return;
+                        setSelectedLogJobId(isSelected ? null : job.id);
+                        setLogsExpanded(true);
+                      }}
+                      className={`w-full flex items-center justify-between py-2 px-3 rounded-lg transition-colors ${
                         isSelected
-                          ? <ChevronUp className="w-4 h-4 text-gray-400" />
-                          : <ChevronDown className="w-4 h-4 text-gray-400" />
-                      )}
-                    </div>
-                  </button>
+                          ? "bg-gray-100 border border-gray-200"
+                          : "hover:bg-gray-50 border border-transparent"
+                      } ${isJobActive ? "cursor-default" : "cursor-pointer"}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {statusIcon(job.status)}
+                        <div className="text-left">
+                          <span className="text-sm font-medium capitalize">{job.status}</span>
+                          <span className="text-xs text-gray-400 ml-2">
+                            {job.pages_done} {t("setup.pages")}
+                            {job.chunks_created ? ` · ${job.chunks_created} chunks` : ""}
+                            {job.pages_failed ? (
+                              <span className="text-red-400 ml-1">
+                                · {job.pages_failed} {t("setup.failed")}
+                              </span>
+                            ) : null}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400">
+                          {job.started_at ? new Date(job.started_at).toLocaleString() : ""}
+                        </span>
+                        {!isJobActive &&
+                          (isSelected ? (
+                            <ChevronUp className="w-4 h-4 text-gray-400" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-gray-400" />
+                          ))}
+                      </div>
+                    </button>
 
-                  {/* Expanded log view */}
-                  {isSelected && logData?.logs?.length > 0 && (
-                    <div className="mt-2 mb-3 ml-2">
-                      <div className="bg-gray-900 rounded-lg p-4 max-h-80 overflow-y-auto font-mono text-xs">
-                        {logData.logs.map((log: LogEntry, i: number) => (
-                          <div key={`${log.timestamp}-${log.url || i}`}>
-                            {renderLogEntry(log)}
-                          </div>
-                        ))}
+                    {/* Expanded log view */}
+                    {isSelected && logData?.logs?.length > 0 && (
+                      <div className="mt-2 mb-3 ml-2">
+                        <div className="bg-gray-900 rounded-lg p-4 max-h-80 overflow-y-auto font-mono text-xs">
+                          {logData.logs.map((log: LogEntry, i: number) => (
+                            <div key={`${log.timestamp}-${log.url || i}`}>
+                              {renderLogEntry(log)}
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                  {isSelected && (!logData?.logs || logData.logs.length === 0) && (
-                    <div className="mt-2 mb-3 ml-2">
-                      <div className="bg-gray-900 rounded-lg p-4 font-mono text-xs text-gray-500 flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4" />
-                        {t("setup.noLogs")}
+                    )}
+                    {isSelected && (!logData?.logs || logData.logs.length === 0) && (
+                      <div className="mt-2 mb-3 ml-2">
+                        <div className="bg-gray-900 rounded-lg p-4 font-mono text-xs text-gray-500 flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4" />
+                          {t("setup.noLogs")}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                    )}
+                  </div>
+                );
+              },
+            )}
           </div>
         </div>
       )}

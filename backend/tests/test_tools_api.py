@@ -6,24 +6,38 @@ import pytest
 
 
 @pytest.fixture
+def allow_any_tool_url(monkeypatch):
+    """Tool CRUD endpoint tests shouldn't depend on live DNS. The SSRF guard
+    itself is covered in test_crawler.py, so here we treat every URL as safe and
+    focus on create/update/delete behaviour."""
+
+    async def _safe(url, allow_private=False):
+        return True, ""
+
+    monkeypatch.setattr("routers.tools._is_safe_public_url", _safe)
+
+
+@pytest.fixture
 async def test_tool(db_repos, test_site):
     """Create a test tool."""
-    tool = await db_repos.tools.create({
-        "site_id": test_site["id"],
-        "name": "Weather API",
-        "description": "Get current weather for a location",
-        "method": "GET",
-        "url": "https://api.weather.com/current",
-        "params_schema": {
-            "type": "object",
-            "properties": {
-                "city": {"type": "string", "description": "City name"},
+    tool = await db_repos.tools.create(
+        {
+            "site_id": test_site["id"],
+            "name": "Weather API",
+            "description": "Get current weather for a location",
+            "method": "GET",
+            "url": "https://api.weather.com/current",
+            "params_schema": {
+                "type": "object",
+                "properties": {
+                    "city": {"type": "string", "description": "City name"},
+                },
             },
-        },
-        "headers": {},
-        "auth_type": "bearer",
-        "auth_value": "test-api-key",
-    })
+            "headers": {},
+            "auth_type": "bearer",
+            "auth_value": "test-api-key",
+        }
+    )
     yield tool
     with contextlib.suppress(Exception):
         await db_repos.tools.delete(tool["id"])
@@ -41,17 +55,21 @@ async def test_list_tools(client, auth_headers, test_site, test_tool):
 
 
 @pytest.mark.asyncio
-async def test_create_tool(client, auth_headers, test_site):
+async def test_create_tool(client, auth_headers, test_site, allow_any_tool_url):
     """POST /api/tools should create a new tool."""
-    response = await client.post("/api/tools", headers=auth_headers, json={
-        "site_id": test_site["id"],
-        "name": "Test Tool",
-        "description": "A test tool",
-        "method": "POST",
-        "url": "https://api.example.com/action",
-        "params_schema": {},
-        "headers": {"Content-Type": "application/json"},
-    })
+    response = await client.post(
+        "/api/tools",
+        headers=auth_headers,
+        json={
+            "site_id": test_site["id"],
+            "name": "Test Tool",
+            "description": "A test tool",
+            "method": "POST",
+            "url": "https://api.example.com/action",
+            "params_schema": {},
+            "headers": {"Content-Type": "application/json"},
+        },
+    )
     assert response.status_code == 200
 
     data = response.json()
@@ -65,10 +83,14 @@ async def test_create_tool(client, auth_headers, test_site):
 @pytest.mark.asyncio
 async def test_update_tool(client, auth_headers, test_tool):
     """PUT /api/tools/{tool_id} should update tool fields."""
-    response = await client.put(f"/api/tools/{test_tool['id']}", headers=auth_headers, json={
-        "name": "Updated Weather API",
-        "description": "Updated description",
-    })
+    response = await client.put(
+        f"/api/tools/{test_tool['id']}",
+        headers=auth_headers,
+        json={
+            "name": "Updated Weather API",
+            "description": "Updated description",
+        },
+    )
     assert response.status_code == 200
     assert response.json()["message"] == "Tool updated"
 
@@ -76,22 +98,28 @@ async def test_update_tool(client, auth_headers, test_tool):
 @pytest.mark.asyncio
 async def test_update_tool_not_found(client, auth_headers):
     """PUT /api/tools/{tool_id} with invalid id should return 404."""
-    response = await client.put("/api/tools/nonexistent-id", headers=auth_headers, json={
-        "name": "Ghost Tool",
-    })
+    response = await client.put(
+        "/api/tools/nonexistent-id",
+        headers=auth_headers,
+        json={
+            "name": "Ghost Tool",
+        },
+    )
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_delete_tool(client, auth_headers, db_repos, test_site):
     """DELETE /api/tools/{tool_id} should delete the tool."""
-    tool = await db_repos.tools.create({
-        "site_id": test_site["id"],
-        "name": "To Delete",
-        "description": "Delete me",
-        "method": "GET",
-        "url": "https://example.com",
-    })
+    tool = await db_repos.tools.create(
+        {
+            "site_id": test_site["id"],
+            "name": "To Delete",
+            "description": "Delete me",
+            "method": "GET",
+            "url": "https://example.com",
+        }
+    )
 
     response = await client.delete(f"/api/tools/{tool['id']}", headers=auth_headers)
     assert response.status_code == 200
@@ -106,17 +134,21 @@ async def test_delete_tool_not_found(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_create_tool_with_auth_config(client, auth_headers, test_site):
+async def test_create_tool_with_auth_config(client, auth_headers, test_site, allow_any_tool_url):
     """POST /api/tools with auth config should store auth settings."""
-    response = await client.post("/api/tools", headers=auth_headers, json={
-        "site_id": test_site["id"],
-        "name": "Authenticated Tool",
-        "description": "A tool with API key auth",
-        "method": "GET",
-        "url": "https://api.example.com/secure",
-        "auth_type": "api_key",
-        "auth_value": "sk-test-key-123",
-    })
+    response = await client.post(
+        "/api/tools",
+        headers=auth_headers,
+        json={
+            "site_id": test_site["id"],
+            "name": "Authenticated Tool",
+            "description": "A tool with API key auth",
+            "method": "GET",
+            "url": "https://api.example.com/secure",
+            "auth_type": "api_key",
+            "auth_value": "sk-test-key-123",
+        },
+    )
     assert response.status_code == 200
     tool_id = response.json()["id"]
 

@@ -20,7 +20,8 @@ function buildPlaygroundHtml(site: Site, siteUrl: string): string {
   const wsUrl = backendUrl.replace(/^http/, "ws");
 
   // Escape for safe embedding in srcdoc
-  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const esc = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -72,13 +73,13 @@ export default function Playground() {
     const main = document.querySelector("main");
     if (main) {
       main.style.overflow = "hidden";
-      return () => { main.style.overflow = ""; };
+      return () => {
+        main.style.overflow = "";
+      };
     }
   }, []);
 
-  const siteUrl = site?.url
-    ? (site.url.startsWith("http") ? site.url : `https://${site.url}`)
-    : "";
+  const siteUrl = site?.url ? (site.url.startsWith("http") ? site.url : `https://${site.url}`) : "";
 
   // Build srcdoc HTML — memoized to avoid unnecessary re-renders
   const srcdoc = useMemo(() => {
@@ -90,7 +91,11 @@ export default function Playground() {
   const handleReload = () => setReloadKey((k) => k + 1);
 
   if (!site) {
-    return <div className="flex items-center justify-center h-64 text-gray-400">{t("common.loading")}</div>;
+    return (
+      <div className="flex items-center justify-center h-64 text-gray-400">
+        {t("common.loading")}
+      </div>
+    );
   }
 
   const deviceStyle = deviceStyles[device];
@@ -114,11 +119,11 @@ export default function Playground() {
 
         <div className="w-px h-5 bg-gray-200" />
 
-        {([
+        {[
           { id: "desktop" as Device, icon: Monitor },
           { id: "tablet" as Device, icon: Tablet },
           { id: "mobile" as Device, icon: Smartphone },
-        ]).map(({ id, icon: Icon }) => (
+        ].map(({ id, icon: Icon }) => (
           <button
             key={id}
             onClick={() => setDevice(id)}

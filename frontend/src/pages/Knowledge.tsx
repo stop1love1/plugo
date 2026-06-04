@@ -2,8 +2,33 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { getKnowledge, getChunk, updateChunk, deleteChunk, addManualChunk, uploadFile, bulkDeleteChunks, getCrawlSiteStatus, getSiteCrawlJobs, clearAllKnowledge, type KnowledgeChunk } from "../lib/api";
-import { Trash2, Plus, Upload, FileText, Search, Pencil, X, ExternalLink, Download, RefreshCw, Link as LinkIcon, AlertTriangle } from "lucide-react";
+import {
+  getKnowledge,
+  getChunk,
+  updateChunk,
+  deleteChunk,
+  addManualChunk,
+  uploadFile,
+  bulkDeleteChunks,
+  getCrawlSiteStatus,
+  getSiteCrawlJobs,
+  clearAllKnowledge,
+  type KnowledgeChunk,
+} from "../lib/api";
+import {
+  Trash2,
+  Plus,
+  Upload,
+  FileText,
+  Search,
+  Pencil,
+  X,
+  ExternalLink,
+  Download,
+  RefreshCw,
+  Link as LinkIcon,
+  AlertTriangle,
+} from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { EmptyState } from "../components/EmptyState";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -171,7 +196,8 @@ export default function Knowledge() {
   };
 
   /** List API returns first 200 chars + "..." when content length > 200. */
-  const isApiTruncatedListContent = (content: string) => content.endsWith("...") && content.length >= 203;
+  const isApiTruncatedListContent = (content: string) =>
+    content.endsWith("...") && content.length >= 203;
 
   const handleReadMore = async (chunk: KnowledgeChunk) => {
     if (isApiTruncatedListContent(chunk.content)) {
@@ -228,7 +254,10 @@ export default function Knowledge() {
 
   return (
     <div>
-      <PageHeader title={t("knowledge.title")} subtitle={`${data?.total || 0} ${t("knowledge.chunks")}`}>
+      <PageHeader
+        title={t("knowledge.title")}
+        subtitle={`${data?.total || 0} ${t("knowledge.chunks")}`}
+      >
         <button
           onClick={exportAllJson}
           disabled={!data?.chunks?.length}
@@ -236,9 +265,18 @@ export default function Knowledge() {
         >
           <Download className="w-4 h-4" /> Export Page (JSON)
         </button>
-        <label className={`flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 cursor-pointer ${uploading ? "opacity-50 pointer-events-none" : ""}`}>
-          <Upload className="w-4 h-4" /> {uploading ? t("knowledge.uploading") : t("knowledge.bulkUpload")}
-          <input type="file" accept=".txt,.md,.pdf,.docx,.csv" multiple onChange={handleUpload} className="hidden" />
+        <label
+          className={`flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 cursor-pointer ${uploading ? "opacity-50 pointer-events-none" : ""}`}
+        >
+          <Upload className="w-4 h-4" />{" "}
+          {uploading ? t("knowledge.uploading") : t("knowledge.bulkUpload")}
+          <input
+            type="file"
+            accept=".txt,.md,.pdf,.docx,.csv"
+            multiple
+            onChange={handleUpload}
+            className="hidden"
+          />
         </label>
         <button
           onClick={() => setShowAdd(true)}
@@ -272,7 +310,9 @@ export default function Knowledge() {
           <div className="w-full bg-blue-200 rounded-full h-2 mb-2">
             <div
               className="bg-blue-500 h-2 rounded-full transition-all duration-500"
-              style={{ width: `${Math.min(100, ((activeJob.pages_done || 0) / (crawlStatus?.crawl_max_pages || 50)) * 100)}%` }}
+              style={{
+                width: `${Math.min(100, ((activeJob.pages_done || 0) / (crawlStatus?.crawl_max_pages || 50)) * 100)}%`,
+              }}
             />
           </div>
           {/* Current URL */}
@@ -304,10 +344,14 @@ export default function Knowledge() {
       {/* Bulk actions */}
       {selectedIds.size > 0 && (
         <div className="flex items-center gap-3 mb-4 p-3 bg-red-50 rounded-lg border border-red-100">
-          <span className="text-sm text-red-700">{selectedIds.size} {t("common.selected")}</span>
+          <span className="text-sm text-red-700">
+            {selectedIds.size} {t("common.selected")}
+          </span>
           {showConfirmDelete ? (
             <>
-              <span className="text-sm text-red-700 font-medium">{t("knowledge.confirmDelete")}</span>
+              <span className="text-sm text-red-700 font-medium">
+                {t("knowledge.confirmDelete")}
+              </span>
               <button
                 onClick={confirmBulkDelete}
                 disabled={bulkDeleteMutation.isPending}
@@ -344,19 +388,31 @@ export default function Knowledge() {
 
       {/* Add Manual Modal */}
       {showAdd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+        >
           <div className="fixed inset-0 bg-black/40" onClick={() => setShowAdd(false)} />
-          <form onSubmit={handleAddManual} className="relative bg-white rounded-xl shadow-xl w-full max-w-lg p-6 z-10">
+          <form
+            onSubmit={handleAddManual}
+            className="relative bg-white rounded-xl shadow-xl w-full max-w-lg p-6 z-10"
+          >
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-lg">{t("knowledge.addManual")}</h3>
-              <button type="button" onClick={() => setShowAdd(false)} className="text-gray-400 hover:text-gray-600">
+              <button
+                type="button"
+                onClick={() => setShowAdd(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t("knowledge.chunkTitle")} <span className="text-gray-400 font-normal">({t("common.optional")})</span>
+                  {t("knowledge.chunkTitle")}{" "}
+                  <span className="text-gray-400 font-normal">({t("common.optional")})</span>
                 </label>
                 <input
                   value={title}
@@ -379,10 +435,18 @@ export default function Knowledge() {
                 />
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowAdd(false)} className="text-gray-500 px-4 py-2 hover:bg-gray-100 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setShowAdd(false)}
+                  className="text-gray-500 px-4 py-2 hover:bg-gray-100 rounded-lg"
+                >
                   {t("common.cancel")}
                 </button>
-                <button type="submit" disabled={addMutation.isPending || !content.trim()} className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50">
+                <button
+                  type="submit"
+                  disabled={addMutation.isPending || !content.trim()}
+                  className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                >
                   {addMutation.isPending ? t("common.loading") : t("common.save")}
                 </button>
               </div>
@@ -393,7 +457,11 @@ export default function Knowledge() {
 
       {/* Clear All Confirmation Modal */}
       {showClearAll && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+        >
           <div className="fixed inset-0 bg-black/40" onClick={() => setShowClearAll(false)} />
           <div className="relative bg-white rounded-xl shadow-xl w-full max-w-sm p-6 z-10">
             <div className="flex items-center gap-3 mb-4">
@@ -402,7 +470,10 @@ export default function Knowledge() {
             </div>
             <p className="text-sm text-gray-600 mb-6">{t("knowledge.clearAllConfirm")}</p>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setShowClearAll(false)} className="text-gray-500 px-4 py-2 hover:bg-gray-100 rounded-lg">
+              <button
+                onClick={() => setShowClearAll(false)}
+                className="text-gray-500 px-4 py-2 hover:bg-gray-100 rounded-lg"
+              >
                 {t("common.cancel")}
               </button>
               <button
@@ -419,7 +490,12 @@ export default function Knowledge() {
 
       {/* Edit modal */}
       {editingId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="knowledge-edit-title">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="knowledge-edit-title"
+        >
           <div
             className="fixed inset-0 bg-black/40"
             onClick={() => {
@@ -462,7 +538,11 @@ export default function Knowledge() {
               />
             </div>
             <div className="flex gap-3 mt-4 pt-4 border-t border-gray-100 shrink-0">
-              <button type="submit" disabled={updateMutation.isPending} className="bg-primary-600 text-white px-4 py-2 rounded-lg disabled:opacity-50">
+              <button
+                type="submit"
+                disabled={updateMutation.isPending}
+                className="bg-primary-600 text-white px-4 py-2 rounded-lg disabled:opacity-50"
+              >
                 {updateMutation.isPending ? t("common.loading") : t("common.save")}
               </button>
               <button
@@ -499,7 +579,10 @@ export default function Knowledge() {
       {isLoading ? (
         <div className="text-gray-400">{t("common.loading")}</div>
       ) : !data?.chunks?.length ? (
-        <EmptyState icon={FileText} message={search ? t("common.noResults") : t("knowledge.noData")} />
+        <EmptyState
+          icon={FileText}
+          message={search ? t("common.noResults") : t("knowledge.noData")}
+        />
       ) : (
         <div className="space-y-3">
           {data.chunks.map((chunk: KnowledgeChunk) => (
@@ -512,7 +595,9 @@ export default function Knowledge() {
                   className="mt-1 rounded border-gray-300"
                 />
                 <div className="flex-1 min-w-0">
-                  <h4 className="font-medium text-gray-900 truncate">{chunk.title || "Untitled"}</h4>
+                  <h4 className="font-medium text-gray-900 truncate">
+                    {chunk.title || "Untitled"}
+                  </h4>
                   {expandedId === chunk.id ? (
                     <div className="mt-1">
                       <p className="text-sm text-gray-500 whitespace-pre-wrap break-words">
@@ -528,16 +613,21 @@ export default function Knowledge() {
                     </div>
                   ) : (
                     <div className="mt-1 relative z-0">
-                      <p className="text-sm text-gray-500 line-clamp-2 break-words">{chunk.content}</p>
+                      <p className="text-sm text-gray-500 line-clamp-2 break-words">
+                        {chunk.content}
+                      </p>
                       {chunk.content &&
-                        (chunk.content.length > 150 || isApiTruncatedListContent(chunk.content)) && (
+                        (chunk.content.length > 150 ||
+                          isApiTruncatedListContent(chunk.content)) && (
                           <button
                             type="button"
                             onClick={() => handleReadMore(chunk)}
                             disabled={loadingExpandId === chunk.id}
                             className="text-xs text-primary-600 hover:text-primary-700 mt-1 disabled:opacity-50"
                           >
-                            {loadingExpandId === chunk.id ? t("common.loading") : t("knowledge.viewFull")}
+                            {loadingExpandId === chunk.id
+                              ? t("common.loading")
+                              : t("knowledge.viewFull")}
                           </button>
                         )}
                     </div>

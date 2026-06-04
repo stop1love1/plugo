@@ -39,3 +39,16 @@ def test_provider_factory_invalid():
 
     with pytest.raises(ValueError, match="Unknown LLM provider"):
         get_llm_provider("nonexistent_provider")
+
+
+def test_validate_settings_rejects_default_mongo_password_in_prod(monkeypatch):
+    """In production, the docker-compose default MongoDB password must abort startup."""
+    import pytest
+
+    from config import settings, validate_settings
+
+    monkeypatch.setenv("ENV", "production")
+    monkeypatch.setattr(settings, "database_provider", "mongodb")
+    monkeypatch.setattr(settings, "mongodb_url", "mongodb://root:plugo_dev_password@db:27017")
+    with pytest.raises(RuntimeError, match="MongoDB is using the default"):
+        validate_settings()

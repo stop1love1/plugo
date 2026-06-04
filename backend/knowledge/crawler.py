@@ -15,32 +15,27 @@ from urllib.robotparser import RobotFileParser
 
 import httpx
 from bs4 import BeautifulSoup
-from config import settings
-from logging_config import logger
 
 from agent.rag import rag_engine
+from config import settings
 from knowledge.chunker import SemanticChunker
+from logging_config import logger
 from providers.factory import get_llm_provider
 
 # Hostnames used by cloud metadata services — always block to avoid credential exfil via SSRF.
-_BLOCKED_METADATA_HOSTS = frozenset({
-    "169.254.169.254",
-    "metadata.google.internal",
-    "metadata.azure.com",
-})
+_BLOCKED_METADATA_HOSTS = frozenset(
+    {
+        "169.254.169.254",
+        "metadata.google.internal",
+        "metadata.azure.com",
+    }
+)
 _BLOCKED_LITERAL_HOSTS = frozenset({"localhost", "0.0.0.0", "::1"})
 
 
 def _ip_is_unsafe(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     """Return True if the IP address is not publicly routable."""
-    return (
-        ip.is_private
-        or ip.is_loopback
-        or ip.is_link_local
-        or ip.is_reserved
-        or ip.is_multicast
-        or ip.is_unspecified
-    )
+    return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified
 
 
 async def _is_safe_public_url(url: str, allow_private: bool = False) -> tuple[bool, str]:
@@ -247,10 +242,7 @@ class WebCrawler:
                 ct = (response.headers.get("content-type") or "").lower()
                 head = raw[:8000].lower()
                 looks_like_sitemap = (
-                    "xml" in ct
-                    or raw.startswith("<?xml")
-                    or "<urlset" in head
-                    or "<sitemapindex" in head
+                    "xml" in ct or raw.startswith("<?xml") or "<urlset" in head or "<sitemapindex" in head
                 )
                 if not looks_like_sitemap:
                     self._log(sitemap_url, "skipped", action="sitemap.xml response not recognized as XML")
@@ -273,15 +265,18 @@ class WebCrawler:
         return urls
 
     async def _save_progress(self, job_id: str, repos):
-        await repos.crawl_jobs.update(job_id, {
-            "pages_found": len(self.visited) + self._queue_size,
-            "pages_done": len(self.visited),
-            "pages_skipped": self.pages_skipped,
-            "pages_failed": self.pages_failed,
-            "chunks_created": self.chunks_created,
-            "current_url": self.current_url,
-            "crawl_log": json.dumps(self.logs),
-        })
+        await repos.crawl_jobs.update(
+            job_id,
+            {
+                "pages_found": len(self.visited) + self._queue_size,
+                "pages_done": len(self.visited),
+                "pages_skipped": self.pages_skipped,
+                "pages_failed": self.pages_failed,
+                "chunks_created": self.chunks_created,
+                "current_url": self.current_url,
+                "crawl_log": json.dumps(self.logs),
+            },
+        )
 
     def _compute_page_hash(self, html: str) -> str:
         normalized = re.sub(r"\s+", " ", html).strip()
@@ -370,6 +365,7 @@ class WebCrawler:
     def _cleanup_temp(self, site_id: str):
         """Delete temp files after knowledge has been stored."""
         import shutil
+
         temp_dir = Path("data/temp") / site_id
         if temp_dir.exists():
             try:
@@ -491,13 +487,16 @@ class WebCrawler:
         safe, reason = await _is_safe_public_url(start_url, allow_private=self.allow_private_urls)
         if not safe:
             self._log(start_url, "error", error=reason, action="blocked unsafe start URL")
-            await repos.crawl_jobs.update(job_id, {
-                "status": "failed",
-                "error_log": f"Refused to crawl unsafe URL: {reason}",
-                "crawl_log": json.dumps(self.logs),
-                "current_url": None,
-                "finished_at": datetime.now(UTC),
-            })
+            await repos.crawl_jobs.update(
+                job_id,
+                {
+                    "status": "failed",
+                    "error_log": f"Refused to crawl unsafe URL: {reason}",
+                    "crawl_log": json.dumps(self.logs),
+                    "current_url": None,
+                    "finished_at": datetime.now(UTC),
+                },
+            )
             return
 
         base_domain = urlparse(start_url).netloc
@@ -512,10 +511,13 @@ class WebCrawler:
         # Track content hashes seen in this crawl to avoid duplicate chunks
         seen_hashes: set[str] = set()
 
-        await repos.crawl_jobs.update(job_id, {
-            "status": "running",
-            "current_url": start_url,
-        })
+        await repos.crawl_jobs.update(
+            job_id,
+            {
+                "status": "running",
+                "current_url": start_url,
+            },
+        )
 
         # Load already-crawled URLs and hashes for change detection and dedup
         if not self.force_recrawl:
@@ -537,7 +539,11 @@ class WebCrawler:
         if self.force_recrawl:
             features.append("force-recrawl")
         feature_str = f" [{', '.join(features)}]" if features else ""
-        self._log(start_url, "success", action=f"crawl started — target: {base_domain}, max {self.max_pages} pages{feature_str}")
+        self._log(
+            start_url,
+            "success",
+            action=f"crawl started — target: {base_domain}, max {self.max_pages} pages{feature_str}",
+        )
 
         try:
             client_kwargs = {
@@ -553,7 +559,11 @@ class WebCrawler:
                 cookie_dict = {c["name"]: c["value"] for c in self.auth_cookies}
                 client_kwargs["cookies"] = cookie_dict
                 domains = list({c.get("domain", "") for c in self.auth_cookies})
-                self._log("", "success", action=f"using {len(self.auth_cookies)} auth cookies for authenticated crawl (domains: {domains})")
+                self._log(
+                    "",
+                    "success",
+                    action=f"using {len(self.auth_cookies)} auth cookies for authenticated crawl (domains: {domains})",
+                )
 
             async with httpx.AsyncClient(**client_kwargs) as client:
                 robot_parser = await self._check_robots_txt(client, start_url)
@@ -603,7 +613,12 @@ class WebCrawler:
                         status_code, content_type, html = await self._fetch_with_retry(client, url)
 
                         if status_code is None:
-                            self._log(url, "error", error="Request timed out (all retries exhausted)", action=f"timeout after {settings.crawl_request_timeout}s")
+                            self._log(
+                                url,
+                                "error",
+                                error="Request timed out (all retries exhausted)",
+                                action=f"timeout after {settings.crawl_request_timeout}s",
+                            )
                             self.pages_failed += 1
                             await self._save_progress(job_id, repos)
                             continue
@@ -631,12 +646,22 @@ class WebCrawler:
                                     "Too many consecutive auth failures — stopping crawl",
                                     consecutive_failures=self._consecutive_auth_failures,
                                 )
-                                self._log(url, "error", error=f"HTTP {status_code}", action="session expired — too many consecutive auth failures, stopping crawl")
+                                self._log(
+                                    url,
+                                    "error",
+                                    error=f"HTTP {status_code}",
+                                    action="session expired — too many consecutive auth failures, stopping crawl",
+                                )
                                 self.pages_failed += 1
                                 await self._save_progress(job_id, repos)
                                 self._stopped = True
                                 break
-                            self._log(url, "skipped", error=f"HTTP {status_code}", action=f"possible auth failure ({self._consecutive_auth_failures}/3 before stop)")
+                            self._log(
+                                url,
+                                "skipped",
+                                error=f"HTTP {status_code}",
+                                action=f"possible auth failure ({self._consecutive_auth_failures}/3 before stop)",
+                            )
                             self.pages_skipped += 1
                             await self._save_progress(job_id, repos)
                             continue
@@ -691,7 +716,9 @@ class WebCrawler:
                                     and clean_url not in queued_urls
                                     and not self._is_excluded(clean_url)
                                 ):
-                                    safe, _ = await _is_safe_public_url(clean_url, allow_private=self.allow_private_urls)
+                                    safe, _ = await _is_safe_public_url(
+                                        clean_url, allow_private=self.allow_private_urls
+                                    )
                                     if safe:
                                         queue.append((clean_url, child_depth))
                                         queued_urls.add(clean_url)
@@ -711,15 +738,17 @@ class WebCrawler:
                                 chunks[-1]["content"] += "\n\n" + media_md
                                 chunks[-1]["content_hash"] = hashlib.sha256(chunks[-1]["content"].encode()).hexdigest()
                             else:
-                                chunks = [{
-                                    "id": str(uuid.uuid4()),
-                                    "site_id": site_id,
-                                    "source_url": url,
-                                    "title": title,
-                                    "content": media_md,
-                                    "chunk_index": 0,
-                                    "content_hash": hashlib.sha256(media_md.encode()).hexdigest(),
-                                }]
+                                chunks = [
+                                    {
+                                        "id": str(uuid.uuid4()),
+                                        "site_id": site_id,
+                                        "source_url": url,
+                                        "title": title,
+                                        "content": media_md,
+                                        "chunk_index": 0,
+                                        "content_hash": hashlib.sha256(media_md.encode()).hexdigest(),
+                                    }
+                                ]
 
                         # Deduplicate: skip chunks with hashes already seen in this crawl
                         unique_chunks = []
@@ -736,7 +765,8 @@ class WebCrawler:
                         recrawl_tag = " (re-crawl)" if is_recrawl else ""
                         depth_tag = f" [depth={depth}]" if self.max_depth > 0 else ""
                         self._log(
-                            url, "success",
+                            url,
+                            "success",
                             title=title,
                             chunks=len(chunks),
                             action=f"extracted {len(chunks)} chunks ({len(html)} bytes){recrawl_tag}{depth_tag}",
@@ -788,16 +818,19 @@ class WebCrawler:
             )
             self._log("", "success", action=summary)
 
-            await repos.crawl_jobs.update(job_id, {
-                "status": final_status,
-                "pages_done": len(self.visited),
-                "pages_skipped": self.pages_skipped,
-                "pages_failed": self.pages_failed,
-                "chunks_created": self.chunks_created,
-                "current_url": None,
-                "crawl_log": json.dumps(self.logs),
-                "finished_at": datetime.now(UTC),
-            })
+            await repos.crawl_jobs.update(
+                job_id,
+                {
+                    "status": final_status,
+                    "pages_done": len(self.visited),
+                    "pages_skipped": self.pages_skipped,
+                    "pages_failed": self.pages_failed,
+                    "chunks_created": self.chunks_created,
+                    "current_url": None,
+                    "crawl_log": json.dumps(self.logs),
+                    "finished_at": datetime.now(UTC),
+                },
+            )
 
         except Exception as e:
             # Wait for any in-flight background embedding tasks
@@ -810,13 +843,16 @@ class WebCrawler:
                     logger.error("Failed to flush chunks on error", site_id=site_id)
 
             self._log("", "error", error=str(e), action="crawl failed with fatal error")
-            await repos.crawl_jobs.update(job_id, {
-                "status": "failed",
-                "error_log": str(e),
-                "crawl_log": json.dumps(self.logs),
-                "current_url": None,
-                "finished_at": datetime.now(UTC),
-            })
+            await repos.crawl_jobs.update(
+                job_id,
+                {
+                    "status": "failed",
+                    "error_log": str(e),
+                    "crawl_log": json.dumps(self.logs),
+                    "current_url": None,
+                    "finished_at": datetime.now(UTC),
+                },
+            )
 
     # Structural tags that must never be decomposed by the class-name filter
     _PROTECTED_TAGS = frozenset({"html", "body", "main", "article", "section"})
@@ -907,15 +943,17 @@ class WebCrawler:
             if len(current_chunk) + len(para) > max_tokens * 4:
                 if current_chunk:
                     body = current_chunk.strip()
-                    chunks.append({
-                        "id": str(uuid.uuid4()),
-                        "site_id": site_id,
-                        "source_url": source_url,
-                        "title": title,
-                        "content": body,
-                        "chunk_index": chunk_index,
-                        "content_hash": hashlib.sha256(body.encode()).hexdigest(),
-                    })
+                    chunks.append(
+                        {
+                            "id": str(uuid.uuid4()),
+                            "site_id": site_id,
+                            "source_url": source_url,
+                            "title": title,
+                            "content": body,
+                            "chunk_index": chunk_index,
+                            "content_hash": hashlib.sha256(body.encode()).hexdigest(),
+                        }
+                    )
                     chunk_index += 1
                 current_chunk = para
             else:
@@ -923,15 +961,17 @@ class WebCrawler:
 
         if current_chunk.strip():
             body = current_chunk.strip()
-            chunks.append({
-                "id": str(uuid.uuid4()),
-                "site_id": site_id,
-                "source_url": source_url,
-                "title": title,
-                "content": body,
-                "chunk_index": chunk_index,
-                "content_hash": hashlib.sha256(body.encode()).hexdigest(),
-            })
+            chunks.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "site_id": site_id,
+                    "source_url": source_url,
+                    "title": title,
+                    "content": body,
+                    "chunk_index": chunk_index,
+                    "content_hash": hashlib.sha256(body.encode()).hexdigest(),
+                }
+            )
 
         return chunks
 
@@ -967,18 +1007,32 @@ class WebCrawler:
                 results = await asyncio.gather(*[_embed_batch(b) for b in batches])
                 all_embeddings = [e for batch_result in results for e in batch_result]
         except Exception as e:
-            logger.error("Embedding failed, skipping chunk storage", site_id=site_id, chunk_count=len(chunks), error=str(e))
+            logger.error(
+                "Embedding failed, skipping chunk storage", site_id=site_id, chunk_count=len(chunks), error=str(e)
+            )
             return
 
         # Store vectors in ChromaDB
         try:
             await rag_engine.add_chunks(site_id, chunks, all_embeddings)
         except Exception as e:
-            logger.error("Vector store failed, skipping DB storage", site_id=site_id, chunk_count=len(chunks), error=str(e))
+            logger.error(
+                "Vector store failed, skipping DB storage", site_id=site_id, chunk_count=len(chunks), error=str(e)
+            )
             return
 
         # Store chunk metadata in DB — if this fails, clean up the vectors
-        valid_fields = {"id", "site_id", "source_url", "source_type", "title", "content", "chunk_index", "content_hash", "embedding_id"}
+        valid_fields = {
+            "id",
+            "site_id",
+            "source_url",
+            "source_type",
+            "title",
+            "content",
+            "chunk_index",
+            "content_hash",
+            "embedding_id",
+        }
         db_chunks = []
         for chunk in chunks:
             db_chunk = {k: v for k, v in chunk.items() if k in valid_fields}

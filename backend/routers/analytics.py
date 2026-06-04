@@ -3,13 +3,30 @@
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 
-from auth import TokenData, get_current_user
 from fastapi import APIRouter, Depends, Query
-from logging_config import logger
 
+from auth import TokenData, get_current_user
+from logging_config import logger
 from repositories import Repositories, get_repos
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
+
+# Cap on sessions pulled into memory for the message-scanning endpoints below.
+# These read full message blobs, so an unbounded scan would OOM/timeout on a
+# high-traffic site. The overview endpoint is unaffected — it aggregates at the
+# DB layer. Bounded to the most recent sessions; truncation is logged, never silent.
+ANALYTICS_MAX_SESSIONS = 5000
+
+
+async def _load_sessions_capped(repos: Repositories, site_id: str, cutoff: datetime) -> list[dict]:
+    sessions = await repos.chat_sessions.list_by_site_since(site_id, cutoff, limit=ANALYTICS_MAX_SESSIONS)
+    if len(sessions) >= ANALYTICS_MAX_SESSIONS:
+        logger.warning(
+            "Analytics scan truncated to most-recent sessions",
+            site_id=site_id,
+            cap=ANALYTICS_MAX_SESSIONS,
+        )
+    return sessions
 
 
 @router.get("/overview")
@@ -55,7 +72,7 @@ async def get_messages_per_day(
     """Get daily message counts for chart."""
     try:
         cutoff = datetime.now(UTC) - timedelta(days=days)
-        sessions = await repos.chat_sessions.list_by_site_since(site_id, cutoff)
+        sessions = await _load_sessions_capped(repos, site_id, cutoff)
         daily_counts: dict[str, int] = {}
 
         for s in sessions:
@@ -106,7 +123,7 @@ async def get_popular_questions(
     """Get most common user questions."""
     try:
         cutoff = datetime.now(UTC) - timedelta(days=90)
-        sessions = await repos.chat_sessions.list_by_site_since(site_id, cutoff)
+        sessions = await _load_sessions_capped(repos, site_id, cutoff)
         if not sessions:
             return []
         questions = []
@@ -137,13 +154,20 @@ async def get_knowledge_gaps(
     """Find user questions where bot responses indicated no knowledge was found."""
     try:
         cutoff = datetime.now(UTC) - timedelta(days=90)
-        sessions = await repos.chat_sessions.list_by_site_since(site_id, cutoff)
+        sessions = await _load_sessions_capped(repos, site_id, cutoff)
         if not sessions:
             return []
         gap_indicators = [
-            "i don't have", "i'm not sure", "i couldn't find", "no information",
-            "không tìm thấy", "không có thông tin", "tôi không biết",
-            "i don't know", "sorry, i", "i apologize",
+            "i don't have",
+            "i'm not sure",
+            "i couldn't find",
+            "no information",
+            "không tìm thấy",
+            "không có thông tin",
+            "tôi không biết",
+            "i don't know",
+            "sorry, i",
+            "i apologize",
         ]
         gaps: list[str] = []
 
@@ -179,7 +203,7 @@ async def get_tool_usage(
     """Get tool call statistics from chat sessions."""
     try:
         cutoff = datetime.now(UTC) - timedelta(days=days)
-        sessions = await repos.chat_sessions.list_by_site_since(site_id, cutoff)
+        sessions = await _load_sessions_capped(repos, site_id, cutoff)
         tool_calls: Counter = Counter()
         tool_errors: Counter = Counter()
 
@@ -200,12 +224,14 @@ async def get_tool_usage(
         result = []
         for tool in tools:
             name = tool.get("name", "unknown")
-            result.append({
-                "name": name,
-                "calls": tool_calls.get(name, 0),
-                "errors": tool_errors.get(name, 0),
-                "enabled": tool.get("enabled", True),
-            })
+            result.append(
+                {
+                    "name": name,
+                    "calls": tool_calls.get(name, 0),
+                    "errors": tool_errors.get(name, 0),
+                    "enabled": tool.get("enabled", True),
+                }
+            )
         return result
     except Exception as e:
         logger.error("Analytics tool-usage error", error=str(e))

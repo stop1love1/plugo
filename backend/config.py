@@ -22,9 +22,9 @@ if not _dotenv:
 
 # --- Load config.json ---
 _CONFIG_PATHS = [
-    Path(__file__).parent.parent / "config.json",   # project root
-    Path(__file__).parent / "config.json",           # backend/
-    Path("config.json"),                             # cwd
+    Path(__file__).parent.parent / "config.json",  # project root
+    Path(__file__).parent / "config.json",  # backend/
+    Path("config.json"),  # cwd
 ]
 
 _json_config: dict = {}
@@ -84,6 +84,8 @@ class Settings(BaseSettings):
     rate_limit_default: str = _get("rate_limit", "default", "60/minute")
     rate_limit_chat: str = _get("rate_limit", "chat", "30/minute")
     rate_limit_crawl: str = _get("rate_limit", "crawl", "5/minute")
+    # Strict per-IP limit on the admin login endpoint to blunt brute-force attempts.
+    rate_limit_auth: str = _get("rate_limit", "auth", "5/minute")
     # Max simultaneous open SSE streams per site_token. Caps the long-lived
     # connection footprint that slowapi's per-window limiter can't see.
     rate_limit_sse_concurrent: int = _get("rate_limit", "sse_concurrent", 10)
@@ -103,6 +105,10 @@ class Settings(BaseSettings):
     crawl_max_retries: int = _get("crawl", "max_retries", 2)
     crawl_scheduler_interval: int = _get("crawl", "scheduler_interval_seconds", 300)
     crawl_embed_batch_size: int = _get("crawl", "embed_batch_size", 200)
+
+    # --- Session retention (from config.json → session) ---
+    # Chat sessions older than this many days are purged by the scheduler. 0 disables.
+    session_retention_days: int = _get("session", "retention_days", 90)
 
     # --- Auth (from config.json → auth) ---
     auth_enabled: bool = _get("auth", "enabled", True)
@@ -151,12 +157,22 @@ def validate_settings():
         )
 
     if settings.auth_enabled and (
-        not settings.admin_username
-        or not settings.admin_password
-        or settings.admin_password == "pluginme"
+        not settings.admin_username or not settings.admin_password or settings.admin_password == "pluginme"
     ):
         raise RuntimeError(
             "FATAL: admin credentials are missing or use the legacy default. "
             "Set USERNAME and PASSWORD in .env — the default admin credentials "
             "must be changed before starting."
+        )
+
+    # In production, refuse to start with the docker-compose default MongoDB
+    # password baked into the connection string.
+    if (
+        os.environ.get("ENV", "development") == "production"
+        and settings.database_provider == "mongodb"
+        and "plugo_dev_password" in settings.mongodb_url
+    ):
+        raise RuntimeError(
+            "FATAL: MongoDB is using the default development password. "
+            "Set a strong MONGO_PASSWORD before running in production."
         )

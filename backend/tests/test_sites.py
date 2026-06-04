@@ -1,16 +1,21 @@
 """Tests for Sites CRUD flow and the per-site origin validator."""
 
 import pytest
+
 from utils.cors import validate_site_origin
 
 
 @pytest.mark.asyncio
 async def test_create_site(client, auth_headers):
     """POST /api/sites should create a new site."""
-    response = await client.post("/api/sites", json={
-        "name": "My Test Site",
-        "url": "https://mysite.com",
-    }, headers=auth_headers)
+    response = await client.post(
+        "/api/sites",
+        json={
+            "name": "My Test Site",
+            "url": "https://mysite.com",
+        },
+        headers=auth_headers,
+    )
     assert response.status_code == 200
 
     data = response.json()
@@ -27,11 +32,14 @@ async def test_create_site(client, auth_headers):
     await client.delete(f"/api/sites/{data['id']}", headers=auth_headers)
 
 
-@pytest.mark.parametrize("overrides", [
-    {"llm_provider": "invalid_provider"},
-    {"primary_color": "not-a-color"},
-    {"name": ""},
-])
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"llm_provider": "invalid_provider"},
+        {"primary_color": "not-a-color"},
+        {"name": ""},
+    ],
+)
 @pytest.mark.asyncio
 async def test_create_site_rejects_invalid_payload(client, auth_headers, overrides):
     """POST /api/sites with invalid provider / color / empty name should 422."""
@@ -72,10 +80,14 @@ async def test_get_site_not_found(client, auth_headers):
 @pytest.mark.asyncio
 async def test_update_site(client, auth_headers, test_site):
     """PUT /api/sites/{site_id} should update site fields."""
-    response = await client.put(f"/api/sites/{test_site['id']}", json={
-        "name": "Updated Name",
-        "primary_color": "#ff0000",
-    }, headers=auth_headers)
+    response = await client.put(
+        f"/api/sites/{test_site['id']}",
+        json={
+            "name": "Updated Name",
+            "primary_color": "#ff0000",
+        },
+        headers=auth_headers,
+    )
     assert response.status_code == 200
 
     data = response.json()
@@ -86,15 +98,20 @@ async def test_update_site(client, auth_headers, test_site):
 @pytest.mark.asyncio
 async def test_update_site_not_found(client, auth_headers):
     """PUT /api/sites/{site_id} with invalid id should return 404."""
-    response = await client.put("/api/sites/nonexistent-id", json={
-        "name": "Ghost Site",
-    }, headers=auth_headers)
+    response = await client.put(
+        "/api/sites/nonexistent-id",
+        json={
+            "name": "Ghost Site",
+        },
+        headers=auth_headers,
+    )
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_update_site_rejects_non_working_model(client, auth_headers, test_site, monkeypatch):
     """PUT /api/sites/{site_id} should reject model configs that fail verification."""
+
     async def fake_get_llm_provider(provider: str | None = None, model: str | None = None):
         raise AssertionError("This helper should not be awaited")
 
@@ -118,10 +135,12 @@ async def test_update_site_rejects_non_working_model(client, auth_headers, test_
 async def test_delete_site(client, auth_headers, db_repos):
     """DELETE /api/sites/{site_id} should delete the site."""
     # Create a site to delete
-    site = await db_repos.sites.create({
-        "name": "To Delete",
-        "url": "https://delete.me",
-    })
+    site = await db_repos.sites.create(
+        {
+            "name": "To Delete",
+            "url": "https://delete.me",
+        }
+    )
 
     response = await client.delete(f"/api/sites/{site['id']}", headers=auth_headers)
     assert response.status_code == 200
@@ -139,11 +158,14 @@ async def test_delete_site_not_found(client, auth_headers):
     assert response.status_code == 404
 
 
-@pytest.mark.parametrize("method, path", [
-    ("POST", "/api/sites"),
-    ("GET", "/api/sites"),
-    ("PUT", "/api/sites/any-id"),
-])
+@pytest.mark.parametrize(
+    "method, path",
+    [
+        ("POST", "/api/sites"),
+        ("GET", "/api/sites"),
+        ("PUT", "/api/sites/any-id"),
+    ],
+)
 @pytest.mark.asyncio
 async def test_sites_endpoints_require_auth(client, method, path):
     """All admin site endpoints must reject unauthenticated requests with 401."""

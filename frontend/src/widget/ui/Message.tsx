@@ -42,11 +42,14 @@ function handleMsgClick(e: Event) {
   if (!slideshow) return;
   const slides = slideshow.querySelectorAll(".plugo-slide");
   let active = -1;
-  slides.forEach((s, i) => { if (s.classList.contains("active")) active = i; });
+  slides.forEach((s, i) => {
+    if (s.classList.contains("active")) active = i;
+  });
   if (active < 0) return;
-  const next = btn.dataset.dir === "next"
-    ? (active + 1) % slides.length
-    : (active - 1 + slides.length) % slides.length;
+  const next =
+    btn.dataset.dir === "next"
+      ? (active + 1) % slides.length
+      : (active - 1 + slides.length) % slides.length;
   goToSlide(slideshow, next);
 }
 
@@ -91,7 +94,16 @@ function ToolCallCard({ toolName, isComplete }: { toolName: string; isComplete: 
       </div>
       {!isComplete && <div class="plugo-spinner" />}
       {isComplete && (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="#22c55e"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <polyline points="20 6 9 17 4 12" />
         </svg>
       )}
@@ -126,13 +138,24 @@ function CitationsFooter({ items }: { items: Citation[] }) {
   );
 }
 
-export function Message({ role, content, timestamp, index, isError, isStreaming, isLastInGroup = true, citations, onFeedback, onRetry }: MessageProps) {
+export function Message({
+  role,
+  content,
+  timestamp,
+  index,
+  isError,
+  isStreaming,
+  isLastInGroup = true,
+  citations,
+  onFeedback,
+  onRetry,
+}: MessageProps) {
   const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
 
   // Check for tool call markers in bot content
   const toolCall = useMemo(
     () => (content && role === "bot" && !isError ? parseToolCalls(content) : null),
-    [role, content, isError]
+    [role, content, isError],
   );
 
   // Strip tool call lines from content for markdown rendering
@@ -141,13 +164,10 @@ export function Message({ role, content, timestamp, index, isError, isStreaming,
     return content.replace(/^>\s*Calling \*\*.+?\*\*.*$/gm, "").trim();
   }, [content, toolCall]);
 
-  const html = useMemo(
-    () => {
-      if (role !== "bot" || isError || !cleanContent) return null;
-      return isStreaming ? parseStreamingMarkdown(cleanContent) : parseMarkdown(cleanContent);
-    },
-    [role, cleanContent, isError, isStreaming]
-  );
+  const html = useMemo(() => {
+    if (role !== "bot" || isError || !cleanContent) return null;
+    return isStreaming ? parseStreamingMarkdown(cleanContent) : parseMarkdown(cleanContent);
+  }, [role, cleanContent, isError, isStreaming]);
 
   if (!content) return null;
 
@@ -158,9 +178,8 @@ export function Message({ role, content, timestamp, index, isError, isStreaming,
     }
   };
 
-  const timeDisplay = isLastInGroup && timestamp ? (
-    <div class="plugo-msg-time">{formatTime(timestamp)}</div>
-  ) : null;
+  const timeDisplay =
+    isLastInGroup && timestamp ? <div class="plugo-msg-time">{formatTime(timestamp)}</div> : null;
 
   // Error messages
   if (isError) {
@@ -170,7 +189,17 @@ export function Message({ role, content, timestamp, index, isError, isStreaming,
           <div class="plugo-msg bot plugo-error">{content}</div>
           {onRetry && (
             <button class="plugo-retry-btn" onClick={onRetry} aria-label="Retry">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                style="vertical-align: middle; margin-right: 4px;"
+              >
                 <polyline points="23 4 23 10 17 10" />
                 <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
               </svg>
@@ -202,8 +231,24 @@ export function Message({ role, content, timestamp, index, isError, isStreaming,
           )}
           {showActions && (
             <div class={`plugo-actions${feedback ? " has-feedback" : ""}`}>
-              <button class="plugo-action-btn" onClick={() => { navigator.clipboard.writeText(cleanContent); }} aria-label="Copy" title="Copy">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <button
+                class="plugo-action-btn"
+                onClick={() => {
+                  navigator.clipboard.writeText(cleanContent);
+                }}
+                aria-label="Copy"
+                title="Copy"
+              >
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                   <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                 </svg>
@@ -213,18 +258,38 @@ export function Message({ role, content, timestamp, index, isError, isStreaming,
                   <button
                     class={`plugo-action-btn${feedback === "up" ? " active" : ""}`}
                     onClick={() => handleFeedback("up")}
-                    aria-label="Helpful" title="Helpful"
+                    aria-label="Helpful"
+                    title="Helpful"
                   >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill={feedback === "up" ? "currentColor" : "none"} stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill={feedback === "up" ? "currentColor" : "none"}
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
                       <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
                     </svg>
                   </button>
                   <button
                     class={`plugo-action-btn${feedback === "down" ? " active" : ""}`}
                     onClick={() => handleFeedback("down")}
-                    aria-label="Not helpful" title="Not helpful"
+                    aria-label="Not helpful"
+                    title="Not helpful"
                   >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill={feedback === "down" ? "currentColor" : "none"} stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill={feedback === "down" ? "currentColor" : "none"}
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
                       <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17" />
                     </svg>
                   </button>
@@ -232,7 +297,16 @@ export function Message({ role, content, timestamp, index, isError, isStreaming,
               )}
               {onRetry && (
                 <button class="plugo-action-btn" onClick={onRetry} aria-label="Retry" title="Retry">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
                     <polyline points="23 4 23 10 17 10" />
                     <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
                   </svg>
@@ -248,7 +322,11 @@ export function Message({ role, content, timestamp, index, isError, isStreaming,
 
   // User messages
   return (
-    <div class={`plugo-msg-row ${role}`} role="article" aria-label={role === "user" ? "Your message" : "Bot message"}>
+    <div
+      class={`plugo-msg-row ${role}`}
+      role="article"
+      aria-label={role === "user" ? "Your message" : "Bot message"}
+    >
       <div class={`plugo-msg-wrapper ${role}`}>
         <div class={`plugo-msg ${role}`}>{content}</div>
         {timeDisplay}

@@ -33,9 +33,8 @@ async def _ensure_db():
     global _db_initialized
     if not _db_initialized:
         # Import all models so Base.metadata knows about all tables
-        from database import Base, engine
-
         import models  # noqa: F401
+        from database import Base, engine
 
         # Drop and recreate all tables to ensure schema is up-to-date
         async with engine.begin() as conn:
@@ -47,6 +46,19 @@ async def _ensure_db():
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.fixture(autouse=True)
+def _disable_rate_limiter():
+    """slowapi's limiter state is process-global (app + limiter are module-cached),
+    so per-window limits would otherwise leak across tests and make ordering matter.
+    Disable it by default; tests that specifically exercise rate limiting flip it
+    back on locally inside the test body."""
+    with contextlib.suppress(Exception):
+        from main import limiter
+
+        limiter.enabled = False
+    yield
 
 
 @pytest.fixture
@@ -81,15 +93,17 @@ async def auth_headers():
 @pytest.fixture
 async def test_site(db_repos, auth_headers):
     """Create a test site and return its data."""
-    site = await db_repos.sites.create({
-        "name": "Test Site",
-        "url": "https://example.com",
-        "llm_provider": "claude",
-        "llm_model": "claude-sonnet-4-20250514",
-        "primary_color": "#6366f1",
-        "greeting": "Hello!",
-        "allowed_domains": "",
-    })
+    site = await db_repos.sites.create(
+        {
+            "name": "Test Site",
+            "url": "https://example.com",
+            "llm_provider": "claude",
+            "llm_model": "claude-sonnet-4-20250514",
+            "primary_color": "#6366f1",
+            "greeting": "Hello!",
+            "allowed_domains": "",
+        }
+    )
     yield site
     # Cleanup
     with contextlib.suppress(Exception):

@@ -1,8 +1,9 @@
 import uuid
 from datetime import UTC, datetime
 
-from database import Base
 from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text
+
+from database import Base
 
 
 class VisitorMemory(Base):
@@ -21,9 +22,7 @@ class VisitorMemory(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
-    __table_args__ = (
-        Index("ix_visitor_memory_lookup", "visitor_id", "site_id", "key"),
-    )
+    __table_args__ = (Index("ix_visitor_memory_lookup", "visitor_id", "site_id", "key"),)
 
 
 class ConversationSummary(Base):

@@ -27,9 +27,26 @@ type WindowProps = {
   onMinimize?: () => void;
   onFeedback?: (index: number, rating: "up" | "down") => void;
   onRetry?: (errorIndex: number) => void;
+  onReconnect?: () => void;
 };
 
-export function ChatWindow({ messages, isTyping, position, suggestions, connectionState, widgetTitle, botAvatar, headerSubtitle, inputPlaceholder, onSend, onClose, onMinimize, onFeedback, onRetry }: WindowProps) {
+export function ChatWindow({
+  messages,
+  isTyping,
+  position,
+  suggestions,
+  connectionState,
+  widgetTitle,
+  botAvatar,
+  headerSubtitle,
+  inputPlaceholder,
+  onSend,
+  onClose,
+  onMinimize,
+  onFeedback,
+  onRetry,
+  onReconnect,
+}: WindowProps) {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -94,7 +111,7 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
       if (ke.key !== "Tab") return;
 
       const focusable = windowRef.current?.querySelectorAll<HTMLElement>(
-        'button, textarea, [tabindex]:not([tabindex="-1"])'
+        'button, textarea, [tabindex]:not([tabindex="-1"])',
       );
       if (!focusable?.length) return;
       const first = focusable[0];
@@ -150,7 +167,13 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
   };
 
   return (
-    <div class={`plugo-window ${position}`} ref={windowRef} role="dialog" aria-modal="true" aria-label={widgetTitle || "Chat"}>
+    <div
+      class={`plugo-window ${position}`}
+      ref={windowRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={widgetTitle || "Chat"}
+    >
       <div class="plugo-header">
         <div class="plugo-header-left">
           <div class="plugo-header-avatar">{botAvatar || "\u{1F4AC}"}</div>
@@ -166,16 +189,20 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
                   ? "Online"
                   : getWidgetString(
                       connectionState as "connecting" | "reconnecting" | "disconnected",
-                      lang
+                      lang,
                     ))}
             </div>
           </div>
         </div>
         <div class="plugo-header-actions">
           {onMinimize && (
-            <button onClick={onMinimize} aria-label="Minimize" title="Minimize">&minus;</button>
+            <button onClick={onMinimize} aria-label="Minimize" title="Minimize">
+              &minus;
+            </button>
           )}
-          <button onClick={onClose} aria-label="Close" title="Close">&times;</button>
+          <button onClick={onClose} aria-label="Close" title="Close">
+            &times;
+          </button>
         </div>
       </div>
 
@@ -187,7 +214,19 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
         <div class="plugo-status-bar reconnecting">{getWidgetString("reconnecting", lang)}</div>
       )}
       {connectionState === "disconnected" && (
-        <div class="plugo-status-bar disconnected">{getWidgetString("disconnected", lang)}</div>
+        <div class="plugo-status-bar disconnected">
+          <span>{getWidgetString("disconnected", lang)}</span>
+          {onReconnect && (
+            <button
+              type="button"
+              class="plugo-reconnect-btn"
+              onClick={onReconnect}
+              style="margin-left:8px;background:none;border:none;color:inherit;text-decoration:underline;cursor:pointer;font:inherit;padding:0;"
+            >
+              {getWidgetString("reconnect", lang)}
+            </button>
+          )}
+        </div>
       )}
 
       <div
@@ -208,34 +247,41 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
               timestamp={msg.timestamp}
               index={i}
               isError={msgIsError}
-              isStreaming={isTyping && i === messages.length - 1 && msg.role === "bot" && !msgIsError}
+              isStreaming={
+                isTyping && i === messages.length - 1 && msg.role === "bot" && !msgIsError
+              }
               isLastInGroup={isLastInGroup(i)}
               citations={msg.citations}
-              onFeedback={msg.role === "bot" && msg.content && !msgIsError && !isTyping ? onFeedback : undefined}
+              onFeedback={
+                msg.role === "bot" && msg.content && !msgIsError && !isTyping
+                  ? onFeedback
+                  : undefined
+              }
               onRetry={msgIsError && onRetry && !isTyping ? () => onRetry(i) : undefined}
             />
           );
         })}
-        {isTyping && !(messages.length > 0 && messages[messages.length - 1].role === "bot" && messages[messages.length - 1].content) && (
-          <div class="plugo-msg-row bot">
-            <div class="plugo-typing">
-              <span />
-              <span />
-              <span />
+        {isTyping &&
+          !(
+            messages.length > 0 &&
+            messages[messages.length - 1].role === "bot" &&
+            messages[messages.length - 1].content
+          ) && (
+            <div class="plugo-msg-row bot">
+              <div class="plugo-typing">
+                <span />
+                <span />
+                <span />
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* Suggestion buttons — only show when no conversation yet (just greeting) */}
         {suggestions.length > 0 && !isTyping && messages.length <= 1 && (
           <div class="plugo-suggestions">
             <div class="plugo-suggestions-list">
               {suggestions.slice(0, 4).map((s, i) => (
-                <button
-                  key={i}
-                  class="plugo-suggestion-btn"
-                  onClick={() => onSend(s)}
-                >
+                <button key={i} class="plugo-suggestion-btn" onClick={() => onSend(s)}>
                   {s}
                 </button>
               ))}
@@ -264,8 +310,19 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
           maxLength={MAX_INPUT_LENGTH}
           rows={1}
         />
-        <button type="submit" disabled={!input.trim() || isTyping || isOffline} aria-label={getWidgetString("send", lang)}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <button
+          type="submit"
+          disabled={!input.trim() || isTyping || isOffline}
+          aria-label={getWidgetString("send", lang)}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
             <line x1="22" y1="2" x2="11" y2="13" />
             <polygon points="22 2 15 22 11 13 2 9 22 2" />
           </svg>
@@ -273,7 +330,9 @@ export function ChatWindow({ messages, isTyping, position, suggestions, connecti
       </form>
       {/* Character counter */}
       {input.length > MAX_INPUT_LENGTH * 0.6 && (
-        <div class={`plugo-char-counter${input.length > MAX_INPUT_LENGTH * 0.95 ? " danger" : input.length > MAX_INPUT_LENGTH * 0.8 ? " warning" : ""}`}>
+        <div
+          class={`plugo-char-counter${input.length > MAX_INPUT_LENGTH * 0.95 ? " danger" : input.length > MAX_INPUT_LENGTH * 0.8 ? " warning" : ""}`}
+        >
           {input.length}/{MAX_INPUT_LENGTH}
         </div>
       )}

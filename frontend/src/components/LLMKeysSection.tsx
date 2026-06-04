@@ -72,8 +72,7 @@ export function LLMKeysSection({ providers }: { providers: Provider[] }) {
 
   const keyProviders = providers.filter((p) => p.requires_key);
 
-  const getKeyInfo = (providerId: string) =>
-    savedKeys.find((k) => k.provider === providerId);
+  const getKeyInfo = (providerId: string) => savedKeys.find((k) => k.provider === providerId);
 
   return (
     <div className="bg-white p-6 rounded-xl border border-gray-200">
@@ -94,7 +93,9 @@ export function LLMKeysSection({ providers }: { providers: Provider[] }) {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-sm">{provider.name}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${badge.className}`}>
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${badge.className}`}
+                  >
                     {badge.showIcon && <Check className="w-3 h-3" />}
                     {badge.label}
                   </span>
@@ -121,7 +122,11 @@ export function LLMKeysSection({ providers }: { providers: Provider[] }) {
                     }}
                     className="text-xs text-primary-600 hover:text-primary-700 px-2 py-1 font-medium"
                   >
-                    {isEditing ? t("common.cancel") : keyInfo ? t("common.edit") : t("settings.addKey")}
+                    {isEditing
+                      ? t("common.cancel")
+                      : keyInfo
+                        ? t("common.edit")
+                        : t("settings.addKey")}
                   </button>
                 </div>
               </div>
@@ -148,7 +153,9 @@ export function LLMKeysSection({ providers }: { providers: Provider[] }) {
                     </button>
                   </div>
                   <button
-                    onClick={() => saveMutation.mutate({ provider: provider.id, api_key: keyInput })}
+                    onClick={() =>
+                      saveMutation.mutate({ provider: provider.id, api_key: keyInput })
+                    }
                     disabled={!keyInput || saveMutation.isPending}
                     className="bg-primary-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-primary-700 disabled:opacity-50"
                   >

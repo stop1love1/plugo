@@ -111,13 +111,19 @@ export default function AuditLog() {
                       <span className="font-medium text-gray-700">{log.username}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded ${actionColors[log.action] || "bg-gray-50 text-gray-600"}`}>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded ${actionColors[log.action] || "bg-gray-50 text-gray-600"}`}
+                      >
                         {log.action}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {log.resource_type}
-                      {log.resource_id && <span className="text-xs text-gray-400 ml-1">({log.resource_id.substring(0, 8)}...)</span>}
+                      {log.resource_id && (
+                        <span className="text-xs text-gray-400 ml-1">
+                          ({log.resource_id.substring(0, 8)}...)
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-gray-500 text-xs max-w-[320px]">
                       <DetailsCell details={log.details} />

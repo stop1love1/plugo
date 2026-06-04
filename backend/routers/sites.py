@@ -1,11 +1,11 @@
 import asyncio
 import json
 
-from auth import TokenData, get_current_user
 from fastapi import APIRouter, Depends, HTTPException
-from logging_config import logger
 from pydantic import BaseModel, Field
 
+from auth import TokenData, get_current_user
+from logging_config import logger
 from providers.factory import get_all_providers, get_llm_provider
 from repositories import Repositories, get_repos
 from routers.chat import invalidate_site_cache
@@ -30,6 +30,7 @@ class SiteCreate(BaseModel):
 
 class SiteUpdate(BaseModel):
     """Editable site settings from the dashboard."""
+
     name: str | None = None
     url: str | None = None
     llm_provider: str | None = None
@@ -90,14 +91,16 @@ async def create_site(
 ):
     site = await repos.sites.create(data.model_dump())
     try:
-        await repos.audit_logs.create({
-            "user_id": user.sub,
-            "username": user.sub,
-            "action": "create",
-            "resource_type": "site",
-            "resource_id": site["id"],
-            "details": json.dumps({"name": data.name, "url": data.url}),
-        })
+        await repos.audit_logs.create(
+            {
+                "user_id": user.sub,
+                "username": user.sub,
+                "action": "create",
+                "resource_type": "site",
+                "resource_id": site["id"],
+                "details": json.dumps({"name": data.name, "url": data.url}),
+            }
+        )
     except Exception as e:
         logger.warning("Failed to create audit log", error=str(e))
     return site
@@ -118,6 +121,7 @@ async def list_providers(_user: TokenData = Depends(get_current_user)):
 
 # --- Approval (must be before /{site_id} to avoid route conflict) ---
 
+
 @router.put("/{site_id}/approval")
 async def update_site_approval(
     site_id: str,
@@ -135,8 +139,11 @@ async def update_site_approval(
 
 # --- CRUD (generic /{site_id} routes last) ---
 
+
 @router.get("/{site_id}")
-async def get_site(site_id: str, repos: Repositories = Depends(get_repos), _user: TokenData = Depends(get_current_user)):
+async def get_site(
+    site_id: str, repos: Repositories = Depends(get_repos), _user: TokenData = Depends(get_current_user)
+):
     site = await repos.sites.get_by_id(site_id)
     if not site:
         raise HTTPException(status_code=404, detail="Site not found")
@@ -168,32 +175,33 @@ async def update_site(
     site = await repos.sites.update(site_id, update_payload)
     invalidate_site_cache()  # Clear all since we don't know token from site_id easily
     try:
-        await repos.audit_logs.create({
-            "user_id": user.sub,
-            "username": user.sub,
-            "action": "update",
-            "resource_type": "site",
-            "resource_id": site_id,
-            "details": json.dumps(data.model_dump(exclude_none=True)),
-        })
+        await repos.audit_logs.create(
+            {
+                "user_id": user.sub,
+                "username": user.sub,
+                "action": "update",
+                "resource_type": "site",
+                "resource_id": site_id,
+                "details": json.dumps(data.model_dump(exclude_none=True)),
+            }
+        )
     except Exception as e:
         logger.warning("Failed to create audit log", error=str(e))
 
     # Dedicated audit entry when the SSRF escape hatch is toggled on — operators
     # should be able to answer "who enabled private-URL crawls for this site?" fast.
-    if (
-        update_payload.get("allow_private_urls") is True
-        and existing_site.get("allow_private_urls") is not True
-    ):
+    if update_payload.get("allow_private_urls") is True and existing_site.get("allow_private_urls") is not True:
         try:
-            await repos.audit_logs.create({
-                "user_id": user.sub,
-                "username": user.sub,
-                "action": "site.allow_private_urls.enabled",
-                "resource_type": "site",
-                "resource_id": site_id,
-                "details": json.dumps({"site_id": site_id}),
-            })
+            await repos.audit_logs.create(
+                {
+                    "user_id": user.sub,
+                    "username": user.sub,
+                    "action": "site.allow_private_urls.enabled",
+                    "resource_type": "site",
+                    "resource_id": site_id,
+                    "details": json.dumps({"site_id": site_id}),
+                }
+            )
         except Exception as e:
             logger.warning("Failed to create audit log for allow_private_urls", error=str(e))
         logger.warning(
@@ -215,14 +223,16 @@ async def delete_site(
         raise HTTPException(status_code=404, detail="Site not found")
     invalidate_site_cache()  # Clear all since we don't know token from site_id easily
     try:
-        await repos.audit_logs.create({
-            "user_id": user.sub,
-            "username": user.sub,
-            "action": "delete",
-            "resource_type": "site",
-            "resource_id": site_id,
-            "details": json.dumps({"site_id": site_id}),
-        })
+        await repos.audit_logs.create(
+            {
+                "user_id": user.sub,
+                "username": user.sub,
+                "action": "delete",
+                "resource_type": "site",
+                "resource_id": site_id,
+                "details": json.dumps({"site_id": site_id}),
+            }
+        )
     except Exception as e:
         logger.warning("Failed to create audit log", error=str(e))
     return {"message": "Site deleted"}

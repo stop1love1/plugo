@@ -6,6 +6,8 @@ from providers.base import BaseLLMProvider
 
 
 class ClaudeProvider(BaseLLMProvider):
+    supports_tools = True  # Anthropic tool_use is implemented in chat() below.
+
     def __init__(self, api_key: str, model: str = "claude-sonnet-4-20250514"):
         self.client = anthropic.AsyncAnthropic(api_key=api_key)
         self.model = model
@@ -83,11 +85,13 @@ class ClaudeProvider(BaseLLMProvider):
         """Convert generic tool format to Anthropic tool format."""
         anthropic_tools = []
         for tool in tools:
-            anthropic_tools.append({
-                "name": tool["name"],
-                "description": tool["description"],
-                "input_schema": tool.get("parameters", {}),
-            })
+            anthropic_tools.append(
+                {
+                    "name": tool["name"],
+                    "description": tool["description"],
+                    "input_schema": tool.get("parameters", {}),
+                }
+            )
         return anthropic_tools
 
     def _parse_response(self, response) -> dict:
@@ -96,11 +100,13 @@ class ClaudeProvider(BaseLLMProvider):
             if block.type == "text":
                 result["content"] += block.text
             elif block.type == "tool_use":
-                result["tool_calls"].append({
-                    "id": block.id,
-                    "name": block.name,
-                    "arguments": block.input,
-                })
+                result["tool_calls"].append(
+                    {
+                        "id": block.id,
+                        "name": block.name,
+                        "arguments": block.input,
+                    }
+                )
         result["stop_reason"] = response.stop_reason
         return result
 

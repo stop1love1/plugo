@@ -24,3 +24,10 @@ async def test_health_endpoint(client):
     data = response.json()
     assert data["status"] == "ok"
     assert "database" in data
+
+
+@pytest.mark.asyncio
+async def test_response_has_request_id_header(client):
+    """Every response must carry an X-Request-ID for log correlation."""
+    response = await client.get("/health")
+    assert response.headers.get("X-Request-ID")

@@ -7,6 +7,10 @@ from providers.base import BaseLLMProvider
 
 
 class OllamaProvider(BaseLLMProvider):
+    # The /api/chat path here doesn't implement function calling, so chat()
+    # always returns tool_calls: []. Declared explicitly for clarity.
+    supports_tools = False
+
     def __init__(self, base_url: str = "http://localhost:11434", model: str = "llama3"):
         self.base_url = base_url.rstrip("/")
         self.model = model
@@ -54,16 +58,19 @@ class OllamaProvider(BaseLLMProvider):
             msgs.append({"role": "system", "content": system_prompt})
         msgs.extend(messages)
 
-        async with httpx.AsyncClient(timeout=120) as client, client.stream(
-            "POST",
-            f"{self.base_url}/api/chat",
-            json={
-                "model": self.model,
-                "messages": msgs,
-                "stream": True,
-                "options": {"temperature": temperature},
-            },
-        ) as response:
+        async with (
+            httpx.AsyncClient(timeout=120) as client,
+            client.stream(
+                "POST",
+                f"{self.base_url}/api/chat",
+                json={
+                    "model": self.model,
+                    "messages": msgs,
+                    "stream": True,
+                    "options": {"temperature": temperature},
+                },
+            ) as response,
+        ):
             async for line in response.aiter_lines():
                 if line:
                     data = json.loads(line)
@@ -73,6 +80,7 @@ class OllamaProvider(BaseLLMProvider):
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         import asyncio
+
         async with httpx.AsyncClient(timeout=60) as client:
             tasks = [
                 client.post(

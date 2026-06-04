@@ -25,7 +25,11 @@ function getYouTubeId(url: string): string | null {
 
 /** Escape a string for safe use inside an HTML attribute */
 function escapeAttr(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 /** Escape a string for safe use as HTML text content */
@@ -48,10 +52,7 @@ const marked = new Marked({
   renderer: {
     // Escape raw HTML to prevent XSS
     html(token) {
-      return token.text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
+      return token.text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     },
     code(token) {
       const lang = token.lang || "";
@@ -95,7 +96,7 @@ const marked = new Marked({
 function wrapButtonGroups(html: string): string {
   return html.replace(
     /(<a [^>]*class="plugo-btn"[^>]*>.*?<\/a>\s*)+/g,
-    (match) => `<div class="plugo-btn-group">${match.trim()}</div>`
+    (match) => `<div class="plugo-btn-group">${match.trim()}</div>`,
   );
 }
 
@@ -131,15 +132,18 @@ function renderSlideshow(imageHtmlArr: string[]): string {
     .map((imgHtml, i) => `<div class="plugo-slide${i === 0 ? " active" : ""}">${imgHtml}</div>`)
     .join("");
   const dots = imageHtmlArr
-    .map((_, i) => `<button class="plugo-slide-dot${i === 0 ? " active" : ""}" data-slide="${i}"></button>`)
+    .map(
+      (_, i) =>
+        `<button class="plugo-slide-dot${i === 0 ? " active" : ""}" data-slide="${i}"></button>`,
+    )
     .join("");
   return (
     `<div class="plugo-slideshow" data-total="${total}">` +
-      `<div class="plugo-slides">${slides}` +
-        `<button class="plugo-slide-prev" data-dir="prev">\u2039</button>` +
-        `<button class="plugo-slide-next" data-dir="next">\u203A</button>` +
-      `</div>` +
-      `<div class="plugo-slide-nav">${dots}<span class="plugo-slide-count">1/${total}</span></div>` +
+    `<div class="plugo-slides">${slides}` +
+    `<button class="plugo-slide-prev" data-dir="prev">\u2039</button>` +
+    `<button class="plugo-slide-next" data-dir="next">\u203A</button>` +
+    `</div>` +
+    `<div class="plugo-slide-nav">${dots}<span class="plugo-slide-count">1/${total}</span></div>` +
     `</div>`
   );
 }
@@ -156,29 +160,30 @@ function buildSlideshowHtml(markdownImages: string): string {
     return `<div class="plugo-image"><img src="${escapeAttr(images[0].url)}" alt="${escapeAttr(images[0].alt)}" loading="lazy" /></div>`;
   }
   const htmlArr = images.map(
-    (img) => `<div class="plugo-image"><img src="${escapeAttr(img.url)}" alt="${escapeAttr(img.alt)}" loading="lazy" /></div>`,
+    (img) =>
+      `<div class="plugo-image"><img src="${escapeAttr(img.url)}" alt="${escapeAttr(img.alt)}" loading="lazy" /></div>`,
   );
   return renderSlideshow(htmlArr);
 }
 
 function restoreGalleries(html: string, galleries: string[]): string {
   // Match the placeholder in any context (may be wrapped in <p> tags by marked)
-  return html.replace(new RegExp(`(?:<p>)?${GALLERY_PLACEHOLDER}(\\d+)END(?:<\\/p>)?`, "g"), (_m, idx) => {
-    const content = galleries[Number(idx)];
-    return content ? buildSlideshowHtml(content) : "";
-  });
+  return html.replace(
+    new RegExp(`(?:<p>)?${GALLERY_PLACEHOLDER}(\\d+)END(?:<\\/p>)?`, "g"),
+    (_m, idx) => {
+      const content = galleries[Number(idx)];
+      return content ? buildSlideshowHtml(content) : "";
+    },
+  );
 }
 
 /** Fallback: wrap consecutive images into a slideshow (for old responses without :::gallery) */
 function wrapImageSlideshow(html: string): string {
-  return html.replace(
-    /(<div class="plugo-image">.*?<\/div>\s*){2,}/g,
-    (match) => {
-      const images = match.match(/<div class="plugo-image">.*?<\/div>/gs) || [];
-      if (images.length < 2) return match;
-      return renderSlideshow(images);
-    }
-  );
+  return html.replace(/(<div class="plugo-image">.*?<\/div>\s*){2,}/g, (match) => {
+    const images = match.match(/<div class="plugo-image">.*?<\/div>/gs) || [];
+    if (images.length < 2) return match;
+    return renderSlideshow(images);
+  });
 }
 
 /**
@@ -201,7 +206,7 @@ function closeIncompleteMarkdown(text: string): string {
   }
 
   // Close unclosed :::gallery block — append ::: so it renders as slideshow during streaming
-  if (/:::gallery\n/.test(s) && !(GALLERY_RE.test(s))) {
+  if (/:::gallery\n/.test(s) && !GALLERY_RE.test(s)) {
     // Reset regex lastIndex since we use /g flag
     GALLERY_RE.lastIndex = 0;
     s += "\n:::";

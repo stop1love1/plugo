@@ -9,7 +9,11 @@ export function useKeyboardShortcuts() {
     const handler = (e: KeyboardEvent) => {
       // Don't trigger when typing in inputs
       const target = e.target as HTMLElement;
-      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT") {
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT"
+      ) {
         return;
       }
 
@@ -18,7 +22,9 @@ export function useKeyboardShortcuts() {
       // Ctrl+K — Quick search (focus first search input on page)
       if (isCtrl && e.key === "k") {
         e.preventDefault();
-        const searchInput = document.querySelector<HTMLInputElement>('input[type="text"], input[placeholder*="earch"]');
+        const searchInput = document.querySelector<HTMLInputElement>(
+          'input[type="text"], input[placeholder*="earch"]',
+        );
         if (searchInput) searchInput.focus();
       }
 
@@ -29,15 +35,33 @@ export function useKeyboardShortcuts() {
         if (!siteId) return;
         const prefix = `/site/${siteId}`;
         switch (e.key) {
-          case "1": navigate(`${prefix}/analytics`); break;
-          case "2": navigate(`${prefix}/setup`); break;
-          case "3": navigate(`${prefix}/knowledge`); break;
-          case "4": navigate(`${prefix}/tools`); break;
-          case "5": navigate(`${prefix}/embed`); break;
-          case "6": navigate(`${prefix}/playground`); break;
-          case "7": navigate(`${prefix}/chat-log`); break;
-          case "8": navigate(`${prefix}/visitors`); break;
-          case "9": navigate(`${prefix}/settings`); break;
+          case "1":
+            navigate(`${prefix}/analytics`);
+            break;
+          case "2":
+            navigate(`${prefix}/setup`);
+            break;
+          case "3":
+            navigate(`${prefix}/knowledge`);
+            break;
+          case "4":
+            navigate(`${prefix}/tools`);
+            break;
+          case "5":
+            navigate(`${prefix}/embed`);
+            break;
+          case "6":
+            navigate(`${prefix}/playground`);
+            break;
+          case "7":
+            navigate(`${prefix}/chat-log`);
+            break;
+          case "8":
+            navigate(`${prefix}/visitors`);
+            break;
+          case "9":
+            navigate(`${prefix}/settings`);
+            break;
         }
       }
     };

@@ -30,7 +30,7 @@ class _FakeChatProvider:
             yield tok
 
 
-async def _fake_search(site_id, query_embedding, top_k=10):
+async def _fake_search(site_id, query_embedding, top_k=10, **kwargs):
     """Return one chunk so the agent doesn't bail on 'no knowledge'."""
     return [
         {
@@ -59,16 +59,18 @@ async def _seed_ref_chunk(db_repos, site_id: str, chunk_id: str = _REF_CHUNK_ID)
     existing = await db_repos.knowledge.get_by_id(chunk_id)
     if existing:
         return
-    await db_repos.knowledge.create({
-        "id": chunk_id,
-        "site_id": site_id,
-        "source_url": "https://example.com/docs",
-        "source_type": "crawl",
-        "title": "Docs",
-        "content": "Example knowledge content.",
-        "chunk_index": 0,
-        "content_hash": f"h-{chunk_id[:8]}",
-    })
+    await db_repos.knowledge.create(
+        {
+            "id": chunk_id,
+            "site_id": site_id,
+            "source_url": "https://example.com/docs",
+            "source_type": "crawl",
+            "title": "Docs",
+            "content": "Example knowledge content.",
+            "chunk_index": 0,
+            "content_hash": f"h-{chunk_id[:8]}",
+        }
+    )
 
 
 @pytest.mark.asyncio
@@ -125,6 +127,7 @@ async def test_sse_origin_required_when_domains_configured(client, db_repos, tes
     await db_repos.sites.update(test_site["id"], {"allowed_domains": "example.com"})
     # Invalidate the site cache so the update is visible to the endpoint.
     from routers.chat import invalidate_site_cache
+
     invalidate_site_cache()
 
     resp = await client.post(
@@ -139,6 +142,7 @@ async def test_sse_origin_mismatch_returns_403(client, db_repos, test_site):
     await _approve_site(db_repos, test_site["id"])
     await db_repos.sites.update(test_site["id"], {"allowed_domains": "example.com"})
     from routers.chat import invalidate_site_cache
+
     invalidate_site_cache()
 
     resp = await client.post(
@@ -184,6 +188,7 @@ async def test_sse_token_usage_persisted_via_core(db_repos, test_site, monkeypat
     # The core acquires an SSE slot on enter and releases on generator end —
     # mirror the endpoint's contract here.
     from utils.rate_limit import acquire_sse_slot
+
     assert await acquire_sse_slot(test_site["token"]) is True
 
     response = await _chat_stream_core(
@@ -203,6 +208,7 @@ async def test_sse_token_usage_persisted_via_core(db_repos, test_site, monkeypat
     done_events = [e for e in events if e.get("event") == "done"]
     assert done_events, f"no done event in: {events}"
     import json
+
     session_id = json.loads(done_events[-1]["data"])["session_id"]
 
     session = await db_repos.chat_sessions.get_by_id(session_id)

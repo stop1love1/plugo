@@ -34,7 +34,8 @@ export default function Login() {
     } catch (err: unknown) {
       const msg =
         err && typeof err === "object" && "response" in err
-          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail || "Authentication failed"
+          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail ||
+            "Authentication failed"
           : "Authentication failed";
       toast.error(msg);
     } finally {
@@ -47,15 +48,24 @@ export default function Login() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 text-2xl font-bold text-primary-600 mb-2">
-            <img src={new URL("../assets/images/logo.png", import.meta.url).href} alt="Plugo" className="w-10 h-10" />
+            <img
+              src={new URL("../assets/images/logo.png", import.meta.url).href}
+              alt="Plugo"
+              className="w-10 h-10"
+            />
             Plugo
           </div>
           <p className="text-gray-500">Sign in to your dashboard</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl border border-gray-200 space-y-4">
+        <form
+          onSubmit={handleSubmit}
+          className="bg-white p-6 rounded-xl border border-gray-200 space-y-4"
+        >
           <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
+              Username
+            </label>
             <input
               id="username"
               value={username}
@@ -66,7 +76,9 @@ export default function Login() {
             />
           </div>
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+              Password
+            </label>
             <input
               id="password"
               type="password"

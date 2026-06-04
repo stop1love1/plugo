@@ -30,9 +30,9 @@ const VISITOR_KEY = "plugo_visitor_";
 const MAX_MESSAGES = 200;
 
 function generateFallbackId(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
   });
 }
 
@@ -197,90 +197,96 @@ export function App({
     const savedSessionId = getSavedSessionId(token);
     const visitorId = getOrCreateVisitorId(token);
 
-    const socket = new PlugoWebSocket(wsUrl, token, {
-      onConnected: (data) => {
-        if (data.session_id) {
-          saveSessionId(token, data.session_id);
-          sessionIdRef.current = data.session_id;
-        }
-
-        if (data.suggestions && data.suggestions.length > 0) {
-          setSuggestions(data.suggestions);
-        }
-
-        if (data.resumed && data.history && data.history.length > 0) {
-          const restored: Message[] = data.history.map((m: WsHistoryItem) => ({
-            role: (m.role === "user" ? "user" : "bot") as Message["role"],
-            content: m.content ?? "",
-            timestamp: m.timestamp ?? Date.now(),
-          }));
-          setMessages(restored);
-        } else if (data.greeting && messagesRef.current.length === 0) {
-          setMessages([{ role: "bot" as const, content: data.greeting, timestamp: Date.now() }]);
-        }
-      },
-      onStart: () => {
-        setIsTyping(true);
-        setSuggestions([]);
-        setMessages((prev) => {
-          // Guard against double onStart: don't push if last message is already an empty bot message
-          const last = prev[prev.length - 1];
-          if (last && last.role === "bot" && last.content === "") {
-            return prev;
+    const socket = new PlugoWebSocket(
+      wsUrl,
+      token,
+      {
+        onConnected: (data) => {
+          if (data.session_id) {
+            saveSessionId(token, data.session_id);
+            sessionIdRef.current = data.session_id;
           }
-          const updated = [...prev, { role: "bot" as const, content: "", timestamp: Date.now() }];
-          return updated.length > MAX_MESSAGES ? updated.slice(-MAX_MESSAGES) : updated;
-        });
+
+          if (data.suggestions && data.suggestions.length > 0) {
+            setSuggestions(data.suggestions);
+          }
+
+          if (data.resumed && data.history && data.history.length > 0) {
+            const restored: Message[] = data.history.map((m: WsHistoryItem) => ({
+              role: (m.role === "user" ? "user" : "bot") as Message["role"],
+              content: m.content ?? "",
+              timestamp: m.timestamp ?? Date.now(),
+            }));
+            setMessages(restored);
+          } else if (data.greeting && messagesRef.current.length === 0) {
+            setMessages([{ role: "bot" as const, content: data.greeting, timestamp: Date.now() }]);
+          }
+        },
+        onStart: () => {
+          setIsTyping(true);
+          setSuggestions([]);
+          setMessages((prev) => {
+            // Guard against double onStart: don't push if last message is already an empty bot message
+            const last = prev[prev.length - 1];
+            if (last && last.role === "bot" && last.content === "") {
+              return prev;
+            }
+            const updated = [...prev, { role: "bot" as const, content: "", timestamp: Date.now() }];
+            return updated.length > MAX_MESSAGES ? updated.slice(-MAX_MESSAGES) : updated;
+          });
+        },
+        onToken: (token) => {
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            // Only append if the last message is a bot message
+            if (!last || last.role !== "bot") return prev;
+            const updated = [...prev];
+            updated[updated.length - 1] = {
+              ...last,
+              content: last.content + token,
+            };
+            return updated;
+          });
+        },
+        onEnd: (data) => {
+          setIsTyping(false);
+          if (data?.suggestions && data.suggestions.length > 0) {
+            setSuggestions(data.suggestions);
+          }
+          if (!isOpenRef.current) {
+            setUnreadCount((prev) => prev + 1);
+          }
+          if (document.hidden) {
+            playNotificationSound();
+          }
+        },
+        onCitations: (items) => {
+          // Attach to the last assistant message (citations arrive before "end").
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (!last || last.role !== "bot") return prev;
+            const updated = [...prev];
+            updated[updated.length - 1] = { ...last, citations: items };
+            return updated;
+          });
+        },
+        onError: (error) => {
+          setIsTyping(false);
+          setMessages((prev) => {
+            const updated = [
+              ...prev,
+              { role: "bot" as const, content: `\u26a0\ufe0f ${error}`, timestamp: Date.now() },
+            ];
+            return updated.length > MAX_MESSAGES ? updated.slice(-MAX_MESSAGES) : updated;
+          });
+        },
+        onConnectionChange: (state) => {
+          setConnectionState(state);
+        },
       },
-      onToken: (token) => {
-        setMessages((prev) => {
-          const last = prev[prev.length - 1];
-          // Only append if the last message is a bot message
-          if (!last || last.role !== "bot") return prev;
-          const updated = [...prev];
-          updated[updated.length - 1] = {
-            ...last,
-            content: last.content + token,
-          };
-          return updated;
-        });
-      },
-      onEnd: (data) => {
-        setIsTyping(false);
-        if (data?.suggestions && data.suggestions.length > 0) {
-          setSuggestions(data.suggestions);
-        }
-        if (!isOpenRef.current) {
-          setUnreadCount(prev => prev + 1);
-        }
-        if (document.hidden) {
-          playNotificationSound();
-        }
-      },
-      onCitations: (items) => {
-        // Attach to the last assistant message (citations arrive before "end").
-        setMessages((prev) => {
-          const last = prev[prev.length - 1];
-          if (!last || last.role !== "bot") return prev;
-          const updated = [...prev];
-          updated[updated.length - 1] = { ...last, citations: items };
-          return updated;
-        });
-      },
-      onError: (error) => {
-        setIsTyping(false);
-        setMessages((prev) => {
-          const updated = [
-            ...prev,
-            { role: "bot" as const, content: `\u26a0\ufe0f ${error}`, timestamp: Date.now() },
-          ];
-          return updated.length > MAX_MESSAGES ? updated.slice(-MAX_MESSAGES) : updated;
-        });
-      },
-      onConnectionChange: (state) => {
-        setConnectionState(state);
-      },
-    }, savedSessionId, visitorId);
+      savedSessionId,
+      visitorId,
+    );
 
     socket.connect();
     setWs(socket);
@@ -335,7 +341,7 @@ export function App({
         body: JSON.stringify({ message_index: messageIndex, rating }),
       }).catch(() => {});
     },
-    [token, serverUrl]
+    [token, serverUrl],
   );
 
   const handleSend = useCallback(
@@ -347,18 +353,25 @@ export function App({
       if (!sent) {
         setMessages((prev) => [
           ...prev,
-          { role: "bot" as const, content: "\u26a0\ufe0f Message could not be sent. Please check your connection.", timestamp: Date.now() },
+          {
+            role: "bot" as const,
+            content: "\u26a0\ufe0f Message could not be sent. Please check your connection.",
+            timestamp: Date.now(),
+          },
         ]);
         return;
       }
 
       setSuggestions([]);
       setMessages((prev) => {
-        const updated = [...prev, { role: "user" as const, content: message, timestamp: Date.now() }];
+        const updated = [
+          ...prev,
+          { role: "user" as const, content: message, timestamp: Date.now() },
+        ];
         return updated.length > MAX_MESSAGES ? updated.slice(-MAX_MESSAGES) : updated;
       });
     },
-    [ws, getPageContext]
+    [ws, getPageContext],
   );
 
   const handleRetry = useCallback(
@@ -378,8 +391,12 @@ export function App({
       setMessages((prev) => prev.filter((_, i) => i !== errorIndex));
       handleSend(lastUserMsg);
     },
-    [handleSend]
+    [handleSend],
   );
+
+  const handleReconnect = useCallback(() => {
+    ws?.reconnect();
+  }, [ws]);
 
   return (
     <div>
@@ -399,6 +416,7 @@ export function App({
           onMinimize={handleMinimize}
           onFeedback={handleFeedback}
           onRetry={handleRetry}
+          onReconnect={handleReconnect}
         />
       )}
       <Bubble

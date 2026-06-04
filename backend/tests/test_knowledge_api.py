@@ -10,15 +10,17 @@ import pytest
 async def test_chunk(db_repos, test_site):
     """Create a test knowledge chunk."""
     chunk_id = str(uuid.uuid4())
-    chunk = await db_repos.knowledge.create({
-        "id": chunk_id,
-        "site_id": test_site["id"],
-        "source_url": "https://example.com/page1",
-        "source_type": "crawl",
-        "title": "Test Chunk",
-        "content": "This is a test knowledge chunk with some content for testing purposes.",
-        "embedding_id": chunk_id,
-    })
+    chunk = await db_repos.knowledge.create(
+        {
+            "id": chunk_id,
+            "site_id": test_site["id"],
+            "source_url": "https://example.com/page1",
+            "source_type": "crawl",
+            "title": "Test Chunk",
+            "content": "This is a test knowledge chunk with some content for testing purposes.",
+            "embedding_id": chunk_id,
+        }
+    )
     yield chunk
     with contextlib.suppress(Exception):
         await db_repos.knowledge.delete(chunk_id)
@@ -83,14 +85,16 @@ async def test_update_chunk_no_fields(client, auth_headers, test_chunk):
 async def test_delete_chunk(client, auth_headers, db_repos, test_site):
     """DELETE /api/knowledge/{chunk_id} should delete the chunk."""
     chunk_id = str(uuid.uuid4())
-    await db_repos.knowledge.create({
-        "id": chunk_id,
-        "site_id": test_site["id"],
-        "source_type": "manual",
-        "title": "To Delete",
-        "content": "Delete me",
-        "embedding_id": chunk_id,
-    })
+    await db_repos.knowledge.create(
+        {
+            "id": chunk_id,
+            "site_id": test_site["id"],
+            "source_type": "manual",
+            "title": "To Delete",
+            "content": "Delete me",
+            "embedding_id": chunk_id,
+        }
+    )
 
     response = await client.delete(
         f"/api/knowledge/{chunk_id}",
@@ -116,14 +120,16 @@ async def test_bulk_delete_chunks(client, auth_headers, db_repos, test_site):
     ids = []
     for i in range(3):
         chunk_id = str(uuid.uuid4())
-        await db_repos.knowledge.create({
-            "id": chunk_id,
-            "site_id": test_site["id"],
-            "source_type": "manual",
-            "title": f"Bulk Delete {i}",
-            "content": f"Content {i}",
-            "embedding_id": chunk_id,
-        })
+        await db_repos.knowledge.create(
+            {
+                "id": chunk_id,
+                "site_id": test_site["id"],
+                "source_type": "manual",
+                "title": f"Bulk Delete {i}",
+                "content": f"Content {i}",
+                "embedding_id": chunk_id,
+            }
+        )
         ids.append(chunk_id)
 
     response = await client.post(
@@ -186,15 +192,17 @@ async def test_list_knowledge_pagination_respects_limits(client, auth_headers, d
     """Create 25 chunks; page 1 (per_page=20) has 20, page 2 has 5."""
     for i in range(25):
         cid = str(uuid.uuid4())
-        await db_repos.knowledge.create({
-            "id": cid,
-            "site_id": test_site["id"],
-            "source_url": f"https://example.com/p{i}",
-            "source_type": "crawl",
-            "title": f"Title {i:02d}",
-            "content": f"Body {i:02d}",
-            "embedding_id": cid,
-        })
+        await db_repos.knowledge.create(
+            {
+                "id": cid,
+                "site_id": test_site["id"],
+                "source_url": f"https://example.com/p{i}",
+                "source_type": "crawl",
+                "title": f"Title {i:02d}",
+                "content": f"Body {i:02d}",
+                "embedding_id": cid,
+            }
+        )
 
     r1 = await client.get(
         f"/api/knowledge?site_id={test_site['id']}&page=1&per_page=20",
@@ -219,16 +227,26 @@ async def test_list_knowledge_search_filters_by_title(client, auth_headers, db_r
     """Search term must match either title or content; non-matching rows excluded."""
     hit_id = str(uuid.uuid4())
     miss_id = str(uuid.uuid4())
-    await db_repos.knowledge.create({
-        "id": hit_id, "site_id": test_site["id"],
-        "source_type": "manual", "title": "Pineapple Guide",
-        "content": "Tropical fruit knowledge.", "embedding_id": hit_id,
-    })
-    await db_repos.knowledge.create({
-        "id": miss_id, "site_id": test_site["id"],
-        "source_type": "manual", "title": "Apple Guide",
-        "content": "Temperate fruit knowledge.", "embedding_id": miss_id,
-    })
+    await db_repos.knowledge.create(
+        {
+            "id": hit_id,
+            "site_id": test_site["id"],
+            "source_type": "manual",
+            "title": "Pineapple Guide",
+            "content": "Tropical fruit knowledge.",
+            "embedding_id": hit_id,
+        }
+    )
+    await db_repos.knowledge.create(
+        {
+            "id": miss_id,
+            "site_id": test_site["id"],
+            "source_type": "manual",
+            "title": "Apple Guide",
+            "content": "Temperate fruit knowledge.",
+            "embedding_id": miss_id,
+        }
+    )
 
     r = await client.get(
         f"/api/knowledge?site_id={test_site['id']}&search=Pineapple",
@@ -246,12 +264,18 @@ async def test_delete_by_url_removes_all_chunks_for_that_url(client, auth_header
     url = f"https://example.com/doc-{uuid.uuid4().hex[:6]}"
     for i in range(3):
         cid = str(uuid.uuid4())
-        await db_repos.knowledge.create({
-            "id": cid, "site_id": test_site["id"],
-            "source_url": url, "source_type": "crawl",
-            "title": f"Chunk {i}", "content": f"Body {i}",
-            "chunk_index": i, "embedding_id": cid,
-        })
+        await db_repos.knowledge.create(
+            {
+                "id": cid,
+                "site_id": test_site["id"],
+                "source_url": url,
+                "source_type": "crawl",
+                "title": f"Chunk {i}",
+                "content": f"Body {i}",
+                "chunk_index": i,
+                "embedding_id": cid,
+            }
+        )
 
     r = await client.post(
         "/api/knowledge/url/delete",
@@ -271,11 +295,16 @@ async def test_delete_all_by_site_cascade_cleanup(db_repos, test_site):
     """Repo-level cascade: delete_all_by_site wipes every chunk for the site."""
     for _ in range(4):
         cid = str(uuid.uuid4())
-        await db_repos.knowledge.create({
-            "id": cid, "site_id": test_site["id"],
-            "source_type": "manual", "title": "x",
-            "content": "x", "embedding_id": cid,
-        })
+        await db_repos.knowledge.create(
+            {
+                "id": cid,
+                "site_id": test_site["id"],
+                "source_type": "manual",
+                "title": "x",
+                "content": "x",
+                "embedding_id": cid,
+            }
+        )
     deleted = await db_repos.knowledge.delete_all_by_site(test_site["id"])
     assert deleted >= 4
 
@@ -298,12 +327,18 @@ async def test_reindex_endpoint_rebuilds_embeddings(client, auth_headers, db_rep
     seeded_ids = []
     for i in range(5):
         cid = str(uuid.uuid4())
-        await db_repos.knowledge.create({
-            "id": cid, "site_id": test_site["id"],
-            "source_url": f"https://example.com/r{i}", "source_type": "manual",
-            "title": f"R{i}", "content": f"Content {i}",
-            "chunk_index": i, "embedding_id": cid,
-        })
+        await db_repos.knowledge.create(
+            {
+                "id": cid,
+                "site_id": test_site["id"],
+                "source_url": f"https://example.com/r{i}",
+                "source_type": "manual",
+                "title": f"R{i}",
+                "content": f"Content {i}",
+                "chunk_index": i,
+                "embedding_id": cid,
+            }
+        )
         seeded_ids.append(cid)
 
     class _StubEmbedProvider:
@@ -400,12 +435,18 @@ async def test_reindex_site_handles_more_than_sync_max(db_repos, test_site, monk
     seeded_ids: list[str] = []
     for i in range(12):
         cid = str(uuid.uuid4())
-        await db_repos.knowledge.create({
-            "id": cid, "site_id": test_site["id"],
-            "source_url": f"https://example.com/big{i}", "source_type": "manual",
-            "title": f"Big {i}", "content": f"Content {i}",
-            "chunk_index": i, "embedding_id": cid,
-        })
+        await db_repos.knowledge.create(
+            {
+                "id": cid,
+                "site_id": test_site["id"],
+                "source_url": f"https://example.com/big{i}",
+                "source_type": "manual",
+                "title": f"Big {i}",
+                "content": f"Content {i}",
+                "chunk_index": i,
+                "embedding_id": cid,
+            }
+        )
         seeded_ids.append(cid)
 
     added_ids: list[str] = []
@@ -452,11 +493,16 @@ async def test_reindex_creates_audit_log(client, auth_headers, db_repos, test_si
     monkeypatch.setattr("routers.knowledge.rag_engine.delete_site", _noop_delete)
 
     cid = str(uuid.uuid4())
-    await db_repos.knowledge.create({
-        "id": cid, "site_id": test_site["id"],
-        "source_type": "manual", "title": "x",
-        "content": "x", "embedding_id": cid,
-    })
+    await db_repos.knowledge.create(
+        {
+            "id": cid,
+            "site_id": test_site["id"],
+            "source_type": "manual",
+            "title": "x",
+            "content": "x",
+            "embedding_id": cid,
+        }
+    )
     r = await client.post(
         f"/api/knowledge/reindex?site_id={test_site['id']}",
         headers=auth_headers,
@@ -465,6 +511,5 @@ async def test_reindex_creates_audit_log(client, auth_headers, db_repos, test_si
 
     audit = await db_repos.audit_logs.list_by_site(page=1, per_page=50)
     assert any(
-        log.get("action") == "reindex" and log.get("resource_type") == "knowledge"
-        for log in audit.get("logs", [])
+        log.get("action") == "reindex" and log.get("resource_type") == "knowledge" for log in audit.get("logs", [])
     )

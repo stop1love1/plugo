@@ -273,29 +273,41 @@ const resolvedBaseURL = import.meta.env.VITE_API_URL
 const api = axios.create({
   baseURL: resolvedBaseURL,
   headers: { "Content-Type": "application/json" },
+  // Send/receive the httpOnly session cookie and the readable CSRF cookie.
+  withCredentials: true,
 });
 
-// Auth interceptor — attach JWT token to all requests
-// TODO(security): migrate to httpOnly cookie and drop this header wiring.
+// Read a cookie value by name (used for the double-submit CSRF token).
+function readCookie(name: string): string | null {
+  const escaped = name.replace(/([.$?*|{}()[\]\\/+^])/g, "\\$1");
+  const match = document.cookie.match(new RegExp("(?:^|; )" + escaped + "=([^;]*)"));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+const CSRF_SAFE_METHODS = new Set(["get", "head", "options"]);
+
+// CSRF interceptor — echo the readable CSRF cookie on state-changing requests.
+// Auth itself rides on the httpOnly session cookie (sent automatically by the
+// browser), so the JWT is never kept in JS-readable storage.
 api.interceptors.request.use((config) => {
-  const token = sessionStorage.getItem("plugo_token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  const method = (config.method ?? "get").toLowerCase();
+  if (!CSRF_SAFE_METHODS.has(method)) {
+    const csrf = readCookie("plugo_csrf");
+    if (csrf) config.headers["X-CSRF-Token"] = csrf;
   }
   return config;
 });
 
-// 401 interceptor — redirect to login on auth failure
+// 401 interceptor — drop the cached profile and bounce to login.
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401 && !error.config.url?.includes("/auth/")) {
-      sessionStorage.removeItem("plugo_token");
       localStorage.removeItem("plugo_user");
       window.location.href = "/login";
     }
     return Promise.reject(error);
-  }
+  },
 );
 
 // ============================================================
@@ -304,72 +316,123 @@ api.interceptors.response.use(
 
 // Auth
 export const login = (data: { username: string; password: string }) =>
-  api.post<{ username: string; role: string; access_token: string }>("/auth/login", data).then((r) => r.data);
-export const getMe = () => api.get<{ username: string; role: string }>("/auth/me").then((r) => r.data);
+  api
+    .post<{
+      username: string;
+      role: string;
+      access_token: string;
+      csrf_token?: string;
+    }>("/auth/login", data)
+    .then((r) => r.data);
+export const logout = () => api.post("/auth/logout").then((r) => r.data);
+export const getMe = () =>
+  api.get<{ username: string; role: string }>("/auth/me").then((r) => r.data);
 
 // Sites
 export const getSites = () => api.get<Site[]>("/sites").then((r) => r.data);
 export const getSite = (id: string) => api.get<Site>(`/sites/${id}`).then((r) => r.data);
-export const createSite = (data: CreateSiteData) => api.post<Site>("/sites", data).then((r) => r.data);
-export const updateSite = (id: string, data: UpdateSiteData) => api.put<Site>(`/sites/${id}`, data).then((r) => r.data);
-export const deleteSite = (id: string) => api.delete<{ message: string }>(`/sites/${id}`).then((r) => r.data);
+export const createSite = (data: CreateSiteData) =>
+  api.post<Site>("/sites", data).then((r) => r.data);
+export const updateSite = (id: string, data: UpdateSiteData) =>
+  api.put<Site>(`/sites/${id}`, data).then((r) => r.data);
+export const deleteSite = (id: string) =>
+  api.delete<{ message: string }>(`/sites/${id}`).then((r) => r.data);
 export const updateSiteApproval = (siteId: string, isApproved: boolean) =>
   api.put<Site>(`/sites/${siteId}/approval`, { is_approved: isApproved }).then((r) => r.data);
 export const getProviders = () => api.get<Provider[]>("/sites/providers/list").then((r) => r.data);
 
 // Crawl
 export const startCrawl = (data: CrawlStartData) =>
-  api.post<{ job_id: string; status: string; message: string; force_recrawl?: boolean }>("/crawl/start", data).then((r) => r.data);
+  api
+    .post<{
+      job_id: string;
+      status: string;
+      message: string;
+      force_recrawl?: boolean;
+    }>("/crawl/start", data)
+    .then((r) => r.data);
 export const stopCrawl = (siteId: string) =>
-  api.post<{ message: string; crawl_status: string; knowledge_count: number }>(`/crawl/stop/${siteId}`).then((r) => r.data);
+  api
+    .post<{
+      message: string;
+      crawl_status: string;
+      knowledge_count: number;
+    }>(`/crawl/stop/${siteId}`)
+    .then((r) => r.data);
 export const pauseCrawl = (siteId: string) =>
   api.post<{ message: string; crawl_status: string }>(`/crawl/pause/${siteId}`).then((r) => r.data);
 export const resumeCrawl = (siteId: string) =>
-  api.post<{ message: string; crawl_status: string }>(`/crawl/resume/${siteId}`).then((r) => r.data);
-export const toggleCrawl = (siteId: string, data: { enabled: boolean; max_pages?: number; auto_interval?: number; max_depth?: number; exclude_patterns?: string }) =>
-  api.put(`/crawl/toggle/${siteId}`, data).then((r) => r.data);
+  api
+    .post<{ message: string; crawl_status: string }>(`/crawl/resume/${siteId}`)
+    .then((r) => r.data);
+export const toggleCrawl = (
+  siteId: string,
+  data: {
+    enabled: boolean;
+    max_pages?: number;
+    auto_interval?: number;
+    max_depth?: number;
+    exclude_patterns?: string;
+  },
+) => api.put(`/crawl/toggle/${siteId}`, data).then((r) => r.data);
 export const getCrawlSiteStatus = (siteId: string) =>
   api.get<CrawlStatus>(`/crawl/status/${siteId}`).then((r) => r.data);
 export const getSiteCrawlJobs = (siteId: string) =>
   api.get<CrawlJob[]>(`/crawl/jobs/${siteId}`).then((r) => r.data);
 export const getCrawlLogs = (jobId: string) =>
-  api.get<{ logs: unknown[]; status: string; pages_done: number }>(`/crawl/job/${jobId}/logs`).then((r) => r.data);
-export const updateCrawlSettings = (siteId: string, data: {
-  max_pages?: number;
-  max_depth?: number;
-  auto_interval?: number;
-  exclude_patterns?: string;
-  crawl_use_browser?: boolean;
-  crawl_login_url?: string;
-  crawl_login_username?: string;
-  crawl_login_password?: string;
-  crawl_login_username_selector?: string;
-  crawl_login_password_selector?: string;
-  crawl_login_submit_selector?: string;
-  crawl_login_success_url?: string;
-}) =>
-  api.put(`/crawl/settings/${siteId}`, data).then((r) => r.data);
+  api
+    .get<{ logs: unknown[]; status: string; pages_done: number }>(`/crawl/job/${jobId}/logs`)
+    .then((r) => r.data);
+export const updateCrawlSettings = (
+  siteId: string,
+  data: {
+    max_pages?: number;
+    max_depth?: number;
+    auto_interval?: number;
+    exclude_patterns?: string;
+    crawl_use_browser?: boolean;
+    crawl_login_url?: string;
+    crawl_login_username?: string;
+    crawl_login_password?: string;
+    crawl_login_username_selector?: string;
+    crawl_login_password_selector?: string;
+    crawl_login_submit_selector?: string;
+    crawl_login_success_url?: string;
+  },
+) => api.put(`/crawl/settings/${siteId}`, data).then((r) => r.data);
 
 // Knowledge
 export const clearAllKnowledge = (siteId: string) =>
-  api.delete<{ message: string; knowledge_count: number }>(`/crawl/knowledge/${siteId}`).then((r) => r.data);
+  api
+    .delete<{ message: string; knowledge_count: number }>(`/crawl/knowledge/${siteId}`)
+    .then((r) => r.data);
 export const getKnowledge = (siteId: string, page = 1, search?: string) => {
   let url = `/knowledge?site_id=${siteId}&page=${page}`;
   if (search) url += `&search=${encodeURIComponent(search)}`;
   return api.get<KnowledgeListResponse>(url).then((r) => r.data);
 };
-export const getChunk = (id: string) => api.get<KnowledgeChunk>(`/knowledge/${id}`).then((r) => r.data);
+export const getChunk = (id: string) =>
+  api.get<KnowledgeChunk>(`/knowledge/${id}`).then((r) => r.data);
 export const updateChunk = (id: string, data: { title?: string; content?: string }) =>
   api.put<{ message: string; chunk: KnowledgeChunk }>(`/knowledge/${id}`, data).then((r) => r.data);
-export const deleteChunk = (id: string) => api.delete<{ message: string }>(`/knowledge/${id}`).then((r) => r.data);
+export const deleteChunk = (id: string) =>
+  api.delete<{ message: string }>(`/knowledge/${id}`).then((r) => r.data);
 export const addManualChunk = (data: ManualChunkData) =>
-  api.post<{ id: string; message: string; embedding: string }>("/knowledge/manual", data).then((r) => r.data);
+  api
+    .post<{ id: string; message: string; embedding: string }>("/knowledge/manual", data)
+    .then((r) => r.data);
 export const uploadFile = (siteId: string, file: File) => {
   const formData = new FormData();
   formData.append("file", file);
-  return api.post<{ id: string; filename: string; message: string; embedding: string }>(`/knowledge/upload?site_id=${siteId}`, formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  }).then((r) => r.data);
+  return api
+    .post<{ id: string; filename: string; message: string; embedding: string }>(
+      `/knowledge/upload?site_id=${siteId}`,
+      formData,
+      {
+        headers: { "Content-Type": "multipart/form-data" },
+      },
+    )
+    .then((r) => r.data);
 };
 
 export const bulkDeleteChunks = (ids: string[]) =>
@@ -379,24 +442,44 @@ export const bulkDeleteChunks = (ids: string[]) =>
 export const getCrawledUrls = (siteId: string) =>
   api.get<CrawledUrl[]>(`/knowledge/urls?site_id=${siteId}`).then((r) => r.data);
 export const getChunksByUrl = (siteId: string, sourceUrl: string) =>
-  api.get<{ chunks: KnowledgeChunk[]; total: number }>(`/knowledge/url/chunks?site_id=${siteId}&source_url=${encodeURIComponent(sourceUrl)}`).then((r) => r.data);
+  api
+    .get<{
+      chunks: KnowledgeChunk[];
+      total: number;
+    }>(`/knowledge/url/chunks?site_id=${siteId}&source_url=${encodeURIComponent(sourceUrl)}`)
+    .then((r) => r.data);
 export const deleteByUrl = (siteId: string, sourceUrl: string) =>
-  api.post<{ deleted: number }>("/knowledge/url/delete", { site_id: siteId, source_url: sourceUrl }).then((r) => r.data);
+  api
+    .post<{ deleted: number }>("/knowledge/url/delete", { site_id: siteId, source_url: sourceUrl })
+    .then((r) => r.data);
 export const recrawlUrl = (siteId: string, sourceUrl: string) =>
-  api.post<{ message: string; old_chunks: number; new_chunks: number }>("/knowledge/url/recrawl", { site_id: siteId, source_url: sourceUrl }).then((r) => r.data);
+  api
+    .post<{
+      message: string;
+      old_chunks: number;
+      new_chunks: number;
+    }>("/knowledge/url/recrawl", { site_id: siteId, source_url: sourceUrl })
+    .then((r) => r.data);
 
 // Tools
-export const getTools = (siteId: string) => api.get<Tool[]>(`/tools?site_id=${siteId}`).then((r) => r.data);
-export const createTool = (data: CreateToolData) => api.post<{ id: string; message: string }>("/tools", data).then((r) => r.data);
-export const updateTool = (id: string, data: UpdateToolData) => api.put<{ message: string }>(`/tools/${id}`, data).then((r) => r.data);
-export const deleteTool = (id: string) => api.delete<{ message: string }>(`/tools/${id}`).then((r) => r.data);
+export const getTools = (siteId: string) =>
+  api.get<Tool[]>(`/tools?site_id=${siteId}`).then((r) => r.data);
+export const createTool = (data: CreateToolData) =>
+  api.post<{ id: string; message: string }>("/tools", data).then((r) => r.data);
+export const updateTool = (id: string, data: UpdateToolData) =>
+  api.put<{ message: string }>(`/tools/${id}`, data).then((r) => r.data);
+export const deleteTool = (id: string) =>
+  api.delete<{ message: string }>(`/tools/${id}`).then((r) => r.data);
 export const testTool = (id: string, params: Record<string, unknown>) =>
-  api.post<{ status: number; response: unknown }>(`/tools/${id}/test`, { params }).then((r) => r.data);
+  api
+    .post<{ status: number; response: unknown }>(`/tools/${id}/test`, { params })
+    .then((r) => r.data);
 
 // Sessions
 export const getSessions = (siteId: string) =>
   api.get<ChatSession[]>(`/sessions?site_id=${siteId}`).then((r) => r.data);
-export const getSession = (id: string) => api.get<ChatSession>(`/sessions/${id}`).then((r) => r.data);
+export const getSession = (id: string) =>
+  api.get<ChatSession>(`/sessions/${id}`).then((r) => r.data);
 
 // LLM Keys
 export const getLLMKeys = () => api.get<LLMKeyInfo[]>("/llm-keys").then((r) => r.data);
@@ -413,12 +496,17 @@ export type CustomModel = {
   description: string;
 };
 
-export const getModelsProviders = () => api.get<Provider[]>("/models/providers").then((r) => r.data);
+export const getModelsProviders = () =>
+  api.get<Provider[]>("/models/providers").then((r) => r.data);
 export const getCustomModels = () => api.get<CustomModel[]>("/models/custom").then((r) => r.data);
 export const addCustomModel = (data: CustomModel) =>
-  api.post<{ message: string; provider: string; model_id: string }>("/models/custom", data).then((r) => r.data);
+  api
+    .post<{ message: string; provider: string; model_id: string }>("/models/custom", data)
+    .then((r) => r.data);
 export const deleteCustomModel = (provider: string, modelId: string) =>
-  api.delete<{ message: string }>("/models/custom", { data: { provider, model_id: modelId } }).then((r) => r.data);
+  api
+    .delete<{ message: string }>("/models/custom", { data: { provider, model_id: modelId } })
+    .then((r) => r.data);
 
 // Audit
 export const getAuditLogs = (page = 1) =>
@@ -426,7 +514,11 @@ export const getAuditLogs = (page = 1) =>
 
 // Feedback
 export const submitFeedback = (sessionId: string, messageIndex: number, rating: "up" | "down") =>
-  api.post<{ message: string }>(`/sessions/${sessionId}/feedback`, { message_index: messageIndex, rating }).then((r) => r.data);
+  api
+    .post<{
+      message: string;
+    }>(`/sessions/${sessionId}/feedback`, { message_index: messageIndex, rating })
+    .then((r) => r.data);
 
 // Global Config
 export type GlobalConfig = Record<string, Record<string, unknown>>;
@@ -435,22 +527,41 @@ export const updateGlobalConfig = (data: GlobalConfig) =>
   api.put<{ status: string; message: string }>("/config", data).then((r) => r.data);
 
 // Flows
-export const getFlows = (siteId: string) => api.get<Flow[]>(`/flows?site_id=${siteId}`).then((r) => r.data);
+export const getFlows = (siteId: string) =>
+  api.get<Flow[]>(`/flows?site_id=${siteId}`).then((r) => r.data);
 export const getFlow = (id: string) => api.get<Flow>(`/flows/${id}`).then((r) => r.data);
-export const createFlow = (data: { site_id: string; name: string; description?: string; requires_login?: boolean }) =>
-  api.post<{ id: string; message: string }>("/flows", data).then((r) => r.data);
+export const createFlow = (data: {
+  site_id: string;
+  name: string;
+  description?: string;
+  requires_login?: boolean;
+}) => api.post<{ id: string; message: string }>("/flows", data).then((r) => r.data);
 export const updateFlow = (id: string, data: Partial<Flow>) =>
   api.put<{ message: string }>(`/flows/${id}`, data).then((r) => r.data);
-export const deleteFlow = (id: string) => api.delete<{ message: string }>(`/flows/${id}`).then((r) => r.data);
-export const addFlowStep = (flowId: string, data: { title: string; description?: string; url?: string }) =>
-  api.post<{ id: string; message: string }>(`/flows/${flowId}/steps`, data).then((r) => r.data);
+export const deleteFlow = (id: string) =>
+  api.delete<{ message: string }>(`/flows/${id}`).then((r) => r.data);
+export const addFlowStep = (
+  flowId: string,
+  data: { title: string; description?: string; url?: string },
+) => api.post<{ id: string; message: string }>(`/flows/${flowId}/steps`, data).then((r) => r.data);
 export const updateFlowStep = (stepId: string, data: Partial<FlowStep>) =>
   api.put<{ message: string }>(`/flows/steps/${stepId}`, data).then((r) => r.data);
 export const deleteFlowStep = (stepId: string) =>
   api.delete<{ message: string }>(`/flows/steps/${stepId}`).then((r) => r.data);
 export const reorderFlowSteps = (flowId: string, stepIds: string[]) =>
-  api.post<{ message: string }>(`/flows/${flowId}/reorder`, { step_ids: stepIds }).then((r) => r.data);
+  api
+    .post<{ message: string }>(`/flows/${flowId}/reorder`, { step_ids: stepIds })
+    .then((r) => r.data);
 export const testBrowserLogin = (siteId: string) =>
-  api.post<{ success: boolean; message: string; cookie_count?: number; cookie_names?: string[]; success_url_detected?: boolean; time_seconds?: number }>(`/crawl/test-login/${siteId}`).then((r) => r.data);
+  api
+    .post<{
+      success: boolean;
+      message: string;
+      cookie_count?: number;
+      cookie_names?: string[];
+      success_url_detected?: boolean;
+      time_seconds?: number;
+    }>(`/crawl/test-login/${siteId}`)
+    .then((r) => r.data);
 
 export default api;

@@ -13,15 +13,20 @@ Public endpoints (no auth required):
 import hmac
 from datetime import UTC, datetime, timedelta
 
-from config import settings
-from fastapi import Depends, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel
 
+from config import settings
+
 # --- JWT config ---
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 8  # 8 hours — shorter window limits a stolen token's lifetime
+
+# --- Cookie names (httpOnly session + readable CSRF token) ---
+SESSION_COOKIE = "plugo_token"
+CSRF_COOKIE = "plugo_csrf"
 
 # --- Bearer token scheme ---
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -35,7 +40,9 @@ class TokenData(BaseModel):
 
 def verify_credentials(username: str, password: str) -> bool:
     """Verify credentials against config."""
-    return hmac.compare_digest(username, settings.admin_username) and hmac.compare_digest(password, settings.admin_password)
+    return hmac.compare_digest(username, settings.admin_username) and hmac.compare_digest(
+        password, settings.admin_password
+    )
 
 
 def create_access_token(subject: str, role: str = "admin", expires_delta: timedelta | None = None) -> str:
@@ -58,28 +65,39 @@ def decode_access_token(token: str) -> TokenData:
 
 # --- FastAPI Dependencies ---
 
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    plugo_token: str | None = Cookie(default=None),
 ) -> TokenData:
-    """Dependency: requires a valid JWT token. Bypassed when auth is disabled."""
+    """Dependency: requires a valid JWT token. Bypassed when auth is disabled.
+
+    Accepts the token from either the ``Authorization: Bearer`` header (API
+    clients, widget) or the httpOnly ``plugo_token`` cookie (dashboard). The
+    cookie path keeps the JWT out of JS-readable storage; CSRF protection for
+    cookie-authenticated mutations is enforced by middleware in main.py.
+    """
     if not settings.auth_enabled:
         return TokenData(sub=settings.admin_username, role="admin")
-    if credentials is None:
+    token = credentials.credentials if credentials else plugo_token
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return decode_access_token(credentials.credentials)
+    return decode_access_token(token)
 
 
 async def get_optional_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    plugo_token: str | None = Cookie(default=None),
 ) -> TokenData | None:
-    """Dependency: returns user if token provided, None otherwise."""
-    if credentials is None:
+    """Dependency: returns user if a valid token is provided (header or cookie), None otherwise."""
+    token = credentials.credentials if credentials else plugo_token
+    if not token:
         return None
     try:
-        return decode_access_token(credentials.credentials)
+        return decode_access_token(token)
     except HTTPException:
         return None

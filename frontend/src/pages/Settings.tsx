@@ -2,7 +2,14 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useNavigate, useBlocker } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { getErrorMessage, getSite, updateSite, deleteSite, getModelsProviders, type UpdateSiteData } from "../lib/api";
+import {
+  getErrorMessage,
+  getSite,
+  updateSite,
+  deleteSite,
+  getModelsProviders,
+  type UpdateSiteData,
+} from "../lib/api";
 import { Save, Trash2, AlertTriangle } from "lucide-react";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useLocale } from "../lib/useLocale";
@@ -114,8 +121,13 @@ export default function Settings() {
       }
     }
     if (field === "allowed_domains") {
-      const domains = value.split(",").map((d) => d.trim()).filter(Boolean);
-      const invalidDomain = domains.find((d) => d.includes(" ") || (!d.includes(".") && d.length > 0));
+      const domains = value
+        .split(",")
+        .map((d) => d.trim())
+        .filter(Boolean);
+      const invalidDomain = domains.find(
+        (d) => d.includes(" ") || (!d.includes(".") && d.length > 0),
+      );
       if (invalidDomain) {
         newErrors.allowed_domains = t("settings.invalidUrl");
       } else {
@@ -147,13 +159,13 @@ export default function Settings() {
   // Ctrl+S / Cmd+S keyboard shortcut to save
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
         if (hasChanges) doSave();
       }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, [hasChanges, doSave]);
 
   // Prevent navigate-away with unsaved changes (browser close/reload)
@@ -161,11 +173,11 @@ export default function Settings() {
     const handler = (e: BeforeUnloadEvent) => {
       if (hasChanges) {
         e.preventDefault();
-        e.returnValue = '';
+        e.returnValue = "";
       }
     };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
   }, [hasChanges]);
 
   // Block in-app route changes when there are unsaved edits. `useBlocker`
@@ -174,8 +186,9 @@ export default function Settings() {
   // NOTE: requires the app to use `createBrowserRouter` + `RouterProvider`
   // (data router). With the plain `<BrowserRouter>` wrapper, useBlocker is
   // a no-op — see main.tsx if you need the guard to fire.
-  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
-    hasChanges && currentLocation.pathname !== nextLocation.pathname,
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      hasChanges && currentLocation.pathname !== nextLocation.pathname,
   );
 
   const deletesMutation = useMutation({
@@ -213,26 +226,40 @@ export default function Settings() {
           <h3 className="font-semibold mb-4">{t("settings.general")}</h3>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.websiteName")}</label>
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t("settings.websiteName")}
+              </label>
+              <input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
+              />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.websiteUrl")}</label>
-              <input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })}
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t("settings.websiteUrl")}
+              </label>
+              <input
+                value={form.url}
+                onChange={(e) => setForm({ ...form, url: e.target.value })}
                 placeholder="https://example.com"
-                className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+                className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
+              />
               <p className="text-xs text-gray-400 mt-1">{t("settings.websiteUrlHint")}</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.domainWhitelist")}</label>
-              <input value={form.allowed_domains}
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t("settings.domainWhitelist")}
+              </label>
+              <input
+                value={form.allowed_domains}
                 onChange={(e) => {
                   setForm({ ...form, allowed_domains: e.target.value });
                   validate("allowed_domains", e.target.value);
                 }}
                 placeholder="example.com, app.example.com"
-                className={`w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500 ${errors.allowed_domains ? "border-red-300" : ""}`} />
+                className={`w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500 ${errors.allowed_domains ? "border-red-300" : ""}`}
+              />
               {errors.allowed_domains && (
                 <p className="text-xs text-red-500 mt-1">{errors.allowed_domains}</p>
               )}
@@ -245,7 +272,9 @@ export default function Settings() {
                   onChange={(e) => setForm({ ...form, allow_private_urls: e.target.checked })}
                   className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                 />
-                <span className="text-sm font-medium text-gray-700">{t("settings.allowPrivateUrls.label")}</span>
+                <span className="text-sm font-medium text-gray-700">
+                  {t("settings.allowPrivateUrls.label")}
+                </span>
               </label>
               <p className="text-xs text-red-600 mt-1">{t("settings.allowPrivateUrls.help")}</p>
             </div>
@@ -256,32 +285,50 @@ export default function Settings() {
         <div className="bg-white p-6 rounded-xl border border-gray-200">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold">{t("settings.model")}</h3>
-            <a href="/models" className="text-xs text-primary-600 hover:text-primary-700 font-medium">
+            <a
+              href="/models"
+              className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+            >
               {t("settings.manageModels")} &rarr;
             </a>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.provider")}</label>
-              <select value={form.llm_provider} onChange={(e) => {
-                const p = providers.find((p) => p.id === e.target.value);
-                setForm({
-                  ...form,
-                  llm_provider: e.target.value,
-                  llm_model: p?.models?.[0]?.id || "",
-                });
-              }} className="w-full border rounded-lg px-3 py-2 outline-none">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t("settings.provider")}
+              </label>
+              <select
+                value={form.llm_provider}
+                onChange={(e) => {
+                  const p = providers.find((p) => p.id === e.target.value);
+                  setForm({
+                    ...form,
+                    llm_provider: e.target.value,
+                    llm_model: p?.models?.[0]?.id || "",
+                  });
+                }}
+                className="w-full border rounded-lg px-3 py-2 outline-none"
+              >
                 {providers.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.model")}</label>
-              <select value={form.llm_model} onChange={(e) => setForm({ ...form, llm_model: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2 outline-none">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t("settings.model")}
+              </label>
+              <select
+                value={form.llm_model}
+                onChange={(e) => setForm({ ...form, llm_model: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 outline-none"
+              >
                 {currentProvider?.models?.map((m) => (
-                  <option key={m.id} value={m.id}>{m.name} — {m.description}</option>
+                  <option key={m.id} value={m.id}>
+                    {m.name} — {m.description}
+                  </option>
                 ))}
               </select>
             </div>
@@ -293,7 +340,9 @@ export default function Settings() {
           <h3 className="font-semibold mb-4">{t("settings.aiRules")}</h3>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.systemPrompt")}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t("settings.systemPrompt")}
+              </label>
               <textarea
                 value={form.system_prompt}
                 onChange={(e) => setForm({ ...form, system_prompt: e.target.value })}
@@ -304,7 +353,9 @@ export default function Settings() {
               <p className="text-xs text-gray-400 mt-1">{t("settings.systemPromptHint")}</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.botRules")}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t("settings.botRules")}
+              </label>
               <textarea
                 value={form.bot_rules}
                 onChange={(e) => setForm({ ...form, bot_rules: e.target.value })}
@@ -315,7 +366,9 @@ export default function Settings() {
               <p className="text-xs text-gray-400 mt-1">{t("settings.botRulesHint")}</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.responseLanguage")}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t("settings.responseLanguage")}
+              </label>
               <select
                 value={form.response_language}
                 onChange={(e) => setForm({ ...form, response_language: e.target.value })}
@@ -336,37 +389,54 @@ export default function Settings() {
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.primaryColor")}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t("settings.primaryColor")}
+                </label>
                 <div className="flex items-center gap-2">
-                  <input type="color" value={form.primary_color}
+                  <input
+                    type="color"
+                    value={form.primary_color}
                     onChange={(e) => {
                       setForm({ ...form, primary_color: e.target.value });
                       validate("primary_color", e.target.value);
                     }}
-                    className="w-10 h-10 rounded border cursor-pointer" />
-                  <input value={form.primary_color}
+                    className="w-10 h-10 rounded border cursor-pointer"
+                  />
+                  <input
+                    value={form.primary_color}
                     onChange={(e) => {
                       setForm({ ...form, primary_color: e.target.value });
                       validate("primary_color", e.target.value);
                     }}
-                    className={`w-28 border rounded-lg px-3 py-2 font-mono text-sm outline-none ${errors.primary_color ? "border-red-300" : ""}`} />
+                    className={`w-28 border rounded-lg px-3 py-2 font-mono text-sm outline-none ${errors.primary_color ? "border-red-300" : ""}`}
+                  />
                 </div>
                 {errors.primary_color && (
                   <p className="text-xs text-red-500 mt-1">{errors.primary_color}</p>
                 )}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.position")}</label>
-                <select value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2 outline-none">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t("settings.position")}
+                </label>
+                <select
+                  value={form.position}
+                  onChange={(e) => setForm({ ...form, position: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2 outline-none"
+                >
                   <option value="bottom-right">{t("settings.positionBottomRight")}</option>
                   <option value="bottom-left">{t("settings.positionBottomLeft")}</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.darkMode")}</label>
-                <select value={form.dark_mode} onChange={(e) => setForm({ ...form, dark_mode: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2 outline-none">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t("settings.darkMode")}
+                </label>
+                <select
+                  value={form.dark_mode}
+                  onChange={(e) => setForm({ ...form, dark_mode: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2 outline-none"
+                >
                   <option value="auto">{t("settings.darkModeAuto")}</option>
                   <option value="light">{t("settings.darkModeLight")}</option>
                   <option value="dark">{t("settings.darkModeDark")}</option>
@@ -375,17 +445,27 @@ export default function Settings() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.botAvatar")}</label>
-                <input value={form.bot_avatar} onChange={(e) => setForm({ ...form, bot_avatar: e.target.value })}
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t("settings.botAvatar")}
+                </label>
+                <input
+                  value={form.bot_avatar}
+                  onChange={(e) => setForm({ ...form, bot_avatar: e.target.value })}
                   placeholder="🤖"
                   maxLength={4}
-                  className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+                  className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
+                />
                 <p className="text-xs text-gray-400 mt-1">{t("settings.botAvatarHint")}</p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.bubbleSize")}</label>
-                <select value={form.bubble_size} onChange={(e) => setForm({ ...form, bubble_size: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2 outline-none">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t("settings.bubbleSize")}
+                </label>
+                <select
+                  value={form.bubble_size}
+                  onChange={(e) => setForm({ ...form, bubble_size: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2 outline-none"
+                >
                   <option value="small">{t("settings.bubbleSmall")}</option>
                   <option value="medium">{t("settings.bubbleMedium")}</option>
                   <option value="large">{t("settings.bubbleLarge")}</option>
@@ -401,54 +481,92 @@ export default function Settings() {
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.widgetTitle")}</label>
-                <input value={form.widget_title} onChange={(e) => setForm({ ...form, widget_title: e.target.value })}
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t("settings.widgetTitle")}
+                </label>
+                <input
+                  value={form.widget_title}
+                  onChange={(e) => setForm({ ...form, widget_title: e.target.value })}
                   placeholder="Chat with us"
-                  className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+                  className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.headerSubtitle")}</label>
-                <input value={form.header_subtitle} onChange={(e) => setForm({ ...form, header_subtitle: e.target.value })}
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t("settings.headerSubtitle")}
+                </label>
+                <input
+                  value={form.header_subtitle}
+                  onChange={(e) => setForm({ ...form, header_subtitle: e.target.value })}
                   placeholder="Online"
-                  className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+                  className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
+                />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.greetingMessage")}</label>
-              <input value={form.greeting} onChange={(e) => setForm({ ...form, greeting: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t("settings.greetingMessage")}
+              </label>
+              <input
+                value={form.greeting}
+                onChange={(e) => setForm({ ...form, greeting: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
+              />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.inputPlaceholder")}</label>
-                <input value={form.input_placeholder} onChange={(e) => setForm({ ...form, input_placeholder: e.target.value })}
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t("settings.inputPlaceholder")}
+                </label>
+                <input
+                  value={form.input_placeholder}
+                  onChange={(e) => setForm({ ...form, input_placeholder: e.target.value })}
                   placeholder="Type a message..."
-                  className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+                  className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.autoOpen")}</label>
-                <input type="number" min={0} max={120} value={form.auto_open_delay}
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t("settings.autoOpen")}
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={120}
+                  value={form.auto_open_delay}
                   onChange={(e) => {
                     const val = parseInt(e.target.value);
-                    setForm({ ...form, auto_open_delay: Number.isNaN(val) ? form.auto_open_delay : val });
+                    setForm({
+                      ...form,
+                      auto_open_delay: Number.isNaN(val) ? form.auto_open_delay : val,
+                    });
                   }}
-                  className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+                  className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
+                />
                 <p className="text-xs text-gray-400 mt-1">{t("settings.autoOpenHint")}</p>
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.suggestions")}</label>
-              <input value={form.suggestions} onChange={(e) => setForm({ ...form, suggestions: e.target.value })}
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t("settings.suggestions")}
+              </label>
+              <input
+                value={form.suggestions}
+                onChange={(e) => setForm({ ...form, suggestions: e.target.value })}
                 placeholder="What can you do?, Tell me about your products, How to get started?"
-                className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500" />
+                className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500"
+              />
               <p className="text-xs text-gray-400 mt-1">{t("settings.suggestionsHint")}</p>
             </div>
           </div>
         </div>
 
-        <button type="submit" disabled={mutation.isPending || Object.keys(errors).length > 0}
+        <button
+          type="submit"
+          disabled={mutation.isPending || Object.keys(errors).length > 0}
           title="Ctrl+S"
-          className="flex items-center gap-2 bg-primary-600 text-white px-6 py-2.5 rounded-lg hover:bg-primary-700 disabled:opacity-50">
+          className="flex items-center gap-2 bg-primary-600 text-white px-6 py-2.5 rounded-lg hover:bg-primary-700 disabled:opacity-50"
+        >
           <Save className="w-4 h-4" />
           {mutation.isPending ? t("settings.saving") : t("settings.saveChanges")}
           <kbd className="ml-1 text-xs bg-primary-700 px-1.5 py-0.5 rounded opacity-75">Ctrl+S</kbd>
@@ -470,7 +588,9 @@ export default function Settings() {
                 className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 text-sm font-medium"
               >
                 <Trash2 className="w-4 h-4" />
-                {deletesMutation.isPending ? t("settings.deleting") : t("settings.deleteSiteButton")}
+                {deletesMutation.isPending
+                  ? t("settings.deleting")
+                  : t("settings.deleteSiteButton")}
               </button>
               <button
                 onClick={() => setShowDeleteConfirm(false)}

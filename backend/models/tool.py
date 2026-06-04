@@ -1,8 +1,9 @@
 import uuid
 from datetime import UTC, datetime
 
-from database import Base
 from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, String, Text
+
+from database import Base
 
 
 class Tool(Base):

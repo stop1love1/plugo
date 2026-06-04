@@ -91,6 +91,9 @@ jobs:
       - name: Lint
         run: cd frontend && pnpm lint
 
+      - name: Typecheck
+        run: cd frontend && pnpm typecheck
+
       - name: Format check
         run: cd frontend && pnpm format:check
 

@@ -1,7 +1,37 @@
 import contextlib
+import re
 
 import chromadb
+
 from config import settings
+
+# Words shorter than this are ignored when computing keyword overlap (drops most
+# stopwords/articles without needing a stopword list).
+_MIN_TERM_LEN = 3
+# Maximum additive boost applied to a chunk that contains every query term.
+_KEYWORD_BOOST_WEIGHT = 0.15
+
+
+def _keyword_boost(query_text: str, chunks: list[dict]) -> list[dict]:
+    """Hybrid rerank: nudge vector scores up for chunks that literally contain
+    query terms, then return a new list re-sorted by the blended score.
+
+    Pure and deterministic — no extra model or dependency — so semantically
+    relevant chunks that also share surface terms with the question rise to the
+    top, mitigating pure-cosine misses. Input dicts are not mutated (a fresh dict
+    with the adjusted score is returned for each), so callers may safely pass
+    cached/shared chunk lists.
+    """
+    terms = {t for t in re.findall(r"\w+", query_text.lower()) if len(t) >= _MIN_TERM_LEN}
+    if not terms:
+        return chunks
+    boosted = []
+    for c in chunks:
+        content = (c.get("content") or "").lower()
+        hits = sum(1 for t in terms if t in content)
+        overlap = hits / len(terms)
+        boosted.append({**c, "score": min(1.0, c.get("score", 0.0) + _KEYWORD_BOOST_WEIGHT * overlap)})
+    return sorted(boosted, key=lambda c: c.get("score", 0.0), reverse=True)
 
 
 class RAGEngine:
@@ -56,8 +86,13 @@ class RAGEngine:
         query_embedding: list[float],
         top_k: int = 10,
         min_score: float | None = None,
+        query_text: str | None = None,
     ) -> list[dict]:
-        """Search for the most relevant chunks with optional relevance filtering."""
+        """Search for the most relevant chunks with optional relevance filtering.
+
+        When ``query_text`` is supplied, survivors are re-ranked with a keyword
+        overlap boost (hybrid retrieval) before the max_chunks cap.
+        """
         if min_score is None:
             min_score = settings.rag_min_score
 
@@ -77,12 +112,18 @@ class RAGEngine:
             score = 1 - results["distances"][0][i]  # Convert distance to similarity
             if score < min_score:
                 continue
-            chunks.append({
-                "id": results["ids"][0][i],
-                "content": results["documents"][0][i],
-                "metadata": results["metadatas"][0][i],
-                "score": score,
-            })
+            chunks.append(
+                {
+                    "id": results["ids"][0][i],
+                    "content": results["documents"][0][i],
+                    "metadata": results["metadatas"][0][i],
+                    "score": score,
+                }
+            )
+
+        # Hybrid rerank on the surviving candidates before capping.
+        if query_text:
+            chunks = _keyword_boost(query_text, chunks)
 
         # Cap at max_chunks
         max_chunks = settings.rag_max_chunks

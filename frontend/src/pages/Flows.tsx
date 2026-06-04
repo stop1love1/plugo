@@ -3,13 +3,29 @@ import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import {
-  getFlows, getFlow, createFlow, updateFlow, deleteFlow,
-  addFlowStep, updateFlowStep, deleteFlowStep, reorderFlowSteps,
-  type Flow, type FlowStep,
+  getFlows,
+  getFlow,
+  createFlow,
+  updateFlow,
+  deleteFlow,
+  addFlowStep,
+  updateFlowStep,
+  deleteFlowStep,
+  reorderFlowSteps,
+  type Flow,
+  type FlowStep,
 } from "../lib/api";
 import {
-  Plus, Trash2, X, ChevronUp, ChevronDown,
-  Lock, Pencil, GitBranch, Eye, EyeOff,
+  Plus,
+  Trash2,
+  X,
+  ChevronUp,
+  ChevronDown,
+  Lock,
+  Pencil,
+  GitBranch,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { EmptyState } from "../components/EmptyState";
@@ -77,7 +93,10 @@ export default function Flows() {
 
   return (
     <div>
-      <PageHeader title={t("flows.title")} subtitle={t("flows.count").replace("{n}", String(flows?.length || 0))}>
+      <PageHeader
+        title={t("flows.title")}
+        subtitle={t("flows.count").replace("{n}", String(flows?.length || 0))}
+      >
         <button
           onClick={() => setShowCreate(true)}
           className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700"
@@ -88,18 +107,31 @@ export default function Flows() {
 
       {/* Create modal */}
       {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+        >
           <div className="fixed inset-0 bg-black/40" onClick={() => setShowCreate(false)} />
-          <form onSubmit={handleCreate} className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6 z-10">
+          <form
+            onSubmit={handleCreate}
+            className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6 z-10"
+          >
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-lg">{t("flows.newFlow")}</h3>
-              <button type="button" onClick={() => setShowCreate(false)} className="text-gray-400 hover:text-gray-600">
+              <button
+                type="button"
+                onClick={() => setShowCreate(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("flows.flowName")}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t("flows.flowName")}
+                </label>
                 <input
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
@@ -109,7 +141,9 @@ export default function Flows() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("flows.descriptionLabel")}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t("flows.descriptionLabel")}
+                </label>
                 <textarea
                   value={newDesc}
                   onChange={(e) => setNewDesc(e.target.value)}
@@ -129,10 +163,18 @@ export default function Flows() {
                 {t("flows.requiresLogin")}
               </label>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowCreate(false)} className="text-gray-500 px-4 py-2 hover:bg-gray-100 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setShowCreate(false)}
+                  className="text-gray-500 px-4 py-2 hover:bg-gray-100 rounded-lg"
+                >
                   {t("common.cancel")}
                 </button>
-                <button type="submit" disabled={createMutation.isPending || !newName.trim()} className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50">
+                <button
+                  type="submit"
+                  disabled={createMutation.isPending || !newName.trim()}
+                  className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                >
                   {createMutation.isPending ? t("common.loading") : t("flows.create")}
                 </button>
               </div>
@@ -161,7 +203,10 @@ export default function Flows() {
       ) : (
         <div className="space-y-3">
           {flows.map((flow) => (
-            <div key={flow.id} className="bg-white p-4 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors">
+            <div
+              key={flow.id}
+              className="bg-white p-4 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors"
+            >
               <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -219,12 +264,19 @@ export default function Flows() {
   );
 }
 
-
 // ============================================================
 // Flow Editor (inline modal)
 // ============================================================
 
-function FlowEditor({ flowId, siteId, onClose }: { flowId: string; siteId: string; onClose: () => void }) {
+function FlowEditor({
+  flowId,
+  siteId,
+  onClose,
+}: {
+  flowId: string;
+  siteId: string;
+  onClose: () => void;
+}) {
   const queryClient = useQueryClient();
   const { t } = useLocale();
 
@@ -247,7 +299,8 @@ function FlowEditor({ flowId, siteId, onClose }: { flowId: string; siteId: strin
   });
 
   const addStepMutation = useMutation({
-    mutationFn: (data: { title: string; description?: string; url?: string }) => addFlowStep(flowId, data),
+    mutationFn: (data: { title: string; description?: string; url?: string }) =>
+      addFlowStep(flowId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["flow", flowId] });
       setNewStepTitle("");
@@ -259,7 +312,8 @@ function FlowEditor({ flowId, siteId, onClose }: { flowId: string; siteId: strin
   });
 
   const updateStepMutation = useMutation({
-    mutationFn: ({ stepId, data }: { stepId: string; data: Partial<FlowStep> }) => updateFlowStep(stepId, data),
+    mutationFn: ({ stepId, data }: { stepId: string; data: Partial<FlowStep> }) =>
+      updateFlowStep(stepId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["flow", flowId] });
     },
@@ -306,7 +360,11 @@ function FlowEditor({ flowId, siteId, onClose }: { flowId: string; siteId: strin
   if (!flow) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+    >
       <div className="fixed inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col z-10">
         {/* Header */}
@@ -335,7 +393,9 @@ function FlowEditor({ flowId, siteId, onClose }: { flowId: string; siteId: strin
               <input
                 type="checkbox"
                 checked={flow.requires_login}
-                onChange={(e) => updateMutation.mutate({ data: { requires_login: e.target.checked } })}
+                onChange={(e) =>
+                  updateMutation.mutate({ data: { requires_login: e.target.checked } })
+                }
                 className="rounded border-gray-300"
               />
               <Lock className="w-3 h-3" /> {t("flows.loginShort")}
@@ -375,8 +435,13 @@ function FlowEditor({ flowId, siteId, onClose }: { flowId: string; siteId: strin
           ))}
 
           {/* Add step form */}
-          <form onSubmit={handleAddStep} className="bg-gray-50 rounded-lg p-4 border border-dashed border-gray-300">
-            <p className="text-xs font-medium text-gray-500 mb-3">{t("flows.addStepN").replace("{n}", String(steps.length + 1))}</p>
+          <form
+            onSubmit={handleAddStep}
+            className="bg-gray-50 rounded-lg p-4 border border-dashed border-gray-300"
+          >
+            <p className="text-xs font-medium text-gray-500 mb-3">
+              {t("flows.addStepN").replace("{n}", String(steps.length + 1))}
+            </p>
             <div className="space-y-2">
               <input
                 value={newStepTitle}
@@ -414,13 +479,18 @@ function FlowEditor({ flowId, siteId, onClose }: { flowId: string; siteId: strin
   );
 }
 
-
 // ============================================================
 // Step Card
 // ============================================================
 
 function StepCard({
-  step, index, total, onMoveUp, onMoveDown, onUpdate, onDelete,
+  step,
+  index,
+  total,
+  onMoveUp,
+  onMoveDown,
+  onUpdate,
+  onDelete,
 }: {
   step: FlowStep;
   index: number;
@@ -450,11 +520,21 @@ function StepCard({
       <div className="flex items-start gap-2">
         {/* Reorder buttons */}
         <div className="flex flex-col items-center gap-0.5 pt-1">
-          <button onClick={onMoveUp} disabled={index === 0} className="text-gray-300 hover:text-gray-500 disabled:opacity-30">
+          <button
+            onClick={onMoveUp}
+            disabled={index === 0}
+            className="text-gray-300 hover:text-gray-500 disabled:opacity-30"
+          >
             <ChevronUp className="w-4 h-4" />
           </button>
-          <span className="text-xs font-medium text-gray-400 w-5 text-center">{step.step_order}</span>
-          <button onClick={onMoveDown} disabled={index === total - 1} className="text-gray-300 hover:text-gray-500 disabled:opacity-30">
+          <span className="text-xs font-medium text-gray-400 w-5 text-center">
+            {step.step_order}
+          </span>
+          <button
+            onClick={onMoveDown}
+            disabled={index === total - 1}
+            className="text-gray-300 hover:text-gray-500 disabled:opacity-30"
+          >
             <ChevronDown className="w-4 h-4" />
           </button>
         </div>
@@ -483,17 +563,27 @@ function StepCard({
                 className="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-primary-500"
               />
               <div className="flex gap-2">
-                <button onClick={handleSave} className="text-xs bg-primary-600 text-white px-3 py-1 rounded hover:bg-primary-700">{t("common.save")}</button>
-                <button onClick={() => setEditing(false)} className="text-xs text-gray-500 hover:text-gray-700">{t("common.cancel")}</button>
+                <button
+                  onClick={handleSave}
+                  className="text-xs bg-primary-600 text-white px-3 py-1 rounded hover:bg-primary-700"
+                >
+                  {t("common.save")}
+                </button>
+                <button
+                  onClick={() => setEditing(false)}
+                  className="text-xs text-gray-500 hover:text-gray-700"
+                >
+                  {t("common.cancel")}
+                </button>
               </div>
             </div>
           ) : (
             <>
               <p className="text-sm font-medium text-gray-900">{step.title}</p>
-              {step.description && <p className="text-xs text-gray-500 mt-0.5">{step.description}</p>}
-              {step.url && (
-                <p className="text-xs text-primary-600 mt-0.5 truncate">{step.url}</p>
+              {step.description && (
+                <p className="text-xs text-gray-500 mt-0.5">{step.description}</p>
               )}
+              {step.url && <p className="text-xs text-primary-600 mt-0.5 truncate">{step.url}</p>}
             </>
           )}
         </div>
@@ -501,7 +591,10 @@ function StepCard({
         {/* Actions */}
         {!editing && (
           <div className="flex gap-0.5 shrink-0">
-            <button onClick={() => setEditing(true)} className="text-gray-400 hover:text-primary-600 p-1">
+            <button
+              onClick={() => setEditing(true)}
+              className="text-gray-400 hover:text-primary-600 p-1"
+            >
               <Pencil className="w-3.5 h-3.5" />
             </button>
             <button onClick={onDelete} className="text-gray-400 hover:text-red-500 p-1">

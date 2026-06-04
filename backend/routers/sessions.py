@@ -1,12 +1,14 @@
-
-from auth import TokenData, get_current_user
-from fastapi import APIRouter, Depends, Header, HTTPException
-from logging_config import logger
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from auth import TokenData, get_current_user
+from logging_config import logger
 from repositories import Repositories, get_repos
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
+
+# Upper bound on page size so a client can't request an unbounded result set.
+MAX_PER_PAGE = 100
 
 
 def _extract_bearer_token(authorization: str | None) -> str | None:
@@ -22,8 +24,8 @@ def _extract_bearer_token(authorization: str | None) -> str | None:
 @router.get("")
 async def list_sessions(
     site_id: str,
-    page: int = 1,
-    per_page: int = 20,
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=MAX_PER_PAGE),
     repos: Repositories = Depends(get_repos),
     _user: TokenData = Depends(get_current_user),
 ):

@@ -6,15 +6,15 @@ from datetime import UTC, datetime
 from time import time
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from logging_config import logger
-from utils.cors import validate_site_origin
-from utils.pricing import estimate_cost
-from utils.rate_limit import SiteTokenWSRateLimiter
 
 from agent.core import ChatAgent
 from agent.memory import ConversationSummarizer, MemoryExtractor
+from logging_config import logger
 from providers.factory import get_llm_provider
 from repositories import create_repos
+from utils.cors import validate_site_origin
+from utils.pricing import estimate_cost
+from utils.rate_limit import SiteTokenWSRateLimiter
 
 router = APIRouter()
 
@@ -41,6 +41,7 @@ def _get_session_resume_lock(session_id: str) -> asyncio.Lock:
         _session_resume_locks[session_id] = lock
     return lock
 
+
 # Retain references until background tasks complete (RUF006 / asyncio.create_task)
 _background_tasks: set[asyncio.Task] = set()
 
@@ -50,14 +51,13 @@ def _fire_and_forget(coro):
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
 
+
 # --- WebSocket rate limiting ---
 # Bucket per (site_token, session) so one tenant's traffic can't starve another's.
 WS_RATE_LIMIT_WINDOW = 60  # seconds
 WS_RATE_LIMIT_MAX = 20  # max messages per window
 
-_ws_rate_limiter = SiteTokenWSRateLimiter(
-    window_seconds=WS_RATE_LIMIT_WINDOW, max_requests=WS_RATE_LIMIT_MAX
-)
+_ws_rate_limiter = SiteTokenWSRateLimiter(window_seconds=WS_RATE_LIMIT_WINDOW, max_requests=WS_RATE_LIMIT_MAX)
 
 # --- Site config cache ---
 _site_cache: dict[str, tuple[dict, float]] = {}
@@ -179,7 +179,9 @@ async def _run_websocket_chat(
         return
 
     if not site.get("is_approved"):
-        await websocket.send_json({"type": "error", "message": "This chat is not available yet. Please try again later."})
+        await websocket.send_json(
+            {"type": "error", "message": "This chat is not available yet. Please try again later."}
+        )
         await websocket.close()
         return
 
@@ -196,7 +198,7 @@ async def _run_websocket_chat(
     # Sanitize visitor_id to prevent cross-site spoofing
     raw_visitor_id = first_data.get("visitor_id", "")
     # Only allow alphanumeric, hyphens, underscores
-    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '', str(raw_visitor_id))[:64] if raw_visitor_id else ""
+    sanitized = re.sub(r"[^a-zA-Z0-9_-]", "", str(raw_visitor_id))[:64] if raw_visitor_id else ""
     if not sanitized:
         sanitized = str(uuid.uuid4())
     # Scope to this site to prevent cross-site memory access
@@ -287,18 +289,20 @@ async def _run_websocket_chat(
             pass  # conversation_summaries repo may not exist yet
 
     # Send welcome with session info and previous messages
-    await websocket.send_json({
-        "type": "connected",
-        "session_id": session_id,
-        "greeting": site["greeting"],
-        "resumed": resumed,
-        "history": [{"role": m["role"], "content": m["content"]} for m in messages] if resumed else [],
-        "config": {
-            "primaryColor": site["primary_color"],
-            "position": site["position"],
-        },
-        "suggestions": site.get("suggestions") or [],
-    })
+    await websocket.send_json(
+        {
+            "type": "connected",
+            "session_id": session_id,
+            "greeting": site["greeting"],
+            "resumed": resumed,
+            "history": [{"role": m["role"], "content": m["content"]} for m in messages] if resumed else [],
+            "config": {
+                "primaryColor": site["primary_color"],
+                "position": site["position"],
+            },
+            "suggestions": site.get("suggestions") or [],
+        }
+    )
 
     # If the first message was a chat message (not init), process it
     if first_data.get("type") != "init" and first_data.get("message"):
@@ -308,9 +312,15 @@ async def _run_websocket_chat(
             await websocket.close(code=1008, reason="Message too long")
             return
         await _handle_message(
-            websocket, agent, repos, session_id, messages,
-            first_message, first_data.get("pageContext"),
-            visitor_id, conversation_summary,
+            websocket,
+            agent,
+            repos,
+            session_id,
+            messages,
+            first_message,
+            first_data.get("pageContext"),
+            visitor_id,
+            conversation_summary,
         )
 
     # Background heartbeat to detect stale connections
@@ -348,10 +358,12 @@ async def _run_websocket_chat(
 
             # Validate message size limits
             if len(message) > 10000:
-                await websocket.send_json({
-                    "type": "error",
-                    "message": "Message too long. Please keep it under 10,000 characters.",
-                })
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "message": "Message too long. Please keep it under 10,000 characters.",
+                    }
+                )
                 continue
 
             if page_context and isinstance(page_context, dict):
@@ -361,10 +373,12 @@ async def _run_websocket_chat(
 
             # Rate limit WebSocket messages — bucket per (site_token, session)
             if not _ws_rate_limiter.is_allowed(session_id, site_token):
-                await websocket.send_json({
-                    "type": "error",
-                    "message": "Too many messages. Please slow down.",
-                })
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "message": "Too many messages. Please slow down.",
+                    }
+                )
                 continue
 
             # Re-fetch conversation summary periodically (after summarization may have run)
@@ -377,8 +391,15 @@ async def _run_websocket_chat(
                     pass
 
             await _handle_message(
-                websocket, agent, repos, session_id, messages,
-                message, page_context, visitor_id, conversation_summary,
+                websocket,
+                agent,
+                repos,
+                session_id,
+                messages,
+                message,
+                page_context,
+                visitor_id,
+                conversation_summary,
             )
 
             # Periodic summarization (every 20 messages)
@@ -420,11 +441,13 @@ async def _handle_message(
     conversation_summary: str | None = None,
 ):
     """Process a single user message and stream the response."""
-    messages.append({
-        "role": "user",
-        "content": message,
-        "timestamp": datetime.now(UTC).isoformat(),
-    })
+    messages.append(
+        {
+            "role": "user",
+            "content": message,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+    )
 
     await websocket.send_json({"type": "start"})
 
@@ -453,7 +476,9 @@ async def _handle_message(
         except Exception:
             stream_error = True
     except Exception as e:
-        logger.error("Chat stream error: {error_type}: {error}", error=str(e), error_type=type(e).__name__, session_id=session_id)
+        logger.error(
+            "Chat stream error: {error_type}: {error}", error=str(e), error_type=type(e).__name__, session_id=session_id
+        )
         try:
             await websocket.send_json({"type": "error", "message": "Oops, something went wrong. Please try again."})
         except Exception:
@@ -463,11 +488,13 @@ async def _handle_message(
 
     # Only save complete responses (skip if client disconnected with no content)
     if full_response.strip():
-        messages.append({
-            "role": "assistant",
-            "content": full_response,
-            "timestamp": datetime.now(UTC).isoformat(),
-        })
+        messages.append(
+            {
+                "role": "assistant",
+                "content": full_response,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+        )
         try:
             await repos.chat_sessions.update_messages(session_id, messages)
         except Exception as e:
@@ -477,10 +504,12 @@ async def _handle_message(
     # can attach them to the just-finished assistant message.
     if not stream_error and agent.last_citations:
         with contextlib.suppress(Exception):
-            await websocket.send_json({
-                "type": "citations",
-                "items": agent.last_citations,
-            })
+            await websocket.send_json(
+                {
+                    "type": "citations",
+                    "items": agent.last_citations,
+                }
+            )
 
     # Record token usage for this turn (providers without usage reporting are no-ops).
     usage = agent.total_usage

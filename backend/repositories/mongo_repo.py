@@ -160,6 +160,7 @@ class MongoSiteRepo(BaseSiteRepo):
             return None
         from logging_config import logger
         from utils.crypto import decrypt_value
+
         try:
             return decrypt_value(doc["crawl_login_password"])
         except ValueError as e:
@@ -245,21 +246,24 @@ class MongoKnowledgeRepo(BaseKnowledgeRepo):
                 seen_in_batch.add(content_hash)
 
             doc_id = data.get("id", str(uuid.uuid4()))
-            docs.append({
-                "_id": doc_id,
-                "site_id": data["site_id"],
-                "source_url": data.get("source_url"),
-                "source_type": data.get("source_type", "crawl"),
-                "title": data.get("title"),
-                "content": data["content"],
-                "content_hash": content_hash,
-                "chunk_index": data.get("chunk_index", 0),
-                "embedding_id": data.get("embedding_id", doc_id),
-                "crawled_at": datetime.now(UTC),
-            })
+            docs.append(
+                {
+                    "_id": doc_id,
+                    "site_id": data["site_id"],
+                    "source_url": data.get("source_url"),
+                    "source_type": data.get("source_type", "crawl"),
+                    "title": data.get("title"),
+                    "content": data["content"],
+                    "content_hash": content_hash,
+                    "chunk_index": data.get("chunk_index", 0),
+                    "embedding_id": data.get("embedding_id", doc_id),
+                    "crawled_at": datetime.now(UTC),
+                }
+            )
             ids.append(doc_id)
         if docs:
             import contextlib
+
             # ordered=False so a race-condition duplicate-key on one doc doesn't
             # prevent the rest of the batch from inserting. Suppressing
             # BulkWriteError here is intentional — duplicates from a concurrent
@@ -284,22 +288,26 @@ class MongoKnowledgeRepo(BaseKnowledgeRepo):
     async def list_crawled_urls(self, site_id: str) -> list[dict]:
         pipeline = [
             {"$match": {"site_id": site_id, "source_url": {"$ne": None}}},
-            {"$group": {
-                "_id": "$source_url",
-                "chunk_count": {"$sum": 1},
-                "title": {"$max": "$title"},
-                "last_crawled_at": {"$max": "$crawled_at"},
-                "source_type": {"$min": "$source_type"},
-            }},
+            {
+                "$group": {
+                    "_id": "$source_url",
+                    "chunk_count": {"$sum": 1},
+                    "title": {"$max": "$title"},
+                    "last_crawled_at": {"$max": "$crawled_at"},
+                    "source_type": {"$min": "$source_type"},
+                }
+            },
             {"$sort": {"last_crawled_at": -1}},
-            {"$project": {
-                "_id": 0,
-                "source_url": "$_id",
-                "chunk_count": 1,
-                "title": 1,
-                "last_crawled_at": 1,
-                "source_type": 1,
-            }},
+            {
+                "$project": {
+                    "_id": 0,
+                    "source_url": "$_id",
+                    "chunk_count": 1,
+                    "title": 1,
+                    "last_crawled_at": 1,
+                    "source_type": 1,
+                }
+            },
         ]
         results = []
         async for doc in self.col.aggregate(pipeline):
@@ -317,9 +325,7 @@ class MongoKnowledgeRepo(BaseKnowledgeRepo):
         return {doc["content_hash"] async for doc in cursor if doc.get("content_hash")}
 
     async def list_by_url(self, site_id: str, source_url: str) -> list[dict]:
-        cursor = self.col.find(
-            {"site_id": site_id, "source_url": source_url}
-        ).sort("chunk_index", 1)
+        cursor = self.col.find({"site_id": site_id, "source_url": source_url}).sort("chunk_index", 1)
         return [_clean_doc(doc) async for doc in cursor]
 
     async def delete_by_url(self, site_id: str, source_url: str) -> int:
@@ -369,7 +375,9 @@ class MongoToolRepo(BaseToolRepo):
     async def update(self, tool_id: str, data: dict) -> dict | None:
         update_data = {k: v for k, v in data.items() if v is not None}
         result = await self.col.find_one_and_update(
-            {"_id": tool_id}, {"$set": update_data}, return_document=True,
+            {"_id": tool_id},
+            {"$set": update_data},
+            return_document=True,
         )
         return _clean_doc(result) if result else None
 
@@ -431,24 +439,31 @@ class MongoChatSessionRepo(BaseChatSessionRepo):
             results.append(_clean_doc(doc))
         return results
 
-    async def list_by_site_since(self, site_id: str, since: datetime) -> list[dict]:
-        cursor = self.col.find({
-            "site_id": site_id,
-            "started_at": {"$gte": since},
-        }).sort("started_at", -1)
+    async def list_by_site_since(self, site_id: str, since: datetime, limit: int | None = None) -> list[dict]:
+        cursor = self.col.find(
+            {
+                "site_id": site_id,
+                "started_at": {"$gte": since},
+            }
+        ).sort("started_at", -1)
+        if limit is not None:
+            cursor = cursor.limit(limit)
         results = []
         async for doc in cursor:
             self._enrich_session(doc)
             results.append(_clean_doc(doc))
         return results
 
+    async def delete_older_than(self, cutoff: datetime) -> int:
+        """Delete sessions started before `cutoff`. Returns the number removed."""
+        result = await self.col.delete_many({"started_at": {"$lt": cutoff}})
+        return result.deleted_count
+
     async def update_messages(self, session_id: str, messages: list[dict]) -> bool:
         # matched_count (not modified_count): True means session exists.
         # modified_count would return False when the new messages equal the stored value,
         # diverging from the SQLite path that always returns True on found session.
-        result = await self.col.update_one(
-            {"_id": session_id}, {"$set": {"messages": messages}}
-        )
+        result = await self.col.update_one({"_id": session_id}, {"$set": {"messages": messages}})
         return result.matched_count > 0
 
     async def set_ended(self, session_id: str, clear: bool = False) -> bool:
@@ -460,23 +475,27 @@ class MongoChatSessionRepo(BaseChatSessionRepo):
         """Single-pipeline aggregation — no per-session Python iteration."""
         pipeline = [
             {"$match": {"site_id": site_id, "started_at": {"$gte": since}}},
-            {"$group": {
-                "_id": None,
-                "total_sessions": {"$sum": 1},
-                "total_messages": {"$sum": {"$size": {"$ifNull": ["$messages", []]}}},
-                "avg_duration": {
-                    "$avg": {
-                        "$cond": [
-                            {"$ifNull": ["$ended_at", False]},
-                            {"$divide": [
-                                {"$subtract": ["$ended_at", "$started_at"]},
-                                1000,  # ms → seconds
-                            ]},
-                            None,
-                        ]
-                    }
-                },
-            }},
+            {
+                "$group": {
+                    "_id": None,
+                    "total_sessions": {"$sum": 1},
+                    "total_messages": {"$sum": {"$size": {"$ifNull": ["$messages", []]}}},
+                    "avg_duration": {
+                        "$avg": {
+                            "$cond": [
+                                {"$ifNull": ["$ended_at", False]},
+                                {
+                                    "$divide": [
+                                        {"$subtract": ["$ended_at", "$started_at"]},
+                                        1000,  # ms → seconds
+                                    ]
+                                },
+                                None,
+                            ]
+                        }
+                    },
+                }
+            },
         ]
         async for doc in self.col.aggregate(pipeline):
             return {
@@ -486,18 +505,18 @@ class MongoChatSessionRepo(BaseChatSessionRepo):
             }
         return {"total_sessions": 0, "total_messages": 0, "avg_session_duration_seconds": 0.0}
 
-    async def add_token_usage(
-        self, session_id: str, in_tokens: int, out_tokens: int, cost_usd: float
-    ) -> bool:
+    async def add_token_usage(self, session_id: str, in_tokens: int, out_tokens: int, cost_usd: float) -> bool:
         # matched_count so a zero-delta call (still a meaningful "session exists"
         # signal) doesn't disagree with SQLite's rowcount>0 semantics.
         result = await self.col.update_one(
             {"_id": session_id},
-            {"$inc": {
-                "tokens_input": int(in_tokens),
-                "tokens_output": int(out_tokens),
-                "cost_usd": float(cost_usd),
-            }},
+            {
+                "$inc": {
+                    "tokens_input": int(in_tokens),
+                    "tokens_output": int(out_tokens),
+                    "cost_usd": float(cost_usd),
+                }
+            },
         )
         return result.matched_count > 0
 
@@ -573,17 +592,35 @@ class MongoUserRepo(BaseUserRepo):
         users = []
         async for doc in cursor:
             created_at = doc.get("created_at")
-            users.append({"id": doc["_id"], "username": doc["username"], "role": doc.get("role", "admin"), "created_at": created_at.isoformat() if isinstance(created_at, datetime) else str(created_at) if created_at else None})
+            users.append(
+                {
+                    "id": doc["_id"],
+                    "username": doc["username"],
+                    "role": doc.get("role", "admin"),
+                    "created_at": created_at.isoformat()
+                    if isinstance(created_at, datetime)
+                    else str(created_at)
+                    if created_at
+                    else None,
+                }
+            )
         return users
 
     async def update_role(self, user_id: str, role: str) -> dict | None:
-        result = await self.col.find_one_and_update(
-            {"_id": user_id}, {"$set": {"role": role}}, return_document=True
-        )
+        result = await self.col.find_one_and_update({"_id": user_id}, {"$set": {"role": role}}, return_document=True)
         if not result:
             return None
         created_at = result.get("created_at")
-        return {"id": result["_id"], "username": result["username"], "role": result.get("role", "admin"), "created_at": created_at.isoformat() if isinstance(created_at, datetime) else str(created_at) if created_at else None}
+        return {
+            "id": result["_id"],
+            "username": result["username"],
+            "role": result.get("role", "admin"),
+            "created_at": created_at.isoformat()
+            if isinstance(created_at, datetime)
+            else str(created_at)
+            if created_at
+            else None,
+        }
 
     async def delete(self, user_id: str) -> bool:
         result = await self.col.delete_one({"_id": user_id})
@@ -616,9 +653,7 @@ class MongoVisitorMemoryRepo(BaseVisitorMemoryRepo):
         return _clean_doc(doc) if doc else None
 
     async def list_by_visitor(self, visitor_id: str, site_id: str) -> list[dict]:
-        cursor = self.col.find(
-            {"visitor_id": visitor_id, "site_id": site_id}
-        ).sort("updated_at", -1)
+        cursor = self.col.find({"visitor_id": visitor_id, "site_id": site_id}).sort("updated_at", -1)
         return [_clean_doc(doc) async for doc in cursor]
 
     async def upsert(self, visitor_id: str, site_id: str, key: str, data: dict) -> dict:
@@ -628,7 +663,9 @@ class MongoVisitorMemoryRepo(BaseVisitorMemoryRepo):
             update_data = {k: v for k, v in data.items() if v is not None}
             update_data["updated_at"] = datetime.now(UTC)
             result = await self.col.find_one_and_update(
-                filter_query, {"$set": update_data}, return_document=True,
+                filter_query,
+                {"$set": update_data},
+                return_document=True,
             )
             return _clean_doc(result)
         else:
@@ -689,7 +726,9 @@ class MongoConversationSummaryRepo(BaseConversationSummaryRepo):
             update_data = {k: v for k, v in data.items() if v is not None}
             update_data["updated_at"] = datetime.now(UTC)
             result = await self.col.find_one_and_update(
-                {"session_id": session_id}, {"$set": update_data}, return_document=True,
+                {"session_id": session_id},
+                {"$set": update_data},
+                return_document=True,
             )
             return _clean_doc(result)
         else:
@@ -730,11 +769,22 @@ class MongoAuditLogRepo(BaseAuditLogRepo):
         await self.col.insert_one(doc)
         return _clean_doc(doc)
 
-    async def list_by_site(self, page: int = 1, per_page: int = 50) -> dict:
+    async def list_by_site(
+        self,
+        page: int = 1,
+        per_page: int = 50,
+        action: str | None = None,
+        resource_type: str | None = None,
+    ) -> dict:
         skip = (page - 1) * per_page
-        cursor = self.col.find().sort("created_at", -1).skip(skip).limit(per_page)
+        query: dict = {}
+        if action:
+            query["action"] = action
+        if resource_type:
+            query["resource_type"] = resource_type
+        cursor = self.col.find(query).sort("created_at", -1).skip(skip).limit(per_page)
         logs = [_clean_doc(doc) async for doc in cursor]
-        total = await self.col.count_documents({})
+        total = await self.col.count_documents(query)
         return {"logs": logs, "total": total, "page": page, "per_page": per_page}
 
 
@@ -757,7 +807,9 @@ class MongoLLMKeyRepo(BaseLLMKeyRepo):
             update_data = {k: v for k, v in data.items() if v is not None}
             update_data["updated_at"] = datetime.now(UTC)
             result = await self.col.find_one_and_update(
-                {"provider": provider}, {"$set": update_data}, return_document=True,
+                {"provider": provider},
+                {"$set": update_data},
+                return_document=True,
             )
             return _clean_doc(result)
         else:

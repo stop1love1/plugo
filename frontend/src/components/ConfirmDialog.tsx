@@ -41,7 +41,7 @@ export function ConfirmDialog({
       // Focus trap: Tab within dialog
       if (e.key === "Tab" && dialogRef.current) {
         const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
         );
         if (focusable.length === 0) return;
 
@@ -61,7 +61,7 @@ export function ConfirmDialog({
         }
       }
     },
-    [open, onCancel]
+    [open, onCancel],
   );
 
   useEffect(() => {
@@ -90,7 +90,9 @@ export function ConfirmDialog({
             <AlertTriangle className={`w-5 h-5 ${danger ? "text-red-600" : "text-blue-600"}`} />
           </div>
           <div>
-            <h3 id="confirm-dialog-title" className="font-semibold text-gray-900">{title}</h3>
+            <h3 id="confirm-dialog-title" className="font-semibold text-gray-900">
+              {title}
+            </h3>
             <p className="text-sm text-gray-600 mt-1">{message}</p>
           </div>
         </div>

@@ -1,5 +1,4 @@
 from config import settings
-
 from providers.base import BaseLLMProvider
 
 # In-memory cache for DB keys (refreshed on each provider creation)
@@ -10,12 +9,14 @@ async def _load_db_key(provider: str) -> str | None:
     """Load API key from DB, cache it."""
     try:
         from routers.llm_keys import get_key_for_provider
+
         key = await get_key_for_provider(provider)
         if key:
             _key_cache[provider] = key
         return key
     except Exception as e:
         from logging_config import logger
+
         logger.warning("Failed to load DB key for provider", provider=provider, error=str(e))
         return _key_cache.get(provider)
 
@@ -45,22 +46,27 @@ def get_llm_provider(
 
     if provider == "claude":
         from providers.claude_provider import ClaudeProvider
+
         return ClaudeProvider(api_key=_get_key("claude", settings.anthropic_api_key), model=model)
 
     elif provider == "openai":
         from providers.openai_provider import OpenAIProvider
+
         return OpenAIProvider(api_key=_get_key("openai", settings.openai_api_key), model=model)
 
     elif provider == "gemini":
         from providers.gemini_provider import GeminiProvider
+
         return GeminiProvider(api_key=_get_key("gemini", settings.gemini_api_key), model=model)
 
     elif provider == "ollama":
         from providers.ollama_provider import OllamaProvider
+
         return OllamaProvider(base_url=settings.ollama_base_url, model=model)
 
     elif provider == "lmstudio":
         from providers.openai_provider import OpenAIProvider
+
         p = OpenAIProvider(api_key="lm-studio", model=model)
         p.client = __import__("openai").AsyncOpenAI(
             api_key="lm-studio",

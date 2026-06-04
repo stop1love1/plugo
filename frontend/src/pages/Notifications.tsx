@@ -56,7 +56,11 @@ export default function Notifications() {
 
   return (
     <div className="flex flex-col h-[calc(100dvh-7rem)] min-h-[24rem] lg:h-[calc(100dvh-5.5rem)] lg:min-h-[28rem]">
-      <PageHeader title={t("notifications.title")} subtitle={t("notifications.subtitle")} className="mb-4 shrink-0">
+      <PageHeader
+        title={t("notifications.title")}
+        subtitle={t("notifications.subtitle")}
+        className="mb-4 shrink-0"
+      >
         {notifications.length > 0 && (
           <button
             type="button"
@@ -73,20 +77,28 @@ export default function Notifications() {
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 shrink-0">
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{t("notifications.summary")}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                {t("notifications.summary")}
+              </p>
               <p className="text-2xl font-bold text-gray-900 mt-1">{notifications.length}</p>
               <p className="text-xs text-gray-500 mt-0.5">{t("notifications.items")}</p>
             </div>
             <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700/80">{t("notifications.filterSuccess")}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700/80">
+                {t("notifications.filterSuccess")}
+              </p>
               <p className="text-2xl font-bold text-emerald-800 mt-1">{counts.success}</p>
             </div>
             <div className="rounded-xl border border-red-100 bg-red-50/60 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-red-700/80">{t("notifications.filterError")}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-red-700/80">
+                {t("notifications.filterError")}
+              </p>
               <p className="text-2xl font-bold text-red-800 mt-1">{counts.error}</p>
             </div>
             <div className="rounded-xl border border-sky-100 bg-sky-50/60 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-700/80">{t("notifications.filterInfo")}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-700/80">
+                {t("notifications.filterInfo")}
+              </p>
               <p className="text-2xl font-bold text-sky-800 mt-1">{counts.info}</p>
             </div>
           </div>
@@ -106,7 +118,9 @@ export default function Notifications() {
                 {pill.count != null && pill.id !== "all" ? (
                   <span
                     className={`tabular-nums rounded-full px-1.5 py-0.5 text-[10px] ${
-                      typeFilter === pill.id ? "bg-white/20 text-white" : "bg-gray-100 text-gray-600"
+                      typeFilter === pill.id
+                        ? "bg-white/20 text-white"
+                        : "bg-gray-100 text-gray-600"
                     }`}
                   >
                     {pill.count}
@@ -124,7 +138,9 @@ export default function Notifications() {
             <EmptyState icon={Bell} message={t("notifications.empty")} />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center p-8 text-sm text-gray-500">{t("common.noResults")}</div>
+          <div className="flex-1 flex items-center justify-center p-8 text-sm text-gray-500">
+            {t("common.noResults")}
+          </div>
         ) : (
           <ul className="flex-1 min-h-0 overflow-y-auto divide-y divide-gray-100">
             {filtered.map((n) => {
@@ -157,9 +173,16 @@ export default function Notifications() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900">{n.title}</p>
                     {n.message && (
-                      <p className="text-sm text-gray-600 mt-1.5 whitespace-pre-wrap break-words leading-relaxed">{n.message}</p>
+                      <p className="text-sm text-gray-600 mt-1.5 whitespace-pre-wrap break-words leading-relaxed">
+                        {n.message}
+                      </p>
                     )}
-                    <p className="text-xs text-gray-400 mt-2" title={new Date(n.timestamp).toLocaleString(locale === "vi" ? "vi-VN" : "en-US")}>
+                    <p
+                      className="text-xs text-gray-400 mt-2"
+                      title={new Date(n.timestamp).toLocaleString(
+                        locale === "vi" ? "vi-VN" : "en-US",
+                      )}
+                    >
                       {formatRelativeTime(n.timestamp, locale)}
                     </p>
                   </div>

@@ -1,8 +1,9 @@
 import uuid
 from datetime import UTC, datetime
 
-from database import Base
 from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, Integer, String
+
+from database import Base
 
 
 class ChatSession(Base):

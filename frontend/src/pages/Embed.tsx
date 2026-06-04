@@ -42,13 +42,15 @@ export default function Embed() {
     lines.push(`    primaryColor: "${s.primary_color}"`);
     if (s.greeting) lines.push(`    greeting: "${s.greeting}"`);
     lines.push(`    position: "${s.position || "bottom-right"}"`);
-    if (s.dark_mode && s.dark_mode !== "auto") lines.push(`    darkMode: ${s.dark_mode === "dark"}`);
+    if (s.dark_mode && s.dark_mode !== "auto")
+      lines.push(`    darkMode: ${s.dark_mode === "dark"}`);
     if (s.widget_title) lines.push(`    widgetTitle: "${s.widget_title}"`);
     if (s.bot_avatar) lines.push(`    botAvatar: "${s.bot_avatar}"`);
     if (s.header_subtitle) lines.push(`    headerSubtitle: "${s.header_subtitle}"`);
     if (s.input_placeholder) lines.push(`    inputPlaceholder: "${s.input_placeholder}"`);
     if (s.auto_open_delay) lines.push(`    autoOpenDelay: ${s.auto_open_delay}`);
-    if (s.bubble_size && s.bubble_size !== "medium") lines.push(`    bubbleSize: "${s.bubble_size}"`);
+    if (s.bubble_size && s.bubble_size !== "medium")
+      lines.push(`    bubbleSize: "${s.bubble_size}"`);
     return lines.join(",\n");
   };
 
@@ -125,7 +127,9 @@ p{text-align:center;font-size:14px;}</style></head>
         {/* Configurator controls */}
         <div className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">{t("embed.primaryColor")}</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              {t("embed.primaryColor")}
+            </label>
             <div className="flex items-center gap-2">
               <input
                 type="color"
@@ -141,7 +145,9 @@ p{text-align:center;font-size:14px;}</style></head>
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">{t("embed.position")}</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              {t("embed.position")}
+            </label>
             <select
               value={previewPosition}
               onChange={(e) => setPreviewPosition(e.target.value)}
@@ -152,7 +158,9 @@ p{text-align:center;font-size:14px;}</style></head>
             </select>
           </div>
           <div className="lg:col-span-2">
-            <label className="block text-xs font-medium text-gray-600 mb-1">{t("embed.greeting")}</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              {t("embed.greeting")}
+            </label>
             <input
               value={previewGreeting}
               onChange={(e) => setPreviewGreeting(e.target.value)}
@@ -226,11 +234,11 @@ p{text-align:center;font-size:14px;}</style></head>
 
       {/* Approval status */}
       {site && (
-        <div className={`rounded-xl border p-4 mb-6 flex items-start gap-3 ${
-          site.is_approved
-            ? "bg-green-50 border-green-200"
-            : "bg-amber-50 border-amber-200"
-        }`}>
+        <div
+          className={`rounded-xl border p-4 mb-6 flex items-start gap-3 ${
+            site.is_approved ? "bg-green-50 border-green-200" : "bg-amber-50 border-amber-200"
+          }`}
+        >
           {site.is_approved ? (
             <>
               <ShieldCheck className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
@@ -258,19 +266,27 @@ p{text-align:center;font-size:14px;}</style></head>
         </div>
         <div className="p-4 text-sm text-gray-700 space-y-3">
           <div className="flex gap-3">
-            <span className="bg-primary-100 text-primary-700 font-bold text-xs w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">1</span>
+            <span className="bg-primary-100 text-primary-700 font-bold text-xs w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">
+              1
+            </span>
             <p>{t("embed.authStep1")}</p>
           </div>
           <div className="flex gap-3">
-            <span className="bg-primary-100 text-primary-700 font-bold text-xs w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">2</span>
+            <span className="bg-primary-100 text-primary-700 font-bold text-xs w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">
+              2
+            </span>
             <p>{t("embed.authStep2")}</p>
           </div>
           <div className="flex gap-3">
-            <span className="bg-primary-100 text-primary-700 font-bold text-xs w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">3</span>
+            <span className="bg-primary-100 text-primary-700 font-bold text-xs w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">
+              3
+            </span>
             <p>{t("embed.authStep3")}</p>
           </div>
           <div className="flex gap-3">
-            <span className="bg-primary-100 text-primary-700 font-bold text-xs w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">4</span>
+            <span className="bg-primary-100 text-primary-700 font-bold text-xs w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5">
+              4
+            </span>
             <p>{t("embed.authStep4")}</p>
           </div>
         </div>

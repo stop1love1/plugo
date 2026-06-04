@@ -5,8 +5,7 @@ import { Check, Circle, ArrowRight } from "lucide-react";
 import { useLocale } from "../lib/useLocale";
 import api from "../lib/api";
 
-const getCrawlStatus = (siteId: string) =>
-  api.get(`/crawl/status/${siteId}`).then((r) => r.data);
+const getCrawlStatus = (siteId: string) => api.get(`/crawl/status/${siteId}`).then((r) => r.data);
 
 export function OnboardingChecklist() {
   const { siteId } = useParams<{ siteId: string }>();
@@ -83,7 +82,9 @@ export function OnboardingChecklist() {
     <div className="bg-white p-5 rounded-xl border border-gray-200 mb-6">
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-semibold text-gray-900">{t("onboarding.title")}</h3>
-        <span className="text-xs text-gray-500">{completedCount}/{steps.length}</span>
+        <span className="text-xs text-gray-500">
+          {completedCount}/{steps.length}
+        </span>
       </div>
 
       {/* Progress bar */}
@@ -108,7 +109,9 @@ export function OnboardingChecklist() {
               ) : (
                 <Circle className="w-4 h-4 text-gray-300" />
               )}
-              <span className={`text-sm ${step.done ? "text-green-700 line-through" : "text-gray-700"}`}>
+              <span
+                className={`text-sm ${step.done ? "text-green-700 line-through" : "text-gray-700"}`}
+              >
                 {step.label}
               </span>
             </div>

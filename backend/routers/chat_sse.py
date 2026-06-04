@@ -20,18 +20,18 @@ import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
-from config import settings
 from fastapi import APIRouter, Depends, HTTPException, Request
-from logging_config import logger
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
+
+from agent.core import ChatAgent
+from config import settings
+from logging_config import logger
+from repositories import Repositories, get_repos
+from routers.chat import get_cached_site
 from utils.cors import validate_site_origin
 from utils.pricing import estimate_cost
 from utils.rate_limit import acquire_sse_slot, release_sse_slot, site_token_key
-
-from agent.core import ChatAgent
-from repositories import Repositories, get_repos
-from routers.chat import get_cached_site
 
 router = APIRouter()
 
@@ -46,6 +46,7 @@ class ChatSSERequest(BaseModel):
 # Lazy limiter lookup so we stay decoupled from main.py import order.
 def _limiter():
     from main import limiter
+
     return limiter
 
 
@@ -75,7 +76,7 @@ async def _chat_stream_core(
     # downstream agent-memory lookup key. Scope to site to block cross-site
     # spoofing.
     raw_visitor_id = body.visitor_id or ""
-    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '', str(raw_visitor_id))[:64] if raw_visitor_id else ""
+    sanitized = re.sub(r"[^a-zA-Z0-9_-]", "", str(raw_visitor_id))[:64] if raw_visitor_id else ""
     if not sanitized:
         sanitized = str(uuid.uuid4())
     visitor_id = f"{site['id']}:{sanitized}"
@@ -140,16 +141,20 @@ async def _chat_stream_core(
         finally:
             # Persist only if we actually got some output. Mirrors the WS path.
             if full_response.strip():
-                history_messages.append({
-                    "role": "user",
-                    "content": body.message,
-                    "timestamp": datetime.now(UTC).isoformat(),
-                })
-                history_messages.append({
-                    "role": "assistant",
-                    "content": full_response,
-                    "timestamp": datetime.now(UTC).isoformat(),
-                })
+                history_messages.append(
+                    {
+                        "role": "user",
+                        "content": body.message,
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    }
+                )
+                history_messages.append(
+                    {
+                        "role": "assistant",
+                        "content": full_response,
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    }
+                )
                 try:
                     await repos.chat_sessions.update_messages(session_id, history_messages)
                 except Exception as e:
@@ -162,13 +167,12 @@ async def _chat_stream_core(
                     if in_t or out_t:
                         cost = estimate_cost(agent.llm_model, in_t, out_t)
                         try:
-                            await repos.chat_sessions.add_token_usage(
-                                session_id, in_t, out_t, cost
-                            )
+                            await repos.chat_sessions.add_token_usage(session_id, in_t, out_t, cost)
                         except Exception as e:
                             logger.warning(
                                 "SSE: record token usage failed",
-                                session_id=session_id, error=str(e),
+                                session_id=session_id,
+                                error=str(e),
                             )
             # Release the concurrent-stream slot acquired by the endpoint.
             await release_sse_slot(site_token)
