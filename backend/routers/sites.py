@@ -223,6 +223,10 @@ async def delete_site(
     ok = await repos.sites.delete(site_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Site not found")
+    # Must happen immediately after the commit: until the cache is flushed a widget
+    # request can still resolve the deleted site by token, and its chat_session insert
+    # would now hit the foreign key. Nothing slow may come between these two lines.
+    invalidate_site_cache()  # Clear all since we don't know token from site_id easily
 
     # The vector collection is secondary storage — a failure here leaves a stale
     # `site_<id>` collection behind, which is worth a warning but not a 500 on a
@@ -234,7 +238,6 @@ async def delete_site(
     except Exception as e:
         logger.warning("Failed to delete vector collection for site", site_id=site_id, error=str(e))
 
-    invalidate_site_cache()  # Clear all since we don't know token from site_id easily
     try:
         await repos.audit_logs.create(
             {

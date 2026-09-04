@@ -1,4 +1,5 @@
 import contextlib
+from typing import Any
 
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -11,7 +12,7 @@ async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit
 
 
 @event.listens_for(engine.sync_engine, "connect")
-def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
+def _enable_sqlite_foreign_keys(dbapi_connection: Any, _connection_record: Any) -> None:
     """Turn on foreign-key enforcement for every SQLite connection.
 
     SQLite ships with `PRAGMA foreign_keys` OFF and the setting is per-connection,
