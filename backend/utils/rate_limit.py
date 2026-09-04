@@ -13,18 +13,45 @@ from fastapi import Request
 from slowapi.util import get_remote_address
 
 
+def extract_bearer_token(authorization: str | None) -> str | None:
+    """Return the token from an `Authorization: Bearer <token>` header, or None.
+
+    Shared by `site_token_key` (below) and any router that authenticates public
+    widget requests via a site token carried in this header — e.g.
+    `routers/sessions.py::submit_feedback`.
+    """
+    if not authorization:
+        return None
+    parts = authorization.split(" ", 1)
+    if len(parts) == 2 and parts[0].lower() == "bearer":
+        return parts[1].strip() or None
+    return None
+
+
 def site_token_key(request: Request) -> str:
     """slowapi key_func: bucket per site_token (falls back to client IP).
 
-    The public routes that use this expose `site_token` as a path parameter
-    (`/api/chat/{site_token}/stream`). When absent, we degrade to IP so the
-    default rate-limit contract still holds.
+    Some public routes expose `site_token` as a path parameter
+    (`/api/chat/{site_token}/stream`); others (e.g. the widget feedback
+    endpoint) carry it in the `Authorization: Bearer <token>` header or a
+    `site_token` query param instead. Check all three, in that order, so every
+    public/embeddable route gets genuine per-tenant bucketing rather than
+    silently degrading to IP. Only when none is present do we fall back to IP,
+    which keeps the default rate-limit contract intact for callers that never
+    carry a token at all.
     """
     token = None
     try:
         token = request.path_params.get("site_token")
     except Exception:
         token = None
+    if not token:
+        token = extract_bearer_token(request.headers.get("authorization"))
+    if not token:
+        try:
+            token = request.query_params.get("site_token")
+        except Exception:
+            token = None
     if token:
         return f"site:{token}"
     return get_remote_address(request)

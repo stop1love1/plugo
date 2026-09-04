@@ -6,22 +6,12 @@ from config import settings
 from limiter import limiter
 from logging_config import logger
 from repositories import Repositories, get_repos
-from utils.rate_limit import site_token_key
+from utils.rate_limit import extract_bearer_token, site_token_key
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
 # Upper bound on page size so a client can't request an unbounded result set.
 MAX_PER_PAGE = 100
-
-
-def _extract_bearer_token(authorization: str | None) -> str | None:
-    """Return the token from an `Authorization: Bearer <token>` header, or None."""
-    if not authorization:
-        return None
-    parts = authorization.split(" ", 1)
-    if len(parts) == 2 and parts[0].lower() == "bearer":
-        return parts[1].strip() or None
-    return None
 
 
 @router.get("")
@@ -53,12 +43,6 @@ class FeedbackRequest(BaseModel):
 
 
 @router.post("/{session_id}/feedback")
-# site_token_key buckets by the `site_token` *path* parameter (see
-# utils/rate_limit.py); this route carries the token in the Authorization
-# header / query string instead, so it degrades to the documented per-IP
-# fallback. Still applied for consistency with the other public endpoints
-# and because it costs nothing — a future header-aware key_func can upgrade
-# this without touching the handler.
 @limiter.limit(settings.rate_limit_default, key_func=site_token_key)
 async def submit_feedback(
     session_id: str,
@@ -77,7 +61,7 @@ async def submit_feedback(
     query param is still accepted for one release cycle; using it logs a
     deprecation warning so we can remove it safely.
     """
-    header_token = _extract_bearer_token(authorization)
+    header_token = extract_bearer_token(authorization)
     resolved_token = header_token or site_token
     if not resolved_token:
         raise HTTPException(status_code=401, detail="Site token required")

@@ -275,6 +275,25 @@ async def test_sse_concurrency_guard_rejects_over_cap(client, db_repos, test_sit
         rl_mod._sse_guard = original_guard
 
 
+def _mock_request(path_params=None, authorization=None, query_site_token=None, ip="1.2.3.4"):
+    """Build a MagicMock standing in for a starlette Request.
+
+    Explicitly sets `headers` and `query_params` to plain dicts (rather than
+    leaving them as auto-vivified MagicMock attributes) so `.get(...)` on an
+    absent key returns a real `None` instead of a truthy child mock — the
+    latter would make `site_token_key` think a token was present when the
+    test intends there to be none.
+    """
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.path_params = path_params or {}
+    req.headers = {"authorization": authorization} if authorization else {}
+    req.query_params = {"site_token": query_site_token} if query_site_token else {}
+    req.client = MagicMock(host=ip)
+    return req
+
+
 @pytest.mark.asyncio
 async def test_site_token_key_isolates_tenants():
     """site_token_key returns `site:<token>` so tenants never share buckets.
@@ -285,21 +304,49 @@ async def test_site_token_key_isolates_tenants():
     transport; the critical invariant is that two different site tokens
     produce different keys.
     """
-    from unittest.mock import MagicMock
-
     from utils.rate_limit import site_token_key
 
-    req_a = MagicMock()
-    req_a.path_params = {"site_token": "token-a"}
-    req_b = MagicMock()
-    req_b.path_params = {"site_token": "token-b"}
-    req_none = MagicMock()
-    req_none.path_params = {}
-    req_none.client = MagicMock(host="1.2.3.4")
+    req_a = _mock_request(path_params={"site_token": "token-a"})
+    req_b = _mock_request(path_params={"site_token": "token-b"})
+    req_none = _mock_request()
 
     assert site_token_key(req_a) == "site:token-a"
     assert site_token_key(req_b) == "site:token-b"
     # Distinct buckets per token.
     assert site_token_key(req_a) != site_token_key(req_b)
-    # No path param → degrade to IP.
+    # No path param, header, or query token → degrade to IP.
     assert site_token_key(req_none) == "1.2.3.4"
+
+
+@pytest.mark.asyncio
+async def test_site_token_key_resolves_from_authorization_header():
+    """A route with no `site_token` path param (e.g. the feedback endpoint) must still
+    bucket per tenant when the token is carried as `Authorization: Bearer <token>`."""
+    from utils.rate_limit import site_token_key
+
+    req = _mock_request(authorization="Bearer header-token")
+    assert site_token_key(req) == "site:header-token"
+
+
+@pytest.mark.asyncio
+async def test_site_token_key_resolves_from_query_param():
+    """The deprecated `?site_token=` query param must also key its own bucket."""
+    from utils.rate_limit import site_token_key
+
+    req = _mock_request(query_site_token="query-token")
+    assert site_token_key(req) == "site:query-token"
+
+
+@pytest.mark.asyncio
+async def test_site_token_key_path_param_takes_precedence():
+    """When a path param, a header, and a query param are all present (shouldn't happen on
+    any real route, but the precedence must still be deterministic), the path param wins —
+    this keeps `/api/chat/{site_token}/stream` behaving exactly as it does today."""
+    from utils.rate_limit import site_token_key
+
+    req = _mock_request(
+        path_params={"site_token": "path-token"},
+        authorization="Bearer header-token",
+        query_site_token="query-token",
+    )
+    assert site_token_key(req) == "site:path-token"
