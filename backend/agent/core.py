@@ -489,8 +489,12 @@ class ChatAgent:
             conversation_summary,
         )
 
-        # Casual messages (greetings, thanks, etc.) bypass knowledge check — let the LLM respond naturally
-        if not has_knowledge_match and not self._is_casual_message(message):
+        # "Usable tools" for this turn: the same condition the tool loop below uses.
+        has_usable_tools = bool(tools) and self.supports_tools
+
+        # Casual messages (greetings, thanks, etc.) bypass knowledge check — let the LLM respond naturally.
+        # A site with usable tools but no knowledge match still has something to work with (Action Mode).
+        if not has_knowledge_match and not self._is_casual_message(message) and not has_usable_tools:
             fallback = self._no_knowledge_response(message)
             self.messages.append({"role": "assistant", "content": fallback})
             for token in fallback:
@@ -501,7 +505,7 @@ class ChatAgent:
         max_tool_rounds = 3
         round_count = 0
 
-        if tools and self.supports_tools:
+        if has_usable_tools:
             result = await self.provider.chat(
                 messages=self.messages,
                 system_prompt=system_prompt,
@@ -574,12 +578,14 @@ class ChatAgent:
             conversation_summary,
         )
 
-        if not has_knowledge_match and not self._is_casual_message(message):
+        effective_tools = tools if (tools and self.supports_tools) else None
+
+        # A site with usable tools but no knowledge match still has something to work with (Action Mode).
+        if not has_knowledge_match and not self._is_casual_message(message) and not effective_tools:
             fallback = self._no_knowledge_response(message)
             self.messages.append({"role": "assistant", "content": fallback})
             return fallback
 
-        effective_tools = tools if (tools and self.supports_tools) else None
         result = await self.provider.chat(
             messages=self.messages,
             system_prompt=system_prompt,
