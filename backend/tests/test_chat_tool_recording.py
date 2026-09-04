@@ -9,8 +9,11 @@ assert against what actually landed in the database.
 """
 
 import json
+from collections.abc import AsyncIterator
 
 import pytest
+
+from repositories import Repositories
 
 TOOL_NAME = "lookup_order"
 
@@ -20,11 +23,11 @@ class _ToolCallingProvider:
 
     supports_tools = True
 
-    def __init__(self, *args, **kwargs):
-        self.last_usage = {"input_tokens": 10, "output_tokens": 5}
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        self.last_usage: dict = {"input_tokens": 10, "output_tokens": 5}
         self.chat_calls = 0
 
-    async def chat(self, messages, system_prompt, tools=None):
+    async def chat(self, messages: list[dict], system_prompt: str, tools: list[dict] | None = None) -> dict:
         self.chat_calls += 1
         if self.chat_calls == 1:
             return {
@@ -34,18 +37,20 @@ class _ToolCallingProvider:
             }
         return {"content": "Done.", "tool_calls": [], "usage": self.last_usage}
 
-    async def stream(self, messages, system_prompt, tools=None):
+    async def stream(
+        self, messages: list[dict], system_prompt: str, tools: list[dict] | None = None
+    ) -> AsyncIterator[str]:
         for tok in ("Your", " order", " shipped."):
             yield tok
 
 
 @pytest.fixture(autouse=True)
-def _patch_agent_dependencies(monkeypatch):
+def _patch_agent_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
     """Isolate from real LLM/embedding/RAG/HTTP, and make every tool call succeed."""
     monkeypatch.setattr("agent.core.get_llm_provider", lambda *a, **k: _ToolCallingProvider())
     monkeypatch.setattr("agent.core.embed_cache.get", lambda q: [0.1, 0.2, 0.3])
 
-    async def _no_chunks(site_id, query_embedding, top_k=10, **kwargs):
+    async def _no_chunks(site_id: str, query_embedding: list[float], top_k: int = 10, **kwargs: object) -> list[dict]:
         return []
 
     monkeypatch.setattr("agent.core.rag_engine.search", _no_chunks)
@@ -56,7 +61,7 @@ def _patch_agent_dependencies(monkeypatch):
     monkeypatch.setattr("agent.core.tool_executor.execute_tool", _fake_execute_tool)
 
 
-async def _seed_tool(db_repos, site_id: str) -> None:
+async def _seed_tool(db_repos: Repositories, site_id: str) -> None:
     await db_repos.tools.create(
         {
             "site_id": site_id,
@@ -80,7 +85,7 @@ class _FakeWebSocket:
 
 
 @pytest.mark.asyncio
-async def test_websocket_persists_tool_calls_on_assistant_message(db_repos, test_site):
+async def test_websocket_persists_tool_calls_on_assistant_message(db_repos: Repositories, test_site: dict) -> None:
     from agent.core import ChatAgent
     from routers.chat import _handle_message
 
@@ -113,7 +118,7 @@ async def test_websocket_persists_tool_calls_on_assistant_message(db_repos, test
 
 
 @pytest.mark.asyncio
-async def test_sse_persists_tool_calls_on_assistant_message(db_repos, test_site):
+async def test_sse_persists_tool_calls_on_assistant_message(db_repos: Repositories, test_site: dict) -> None:
     """Drives `_chat_stream_core`'s generator directly — see test_chat_sse.py for why."""
     from starlette.requests import Request as StarletteRequest
 
@@ -133,7 +138,7 @@ async def test_sse_persists_tool_calls_on_assistant_message(db_repos, test_site)
         "query_string": b"",
     }
 
-    async def _receive():
+    async def _receive() -> dict:
         return {"type": "http.request", "body": b"", "more_body": False}
 
     assert await acquire_sse_slot(test_site["token"]) is True
@@ -157,14 +162,16 @@ async def test_sse_persists_tool_calls_on_assistant_message(db_repos, test_site)
 
 
 @pytest.mark.asyncio
-async def test_turn_without_tool_calls_persists_no_tool_key(db_repos, test_site, monkeypatch):
+async def test_turn_without_tool_calls_persists_no_tool_key(
+    db_repos: Repositories, test_site: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A turn where no tool ran must not add a `tool_calls` key at all — that absence
     is exactly what legacy sessions look like to the analytics reader."""
     from agent.core import ChatAgent
     from routers.chat import _handle_message
 
     class _NoToolProvider(_ToolCallingProvider):
-        async def chat(self, messages, system_prompt, tools=None):
+        async def chat(self, messages: list[dict], system_prompt: str, tools: list[dict] | None = None) -> dict:
             return {"content": "Hi!", "tool_calls": [], "usage": self.last_usage}
 
     monkeypatch.setattr("agent.core.get_llm_provider", lambda *a, **k: _NoToolProvider())

@@ -176,11 +176,20 @@ async def get_knowledge_gaps(
             "chưa có dữ liệu",
             "không có dữ liệu",
             "không tìm thấy",
-            "không biết",
-            "chưa biết",
-            "không rõ",
             "chưa hỗ trợ",
-            "xin lỗi",
+            # First-person forms only. Bare "không biết" / "không rõ" / "xin lỗi" also
+            # match advice aimed at the visitor ("nếu bạn không biết mã đơn hàng…") and
+            # ordinary politeness, neither of which is a knowledge gap. Anchoring to the
+            # pronoun mirrors the English "sorry, i". Both pronouns are listed because the
+            # bot says "mình" or "tôi" depending on the configured fallback and prompt.
+            "tôi không biết",
+            "mình không biết",
+            "tôi chưa biết",
+            "mình chưa biết",
+            "tôi không rõ",
+            "mình không rõ",
+            "xin lỗi, tôi",
+            "xin lỗi, mình",
         ]
         gaps: list[str] = []
 

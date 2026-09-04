@@ -10,6 +10,9 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from httpx import AsyncClient
+
+from repositories import Repositories
 
 
 @pytest.fixture
@@ -227,7 +230,9 @@ async def test_knowledge_gaps_detects_apology_patterns(client, auth_headers, db_
 
 
 @pytest.mark.asyncio
-async def test_knowledge_gaps_detects_default_vietnamese_fallback(client, auth_headers, db_repos, analytics_site):
+async def test_knowledge_gaps_detects_default_vietnamese_fallback(
+    client: AsyncClient, auth_headers: dict, db_repos: Repositories, analytics_site: dict
+) -> None:
     """The bot's own default Vietnamese no-knowledge reply must be counted as a gap."""
     from agent.core import ChatAgent
 
@@ -260,7 +265,51 @@ async def test_knowledge_gaps_detects_default_vietnamese_fallback(client, auth_h
     assert not any(i["question"] == "Văn phòng ở đâu?" for i in items)
 
 
-async def _seed_two_tools(db_repos, site_id: str) -> None:
+@pytest.mark.asyncio
+async def test_knowledge_gaps_ignores_advice_addressed_to_the_visitor(
+    client: AsyncClient, auth_headers: dict, db_repos: Repositories, analytics_site: dict
+) -> None:
+    """The Vietnamese indicators are pronoun-anchored: "if *you* don't know…" is a
+    complete, helpful answer, not a knowledge gap. Only first-person forms count."""
+    now = datetime.now(UTC)
+    await _seed_session(
+        db_repos,
+        analytics_site["id"],
+        [
+            _msg("user", "Tôi tra cứu đơn hàng thế nào?", now),
+            _msg("assistant", "Nếu bạn không biết mã đơn hàng, hãy kiểm tra email xác nhận nhé.", now),
+        ],
+    )
+    await _seed_session(
+        db_repos,
+        analytics_site["id"],
+        [
+            _msg("user", "Cửa hàng có giao quốc tế không?", now),
+            _msg("assistant", "Nếu chưa rõ phí ship, bạn có thể xem bảng giá trên website.", now),
+        ],
+    )
+    # First person — this one really is a gap.
+    await _seed_session(
+        db_repos,
+        analytics_site["id"],
+        [
+            _msg("user", "Chính sách bảo hành thế nào?", now),
+            _msg("assistant", "Xin lỗi, mình không biết chính sách bảo hành.", now),
+        ],
+    )
+
+    r = await client.get(
+        f"/api/analytics/knowledge-gaps?site_id={analytics_site['id']}",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    flagged = {i["question"] for i in r.json()}
+    assert "Chính sách bảo hành thế nào?" in flagged
+    assert "Tôi tra cứu đơn hàng thế nào?" not in flagged
+    assert "Cửa hàng có giao quốc tế không?" not in flagged
+
+
+async def _seed_two_tools(db_repos: Repositories, site_id: str) -> None:
     for name in ("lookup", "search"):
         await db_repos.tools.create(
             {
@@ -283,7 +332,9 @@ def _assistant_with_tools(content: str, when: datetime, tool_calls: list[dict]) 
 
 
 @pytest.mark.asyncio
-async def test_tool_usage_counts_successful_invocation(client, auth_headers, db_repos, analytics_site):
+async def test_tool_usage_counts_successful_invocation(
+    client: AsyncClient, auth_headers: dict, db_repos: Repositories, analytics_site: dict
+) -> None:
     """A persisted successful tool invocation is reported under `calls`, not `errors`."""
     await _seed_two_tools(db_repos, analytics_site["id"])
 
@@ -312,7 +363,9 @@ async def test_tool_usage_counts_successful_invocation(client, auth_headers, db_
 
 
 @pytest.mark.asyncio
-async def test_tool_usage_counts_failed_invocation_as_error(client, auth_headers, db_repos, analytics_site):
+async def test_tool_usage_counts_failed_invocation_as_error(
+    client: AsyncClient, auth_headers: dict, db_repos: Repositories, analytics_site: dict
+) -> None:
     """A failed invocation still counts as a call, and additionally as an error."""
     await _seed_two_tools(db_repos, analytics_site["id"])
 
@@ -342,7 +395,9 @@ async def test_tool_usage_counts_failed_invocation_as_error(client, auth_headers
 
 
 @pytest.mark.asyncio
-async def test_tool_usage_legacy_sessions_without_tool_data(client, auth_headers, db_repos, analytics_site):
+async def test_tool_usage_legacy_sessions_without_tool_data(
+    client: AsyncClient, auth_headers: dict, db_repos: Repositories, analytics_site: dict
+) -> None:
     """Sessions stored before tool recording existed have no tool key — report zeros, don't raise."""
     await _seed_two_tools(db_repos, analytics_site["id"])
 
