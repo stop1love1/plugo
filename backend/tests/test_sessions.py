@@ -93,6 +93,68 @@ async def test_submit_feedback_recorded(client, test_site, test_session, message
     assert response.json()["message"] == "Feedback recorded"
 
 
+@pytest.mark.asyncio
+async def test_submit_feedback_no_token_messages_unchanged(client, db_repos, test_session):
+    """No token → 401, and the underlying stored messages must be untouched."""
+    response = await client.post(
+        f"/api/sessions/{test_session['id']}/feedback",
+        json={"message_index": 1, "rating": "up"},
+    )
+    assert response.status_code == 401
+
+    stored = await db_repos.chat_sessions.get_by_id(test_session["id"])
+    assert "feedback" not in stored["messages"][1]
+
+
+@pytest.mark.asyncio
+async def test_submit_feedback_wrong_site_token_forbidden(client, db_repos, test_session):
+    """A token that resolves to a *different* site than the session's owner must 403."""
+    other_site = await db_repos.sites.create(
+        {
+            "name": "Other Site",
+            "url": "https://other.example.com",
+            "llm_provider": "claude",
+            "llm_model": "claude-sonnet-4-20250514",
+            "primary_color": "#6366f1",
+            "greeting": "Hello!",
+            "allowed_domains": "",
+        }
+    )
+    try:
+        response = await client.post(
+            f"/api/sessions/{test_session['id']}/feedback",
+            json={"message_index": 1, "rating": "up"},
+            headers={"Authorization": f"Bearer {other_site['token']}"},
+        )
+        assert response.status_code == 403
+    finally:
+        with contextlib.suppress(Exception):
+            await db_repos.sites.delete(other_site["id"])
+
+
+@pytest.mark.asyncio
+async def test_submit_feedback_query_param_token_still_works(client, test_site, test_session):
+    """The deprecated ?site_token= query param must still authenticate feedback submissions."""
+    response = await client.post(
+        f"/api/sessions/{test_session['id']}/feedback?site_token={test_site['token']}",
+        json={"message_index": 2, "rating": "down"},
+    )
+    assert response.status_code == 200
+    assert response.json()["message"] == "Feedback recorded"
+
+
+@pytest.mark.asyncio
+async def test_submit_feedback_no_token_nonexistent_session_still_401(client):
+    """Missing token against a session id that doesn't exist must still be 401, not 404 —
+    otherwise an unauthenticated caller could use the status code to probe which session
+    ids exist."""
+    response = await client.post(
+        "/api/sessions/definitely-not-a-real-session-id/feedback",
+        json={"message_index": 0, "rating": "up"},
+    )
+    assert response.status_code == 401
+
+
 @pytest.mark.parametrize(
     "payload",
     [
