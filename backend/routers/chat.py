@@ -488,13 +488,16 @@ async def _handle_message(
 
     # Only save complete responses (skip if client disconnected with no content)
     if full_response.strip():
-        messages.append(
-            {
-                "role": "assistant",
-                "content": full_response,
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
-        )
+        assistant_msg: dict = {
+            "role": "assistant",
+            "content": full_response,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+        # Structured tool-invocation record for this turn (analytics reads it).
+        # Copied so a later turn's reset can't mutate what we persisted.
+        if agent.last_tool_calls:
+            assistant_msg["tool_calls"] = list(agent.last_tool_calls)
+        messages.append(assistant_msg)
         try:
             await repos.chat_sessions.update_messages(session_id, messages)
         except Exception as e:

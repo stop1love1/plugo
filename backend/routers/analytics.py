@@ -157,17 +157,30 @@ async def get_knowledge_gaps(
         sessions = await _load_sessions_capped(repos, site_id, cutoff)
         if not sessions:
             return []
+        # Substrings that mark a "no knowledge" answer. These must cover the fallbacks
+        # ChatAgent actually emits (_DEFAULT_NO_KNOWLEDGE_EN / _DEFAULT_NO_KNOWLEDGE_VI)
+        # as well as free-form LLM phrasings, and stay broad enough to survive an
+        # operator override of agent.no_knowledge_response_vi / _en in config.json.
         gap_indicators = [
+            # English
             "i don't have",
             "i'm not sure",
             "i couldn't find",
             "no information",
-            "không tìm thấy",
-            "không có thông tin",
-            "tôi không biết",
             "i don't know",
             "sorry, i",
             "i apologize",
+            # Vietnamese — "chưa có thông tin" is the default VI fallback's core phrase.
+            "chưa có thông tin",
+            "không có thông tin",
+            "chưa có dữ liệu",
+            "không có dữ liệu",
+            "không tìm thấy",
+            "không biết",
+            "chưa biết",
+            "không rõ",
+            "chưa hỗ trợ",
+            "xin lỗi",
         ]
         gaps: list[str] = []
 
@@ -212,13 +225,19 @@ async def get_tool_usage(
             for msg in messages:
                 if msg.get("role") != "assistant":
                     continue
-                content = msg.get("content", "")
-                # Detect tool calls from response patterns
-                if "tool_call" in str(msg) or "[Called " in content:
-                    tool_name = msg.get("tool_name", "unknown")
-                    tool_calls[tool_name] += 1
-                    if msg.get("tool_error"):
-                        tool_errors[tool_name] += 1
+                # Assistant messages persisted since the tool-analytics change carry a
+                # "tool_calls" list of {"name", "success"} — one entry per executed tool.
+                # Sessions stored before that (and turns with no tool use) simply have no
+                # such key, which reads as "no tool data" rather than an error.
+                for call in msg.get("tool_calls") or []:
+                    if not isinstance(call, dict):
+                        continue
+                    name = call.get("name")
+                    if not isinstance(name, str) or not name:
+                        continue
+                    tool_calls[name] += 1
+                    if not call.get("success", False):
+                        tool_errors[name] += 1
 
         tools = await repos.tools.list_by_site(site_id)
         result = []

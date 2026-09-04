@@ -227,40 +227,73 @@ async def test_knowledge_gaps_detects_apology_patterns(client, auth_headers, db_
 
 
 @pytest.mark.asyncio
-async def test_tool_usage_returns_tools_with_counts(client, auth_headers, db_repos, analytics_site):
-    # Seed two tools, one with a matching "[Called X]" assistant message.
-    await db_repos.tools.create(
-        {
-            "site_id": analytics_site["id"],
-            "name": "lookup",
-            "description": "",
-            "method": "GET",
-            "url": "https://api.example.com/lookup",
-        }
-    )
-    await db_repos.tools.create(
-        {
-            "site_id": analytics_site["id"],
-            "name": "search",
-            "description": "",
-            "method": "GET",
-            "url": "https://api.example.com/search",
-        }
-    )
+async def test_knowledge_gaps_detects_default_vietnamese_fallback(client, auth_headers, db_repos, analytics_site):
+    """The bot's own default Vietnamese no-knowledge reply must be counted as a gap."""
+    from agent.core import ChatAgent
 
     now = datetime.now(UTC)
     await _seed_session(
         db_repos,
         analytics_site["id"],
         [
-            _msg("user", "hi", now),
-            # The analytics detector looks for the literal "[Called " substring.
+            _msg("user", "Edusoft cung cấp giải pháp gì?", now),
+            _msg("assistant", ChatAgent._DEFAULT_NO_KNOWLEDGE_VI, now),
+        ],
+    )
+    # Non-gap Vietnamese answer — must not be flagged.
+    await _seed_session(
+        db_repos,
+        analytics_site["id"],
+        [
+            _msg("user", "Văn phòng ở đâu?", now),
+            _msg("assistant", "Văn phòng của chúng tôi ở Hà Nội.", now),
+        ],
+    )
+
+    r = await client.get(
+        f"/api/analytics/knowledge-gaps?site_id={analytics_site['id']}",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    items = r.json()
+    assert any(i["question"] == "Edusoft cung cấp giải pháp gì?" for i in items)
+    assert not any(i["question"] == "Văn phòng ở đâu?" for i in items)
+
+
+async def _seed_two_tools(db_repos, site_id: str) -> None:
+    for name in ("lookup", "search"):
+        await db_repos.tools.create(
             {
-                "role": "assistant",
-                "content": "[Called lookup] result",
-                "timestamp": now.isoformat(),
-                "tool_name": "lookup",
-            },
+                "site_id": site_id,
+                "name": name,
+                "description": "",
+                "method": "GET",
+                "url": f"https://api.example.com/{name}",
+            }
+        )
+
+
+def _assistant_with_tools(content: str, when: datetime, tool_calls: list[dict]) -> dict:
+    return {
+        "role": "assistant",
+        "content": content,
+        "timestamp": when.isoformat(),
+        "tool_calls": tool_calls,
+    }
+
+
+@pytest.mark.asyncio
+async def test_tool_usage_counts_successful_invocation(client, auth_headers, db_repos, analytics_site):
+    """A persisted successful tool invocation is reported under `calls`, not `errors`."""
+    await _seed_two_tools(db_repos, analytics_site["id"])
+
+    now = datetime.now(UTC)
+    await _seed_session(
+        db_repos,
+        analytics_site["id"],
+        [
+            _msg("user", "where is order 123?", now),
+            _assistant_with_tools("It shipped yesterday.", now, [{"name": "lookup", "success": True}]),
         ],
     )
 
@@ -273,4 +306,63 @@ async def test_tool_usage_returns_tools_with_counts(client, auth_headers, db_rep
     assert len(tools) == 2
     by_name = {t["name"]: t for t in tools}
     assert by_name["lookup"]["calls"] == 1
+    assert by_name["lookup"]["errors"] == 0
     assert by_name["search"]["calls"] == 0
+    assert by_name["search"]["errors"] == 0
+
+
+@pytest.mark.asyncio
+async def test_tool_usage_counts_failed_invocation_as_error(client, auth_headers, db_repos, analytics_site):
+    """A failed invocation still counts as a call, and additionally as an error."""
+    await _seed_two_tools(db_repos, analytics_site["id"])
+
+    now = datetime.now(UTC)
+    await _seed_session(
+        db_repos,
+        analytics_site["id"],
+        [
+            _msg("user", "search for hats", now),
+            _assistant_with_tools(
+                "Sorry, that lookup failed.",
+                now,
+                [{"name": "search", "success": False}, {"name": "search", "success": True}],
+            ),
+        ],
+    )
+
+    r = await client.get(
+        f"/api/analytics/tool-usage?site_id={analytics_site['id']}",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    by_name = {t["name"]: t for t in r.json()}
+    assert by_name["search"]["calls"] == 2
+    assert by_name["search"]["errors"] == 1
+    assert by_name["lookup"]["calls"] == 0
+
+
+@pytest.mark.asyncio
+async def test_tool_usage_legacy_sessions_without_tool_data(client, auth_headers, db_repos, analytics_site):
+    """Sessions stored before tool recording existed have no tool key — report zeros, don't raise."""
+    await _seed_two_tools(db_repos, analytics_site["id"])
+
+    now = datetime.now(UTC)
+    await _seed_session(
+        db_repos,
+        analytics_site["id"],
+        [
+            _msg("user", "hi", now),
+            _msg("assistant", "Hello! How can I help?", now),
+        ],
+    )
+
+    r = await client.get(
+        f"/api/analytics/tool-usage?site_id={analytics_site['id']}",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    tools = r.json()
+    assert len(tools) == 2
+    assert {t["name"] for t in tools} == {"lookup", "search"}
+    assert all(t["calls"] == 0 and t["errors"] == 0 for t in tools)
+    assert all(t["enabled"] is True for t in tools)

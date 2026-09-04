@@ -148,13 +148,16 @@ async def _chat_stream_core(
                         "timestamp": datetime.now(UTC).isoformat(),
                     }
                 )
-                history_messages.append(
-                    {
-                        "role": "assistant",
-                        "content": full_response,
-                        "timestamp": datetime.now(UTC).isoformat(),
-                    }
-                )
+                assistant_msg: dict = {
+                    "role": "assistant",
+                    "content": full_response,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                }
+                # Structured tool-invocation record for this turn (analytics reads it).
+                # Copied so a later turn's reset can't mutate what we persisted.
+                if agent.last_tool_calls:
+                    assistant_msg["tool_calls"] = list(agent.last_tool_calls)
+                history_messages.append(assistant_msg)
                 try:
                     await repos.chat_sessions.update_messages(session_id, history_messages)
                 except Exception as e:

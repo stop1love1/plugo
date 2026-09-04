@@ -153,6 +153,12 @@ class ChatAgent:
         # Structured citations from the most recent turn (deduped by URL, max score kept).
         # Router reads this after streaming to emit a dedicated {"type":"citations"} event.
         self.last_citations: list[dict] = []
+        # Tool invocations executed during the most recent turn, as
+        # [{"name": str, "success": bool}]. Only tools that actually ran are
+        # recorded — a hallucinated name with no matching _meta is not an
+        # invocation. Transports read this after the turn and persist it onto
+        # the stored assistant message so analytics can aggregate it.
+        self.last_tool_calls: list[dict] = []
 
     def _accumulate_usage(self, usage: dict | None) -> None:
         if not usage:
@@ -164,6 +170,14 @@ class ChatAgent:
         else:
             self.total_usage["input_tokens"] += in_t
             self.total_usage["output_tokens"] += out_t
+
+    def _record_tool_call(self, name: str, tool_result: dict | None) -> None:
+        """Record one executed tool invocation for this turn.
+
+        ``tool_executor.execute_tool`` reports outcome via ``"success"``; a result
+        without that key (e.g. an unsupported HTTP method) is counted as a failure.
+        """
+        self.last_tool_calls.append({"name": name, "success": bool((tool_result or {}).get("success", False))})
 
     def _append_tool_messages(self, tc: dict, result_str: str):
         """Append tool call assistant message and tool result in the correct format for the active provider."""
@@ -300,8 +314,9 @@ class ChatAgent:
         as context, so the transport layer (WS/SSE) can emit a structured
         citations event. We no longer ask the LLM to format a "Sources:" tail.
         """
-        # Reset citations — we collect them fresh per turn.
+        # Reset per-turn accumulators — both are collected fresh for each turn.
         self.last_citations = []
+        self.last_tool_calls = []
 
         # --- Visitor memory ---
         # Memory key/value pairs originate from earlier visitor turns — fence as untrusted.
@@ -523,6 +538,7 @@ class ChatAgent:
                         yield f"\n\n> Calling **{tc['name']}**...\n\n"
 
                         tool_result = await tool_executor.execute_tool(tool_meta, tc["arguments"])
+                        self._record_tool_call(tc["name"], tool_result)
                         result_str = json.dumps(tool_result, ensure_ascii=False)
                         self._append_tool_messages(tc, result_str)
                         tool_called = True
@@ -603,6 +619,7 @@ class ChatAgent:
                 tool_meta = next((t["_meta"] for t in tools if t["name"] == tc["name"]), None)
                 if tool_meta:
                     tool_result = await tool_executor.execute_tool(tool_meta, tc["arguments"])
+                    self._record_tool_call(tc["name"], tool_result)
                     result_str = json.dumps(tool_result, ensure_ascii=False)
                     self._append_tool_messages(tc, result_str)
                     tool_called = True

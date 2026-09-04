@@ -62,6 +62,35 @@ class FakeToolProvider:
             yield token
 
 
+class ToolCallingProvider:
+    """Stand-in provider that requests one tool call on its first chat, then answers.
+
+    Used to exercise the agent's tool-execution loop end to end.
+    """
+
+    supports_tools = True
+
+    def __init__(self, tool_name: str = "lookup_order"):
+        self.last_usage = None
+        self.chat_calls = 0
+        self._tool_name = tool_name
+        self._reply = "Your order is on its way."
+
+    async def chat(self, *args, **kwargs):
+        self.chat_calls += 1
+        if self.chat_calls == 1:
+            return {
+                "content": "",
+                "tool_calls": [{"id": "call-1", "name": self._tool_name, "arguments": {"order_id": "123"}}],
+                "usage": None,
+            }
+        return {"content": self._reply, "tool_calls": [], "usage": None}
+
+    async def stream(self, *args, **kwargs):
+        for token in self._reply:
+            yield token
+
+
 ENABLED_TOOL = {
     "id": "tool-1",
     "name": "lookup_order",
@@ -232,6 +261,114 @@ async def test_stream_response_still_falls_back_without_knowledge_and_without_to
 
     response = "".join(parts)
     assert "chưa có thông tin" in response or "don't have information" in response
+
+
+def _patch_no_knowledge(monkeypatch, provider):
+    """Wire an agent up with a stub provider and an empty knowledge base."""
+    monkeypatch.setattr("agent.core.get_llm_provider", lambda *args, **kwargs: provider)
+    monkeypatch.setattr("agent.core.embed_cache.get", lambda query: [0.1, 0.2, 0.3])
+
+    async def fake_search(site_id, query_embedding, top_k=10, **kwargs):
+        return []
+
+    monkeypatch.setattr("agent.core.rag_engine.search", fake_search)
+
+
+def _patch_execute_tool(monkeypatch, result: dict) -> list[tuple[str, dict]]:
+    """Replace the real HTTP tool executor; returns a log of (url, arguments)."""
+    seen: list[tuple[str, dict]] = []
+
+    async def fake_execute_tool(tool_meta: dict, arguments: dict, timeout: float = 30.0) -> dict:
+        seen.append((tool_meta["url"], arguments))
+        return result
+
+    monkeypatch.setattr("agent.core.tool_executor.execute_tool", fake_execute_tool)
+    return seen
+
+
+@pytest.mark.asyncio
+async def test_get_response_records_successful_tool_call(monkeypatch):
+    """A tool that ran successfully is recorded on the agent's per-turn accumulator."""
+
+    _patch_no_knowledge(monkeypatch, ToolCallingProvider())
+    seen = _patch_execute_tool(monkeypatch, {"status_code": 200, "data": {"ok": True}, "success": True})
+
+    agent = ChatAgent(site_id="site-1", site_name="Demo Site", site_url="https://edusoft.vn", llm_provider="claude")
+    repos = FakeRepos(chunks=[], tools=[ENABLED_TOOL])
+
+    await agent.get_response("Show me order #123", repos=repos)
+
+    assert len(seen) == 1
+    assert agent.last_tool_calls == [{"name": "lookup_order", "success": True}]
+
+
+@pytest.mark.asyncio
+async def test_get_response_records_failed_tool_call(monkeypatch):
+    """A tool whose execution failed is recorded with success=False."""
+
+    _patch_no_knowledge(monkeypatch, ToolCallingProvider())
+    _patch_execute_tool(monkeypatch, {"error": "Request timed out", "success": False})
+
+    agent = ChatAgent(site_id="site-1", site_name="Demo Site", site_url="https://edusoft.vn", llm_provider="claude")
+    repos = FakeRepos(chunks=[], tools=[ENABLED_TOOL])
+
+    await agent.get_response("Show me order #123", repos=repos)
+
+    assert agent.last_tool_calls == [{"name": "lookup_order", "success": False}]
+
+
+@pytest.mark.asyncio
+async def test_stream_response_records_tool_call(monkeypatch):
+    """The streaming path records tool invocations too."""
+
+    _patch_no_knowledge(monkeypatch, ToolCallingProvider())
+    _patch_execute_tool(monkeypatch, {"status_code": 200, "data": {}, "success": True})
+
+    agent = ChatAgent(site_id="site-1", site_name="Demo Site", site_url="https://edusoft.vn", llm_provider="claude")
+    repos = FakeRepos(chunks=[], tools=[ENABLED_TOOL])
+
+    async for _token in agent.stream_response("Show me order #123", repos=repos):
+        pass
+
+    assert agent.last_tool_calls == [{"name": "lookup_order", "success": True}]
+
+
+@pytest.mark.asyncio
+async def test_hallucinated_tool_name_is_not_recorded(monkeypatch):
+    """A tool name with no matching _meta never ran, so it must not be counted."""
+
+    _patch_no_knowledge(monkeypatch, ToolCallingProvider(tool_name="teleport_customer"))
+
+    async def never_called(tool_meta: dict, arguments: dict, timeout: float = 30.0) -> dict:
+        raise AssertionError("execute_tool must not run for an unknown tool")
+
+    monkeypatch.setattr("agent.core.tool_executor.execute_tool", never_called)
+
+    agent = ChatAgent(site_id="site-1", site_name="Demo Site", site_url="https://edusoft.vn", llm_provider="claude")
+    repos = FakeRepos(chunks=[], tools=[ENABLED_TOOL])
+
+    await agent.get_response("Show me order #123", repos=repos)
+
+    assert agent.last_tool_calls == []
+
+
+@pytest.mark.asyncio
+async def test_tool_calls_reset_between_turns(monkeypatch):
+    """Each turn reports only its own tool calls — like last_citations."""
+
+    provider = ToolCallingProvider()
+    _patch_no_knowledge(monkeypatch, provider)
+    _patch_execute_tool(monkeypatch, {"status_code": 200, "data": {}, "success": True})
+
+    agent = ChatAgent(site_id="site-1", site_name="Demo Site", site_url="https://edusoft.vn", llm_provider="claude")
+    repos = FakeRepos(chunks=[], tools=[ENABLED_TOOL])
+
+    await agent.get_response("Show me order #123", repos=repos)
+    assert len(agent.last_tool_calls) == 1
+
+    # Second turn: the provider has moved past its scripted tool call, so no tool runs.
+    await agent.get_response("Thanks, anything else?", repos=repos)
+    assert agent.last_tool_calls == []
 
 
 def test_detects_vietnamese_without_diacritics():
