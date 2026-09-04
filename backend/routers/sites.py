@@ -218,9 +218,22 @@ async def delete_site(
     repos: Repositories = Depends(get_repos),
     user: TokenData = Depends(get_current_user),
 ):
+    # The repo cascade removes every DB record owned by the site; if it fails the
+    # request must fail, so it is deliberately not wrapped.
     ok = await repos.sites.delete(site_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Site not found")
+
+    # The vector collection is secondary storage — a failure here leaves a stale
+    # `site_<id>` collection behind, which is worth a warning but not a 500 on a
+    # deletion the database has already committed.
+    from agent.rag import rag_engine
+
+    try:
+        await rag_engine.delete_site(site_id)
+    except Exception as e:
+        logger.warning("Failed to delete vector collection for site", site_id=site_id, error=str(e))
+
     invalidate_site_cache()  # Clear all since we don't know token from site_id easily
     try:
         await repos.audit_logs.create(

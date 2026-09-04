@@ -219,6 +219,14 @@ class SQLiteSiteRepo(BaseSiteRepo):
         return _site_to_dict(site)
 
     async def delete(self, site_id: str) -> bool:
+        """Delete the site. Everything scoped to it goes with it.
+
+        The cascade is enforced by the database: every site-scoped table declares
+        `ForeignKey("sites.id", ondelete="CASCADE")`, and `database.py` turns on
+        `PRAGMA foreign_keys` for every connection so SQLite actually honours it.
+        That includes the second hop (flows -> flow_steps), which SQLite cascades
+        recursively.
+        """
         site = await self.db.get(Site, site_id)
         if not site:
             return False

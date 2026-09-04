@@ -30,7 +30,18 @@ class BaseSiteRepo(ABC):
     @abstractmethod
     async def update(self, site_id: str, data: dict) -> dict | None: ...
     @abstractmethod
-    async def delete(self, site_id: str) -> bool: ...
+    async def delete(self, site_id: str) -> bool:
+        """Delete the site AND every record scoped to it.
+
+        Both backends must leave nothing behind: knowledge chunks, chat sessions,
+        tools, flows (plus their steps), visitor memories, conversation summaries
+        and crawl jobs all go with the site. Returns False (deleting nothing) when
+        the site does not exist.
+
+        Dropping the site's vector collection is NOT part of this contract — the
+        vector store is not a database concern and is handled by the caller.
+        """
+        ...
 
     async def get_crawl_password(self, site_id: str) -> str | None:
         """Get the raw (unmasked) crawl login password. Override in implementations."""
