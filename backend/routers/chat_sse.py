@@ -6,6 +6,11 @@ flow, SSE is stateless: each request creates a transient agent with history
 loaded from DB and is NOT registered in `active_agents` — multiple concurrent
 SSE requests on the same session are independent.
 
+That statelessness changes where the shared behaviour hangs, not whether it runs: the
+size limits, the summary the prompt carries, and the background memory/summarization
+work all match the WS path, but a completed turn is the hook for them, since SSE has no
+connection lifetime to attach anything to.
+
 Events emitted (per the EventSource spec):
     event: token       data: <plain text>
     event: citations   data: <JSON {"items": [...]}>
@@ -21,26 +26,59 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from agent.core import ChatAgent
+from agent.memory import ConversationSummarizer
 from config import settings
 from logging_config import logger
 from repositories import Repositories, get_repos
-from routers.chat import get_cached_site
+from routers.chat import (
+    _extract_and_save_memories,
+    _fire_and_forget,
+    _maybe_summarize,
+    get_cached_site,
+    restore_agent_history,
+)
 from utils.cors import validate_site_origin
 from utils.pricing import estimate_cost
 from utils.rate_limit import acquire_sse_slot, release_sse_slot, site_token_key
 
 router = APIRouter()
 
+# Same ceilings the WS turn loop enforces, so neither transport is the soft way in.
+MAX_MESSAGE_CHARS = 10000
+MAX_PAGE_TEXT_CHARS = 5000
+
+# The WS path extracts memories once a session holds at least this many stored messages.
+MEMORY_MIN_MESSAGES = 4
+
 
 class ChatSSERequest(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1, max_length=MAX_MESSAGE_CHARS)
     session_id: str | None = None
     visitor_id: str | None = None
     page_context: dict | None = None
+
+
+def _clamp_page_context(page_context: dict | None) -> dict | None:
+    """Bound the page body a client can push into the system prompt.
+
+    The body travels under ``pageText``: that is the key the widget fills
+    (``frontend/src/widget/index.ts``), the key ``docs/api-reference.md`` documents, and
+    the only one ``ChatAgent._build_system_prompt`` reads. The WS path clamps ``"text"``
+    instead, which nothing writes and nothing reads — so clamp the key that genuinely
+    carries the body rather than copying a clamp that never fires.
+
+    Returns a shallow copy when a clamp applies; the caller's request model is left alone.
+    """
+    if not isinstance(page_context, dict):
+        return None
+    page_text = page_context.get("pageText")
+    if isinstance(page_text, str) and len(page_text) > MAX_PAGE_TEXT_CHARS:
+        return {**page_context, "pageText": page_text[:MAX_PAGE_TEXT_CHARS]}
+    return page_context
 
 
 # Lazy limiter lookup so we stay decoupled from main.py import order.
@@ -83,10 +121,16 @@ async def _chat_stream_core(
 
     session_id = body.session_id
     history_messages: list[dict] = []
+    summary_row: dict | None = None
     if session_id:
         existing = await repos.chat_sessions.get_by_id(session_id)
         if existing and existing.get("site_id") == site["id"]:
             history_messages = list(existing.get("messages") or [])
+            try:
+                summary_row = await repos.conversation_summaries.get_by_session(session_id)
+            except Exception as e:
+                # A missing summary must never cost the visitor their turn.
+                logger.warning("SSE: load conversation summary failed", session_id=session_id, error=str(e))
         else:
             session_id = None
     if not session_id:
@@ -104,9 +148,12 @@ async def _chat_stream_core(
         bot_rules=site.get("bot_rules", ""),
         response_language=site.get("response_language", "auto"),
     )
-    for m in history_messages:
-        role = "user" if m.get("role") == "user" else "assistant"
-        agent.messages.append({"role": role, "content": m.get("content", "")})
+    # Replay bounded by whatever the stored summary already covers — the SSE equivalent
+    # of the WS path's between-turn trim, since a summary that is sent *alongside* the
+    # history it covers grows the prompt instead of shrinking it.
+    restore_agent_history(agent, history_messages, summary_row)
+    conversation_summary = (summary_row or {}).get("summary_text") or None
+    page_context = _clamp_page_context(body.page_context)
 
     async def event_stream() -> AsyncIterator[dict]:
         # Always persist whatever we streamed — on normal completion, on
@@ -118,9 +165,10 @@ async def _chat_stream_core(
         try:
             async for tok in agent.stream_response(
                 message=body.message,
-                page_context=body.page_context,
+                page_context=page_context,
                 repos=repos,
                 visitor_id=visitor_id,
+                conversation_summary=conversation_summary,
             ):
                 full_response += tok
                 yield {"event": "token", "data": tok}
@@ -177,6 +225,22 @@ async def _chat_stream_core(
                                 session_id=session_id,
                                 error=str(e),
                             )
+
+                # Background follow-ups, on the WS path's thresholds. Both helpers open
+                # their own `repos`, which is what makes them safe here: this generator's
+                # `finally` is the last thing to run before FastAPI closes the
+                # request-scoped one.
+                #
+                # A turn is the only hook SSE has — it is stateless by design, so there is
+                # no session-end signal to defer extraction to the way the WS path does.
+                if len(history_messages) >= MEMORY_MIN_MESSAGES:
+                    _fire_and_forget(_extract_and_save_memories(visitor_id, site, session_id, list(history_messages)))
+                # No `agent`/`trim_boundary`: this agent is discarded with the request, so
+                # staging a summary on it would trim history nobody reads again. The next
+                # SSE request re-reads the stored summary row and bounds its own replay
+                # through `restore_agent_history` — that is where SSE's shrink happens.
+                if len(history_messages) % ConversationSummarizer.MESSAGE_THRESHOLD == 0:
+                    _fire_and_forget(_maybe_summarize(session_id, site, list(history_messages)))
             # Release the concurrent-stream slot acquired by the endpoint.
             await release_sse_slot(site_token)
             if not streamed_ok:
