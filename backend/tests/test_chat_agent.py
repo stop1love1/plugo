@@ -286,9 +286,7 @@ def _patch_no_knowledge(monkeypatch: pytest.MonkeyPatch, provider: ToolCallingPr
     monkeypatch.setattr("agent.core.get_llm_provider", lambda *args, **kwargs: provider)
     monkeypatch.setattr("agent.core.embed_cache.get", lambda query: [0.1, 0.2, 0.3])
 
-    async def fake_search(
-        site_id: str, query_embedding: list[float], top_k: int = 10, **kwargs: object
-    ) -> list[dict]:
+    async def fake_search(site_id: str, query_embedding: list[float], top_k: int = 10, **kwargs: object) -> list[dict]:
         return []
 
     monkeypatch.setattr("agent.core.rag_engine.search", fake_search)
@@ -425,3 +423,31 @@ def test_detects_vietnamese_without_diacritics():
     agent = ChatAgent(site_id="site-1", site_name="Demo Site", site_url="https://edusoft.vn")
 
     assert agent._is_likely_vietnamese("Edusoft cung cap giai phap gi?")
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        # Vietnamese with diacritics.
+        ("Bạn có thể cho tôi biết giải pháp không?", True),
+        # Vietnamese typed without diacritics, caught by the existing word markers.
+        ("cung cap giai phap gi", True),
+        # Plain English.
+        ("What time do you open tomorrow?", False),
+        # Japanese — a non-ASCII language that must NOT get the Vietnamese fallback.
+        ("こんにちは、営業時間を教えてください", False),
+        # Korean.
+        ("안녕하세요, 영업시간이 어떻게 되나요?", False),
+        # Chinese.
+        ("你好, 请问营业时间是几点?", False),
+        # Accented French — uses the shared Latin diacritics (à, é, è, ê, â, î) that
+        # this detector must not treat as Vietnamese-exclusive.
+        ("Où est le café ? C'est très intéressant et généreux.", False),
+    ],
+)
+def test_is_likely_vietnamese_language_table(text: str, expected: bool) -> None:
+    """`_is_likely_vietnamese` must key off Vietnamese's distinctive diacritics/words,
+    not merely "contains a non-ASCII character" — otherwise every non-English,
+    non-Vietnamese visitor (JA/KO/ZH/FR/...) wrongly gets the Vietnamese fallback."""
+
+    assert ChatAgent._is_likely_vietnamese(text) is expected

@@ -112,6 +112,64 @@ async def test_update_site_not_found(client, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_update_site_evicts_only_its_own_cache_entry(client, auth_headers, db_repos, test_site):
+    """Updating one site must not evict a different site's cached config. On a
+    multi-tenant server, `invalidate_site_cache()` with no token flushes everyone."""
+    from time import time
+
+    from routers.chat import _site_cache
+
+    other_site = await db_repos.sites.create({"name": "Other Site", "url": "https://other.example.com"})
+    try:
+        # Seed both cache entries directly, the way `get_cached_site` would.
+        _site_cache[test_site["token"]] = (dict(test_site), time())
+        _site_cache[other_site["token"]] = (dict(other_site), time())
+
+        response = await client.put(
+            f"/api/sites/{test_site['id']}",
+            json={"name": "Renamed"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+        assert test_site["token"] not in _site_cache
+        assert other_site["token"] in _site_cache
+    finally:
+        _site_cache.pop(test_site["token"], None)
+        _site_cache.pop(other_site["token"], None)
+        await db_repos.sites.delete(other_site["id"])
+
+
+@pytest.mark.asyncio
+async def test_delete_site_evicts_only_its_own_cache_entry(client, auth_headers, db_repos, monkeypatch):
+    """Deleting one site must not evict a different site's cached config."""
+    from time import time
+
+    from agent.rag import rag_engine
+    from routers.chat import _site_cache
+
+    async def _noop(site_id: str) -> None:
+        return None
+
+    monkeypatch.setattr(rag_engine, "delete_site", _noop)
+
+    doomed = await db_repos.sites.create({"name": "Doomed Site", "url": "https://doomed.example.com"})
+    keeper = await db_repos.sites.create({"name": "Keeper Site", "url": "https://keeper.example.com"})
+    try:
+        _site_cache[doomed["token"]] = (dict(doomed), time())
+        _site_cache[keeper["token"]] = (dict(keeper), time())
+
+        response = await client.delete(f"/api/sites/{doomed['id']}", headers=auth_headers)
+        assert response.status_code == 200
+
+        assert doomed["token"] not in _site_cache
+        assert keeper["token"] in _site_cache
+    finally:
+        _site_cache.pop(keeper["token"], None)
+        await db_repos.sites.delete(keeper["id"])
+
+
+@pytest.mark.asyncio
 async def test_update_site_rejects_non_working_model(client, auth_headers, test_site, monkeypatch):
     """PUT /api/sites/{site_id} should reject model configs that fail verification."""
 

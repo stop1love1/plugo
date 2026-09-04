@@ -8,8 +8,12 @@ PRICING_PER_1M: dict[str, tuple[float, float]] = {
     "claude-sonnet-4": (3.0, 15.0),
     "claude-opus-4": (15.0, 75.0),
     "claude-haiku": (1.0, 5.0),
-    "gpt-4o": (2.5, 10.0),
     "gpt-4o-mini": (0.15, 0.6),
+    "gpt-4o": (2.5, 10.0),
+    "gpt-4-turbo": (10.0, 30.0),
+    "gemini-1.5-flash": (0.075, 0.3),
+    "gemini-1.5-pro": (1.25, 5.0),
+    "gemini-2.0-flash": (0.1, 0.4),
     "default": (0.0, 0.0),
 }
 

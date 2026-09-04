@@ -324,6 +324,15 @@ class ChatAgent:
                     return True
         return False
 
+    # Vietnamese-exclusive precomposed diacritic vowels, plus "đ". Deliberately
+    # excludes bare acute/grave (à á è é ì í ò ó ù ú) and bare circumflex (â ê ô),
+    # since French and Spanish also use those — including them would misclassify
+    # accented French/Spanish text as Vietnamese. Every character below only shows
+    # up when a vowel carries a breve, horn, hook-above, dot-below, or tilde mark
+    # (or a circumflex combined with one of those), which none of the widget's
+    # other eight languages (en, ja, ko, zh, fr, de, es, th) produce.
+    _VIETNAMESE_ONLY_CHARS: ClassVar[frozenset[str]] = frozenset("ãảạăằắẳẵặầấẩẫậẽẻẹềếểễệĩỉịõỏọồốổỗộơờớởỡợũủụừứửữựỹỷỵđ")
+
     @staticmethod
     def _is_likely_vietnamese(text: str) -> bool:
         lowered = text.lower()
@@ -342,7 +351,9 @@ class ChatAgent:
             "o dau",
             "khong",
         )
-        return any(marker in lowered for marker in vietnamese_markers) or any(ord(ch) > 127 for ch in text)
+        if any(marker in lowered for marker in vietnamese_markers):
+            return True
+        return any(ch in ChatAgent._VIETNAMESE_ONLY_CHARS for ch in lowered)
 
     _DEFAULT_NO_KNOWLEDGE_VI: ClassVar[str] = (
         "Xin lỗi, mình chưa có thông tin về vấn đề này. "
