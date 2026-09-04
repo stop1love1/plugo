@@ -8,8 +8,8 @@ SSE requests on the same session are independent.
 
 That statelessness changes where the shared behaviour hangs, not whether it runs: the
 size limits, the summary the prompt carries, and the background memory/summarization
-work all match the WS path, but a completed turn is the hook for them, since SSE has no
-connection lifetime to attach anything to.
+work all match the WS path, but a completed turn is the only hook for them — so the
+background work runs on a cadence rather than at a session end that never arrives.
 
 Events emitted (per the EventSource spec):
     event: token       data: <plain text>
@@ -51,8 +51,17 @@ router = APIRouter()
 MAX_MESSAGE_CHARS = 10000
 MAX_PAGE_TEXT_CHARS = 5000
 
-# The WS path extracts memories once a session holds at least this many stored messages.
+# Memory extraction on a cadence, because SSE has no session end to hang it on.
+#
+# The WS path extracts exactly once per conversation, when the socket closes, from any
+# session holding at least MEMORY_MIN_MESSAGES. SSE cannot know which turn is the last, so
+# it extracts as soon as a conversation is worth extracting from — the same floor — and
+# then on the same 20-message rhythm the summarizer runs on, sharing that beat rather than
+# inventing a second one. Extracting every turn instead would bill the site operator a full
+# LLM round trip per visitor message: ~19 calls across a 20-turn conversation where the WS
+# transport makes one.
 MEMORY_MIN_MESSAGES = 4
+MEMORY_EXTRACT_EVERY_MESSAGES = ConversationSummarizer.MESSAGE_THRESHOLD
 
 
 class ChatSSERequest(BaseModel):
@@ -189,6 +198,7 @@ async def _chat_stream_core(
         finally:
             # Persist only if we actually got some output. Mirrors the WS path.
             if full_response.strip():
+                stored_before = len(history_messages)
                 history_messages.append(
                     {
                         "role": "user",
@@ -226,20 +236,23 @@ async def _chat_stream_core(
                                 error=str(e),
                             )
 
-                # Background follow-ups, on the WS path's thresholds. Both helpers open
-                # their own `repos`, which is what makes them safe here: this generator's
-                # `finally` is the last thing to run before FastAPI closes the
-                # request-scoped one.
-                #
-                # A turn is the only hook SSE has — it is stateless by design, so there is
-                # no session-end signal to defer extraction to the way the WS path does.
-                if len(history_messages) >= MEMORY_MIN_MESSAGES:
+                # Background follow-ups. Both helpers open their own `repos`, which is what
+                # makes them safe here: this generator's `finally` is the last thing to run
+                # before FastAPI closes the request-scoped one.
+                stored = len(history_messages)
+                # See MEMORY_EXTRACT_EVERY_MESSAGES: once when this turn takes the
+                # conversation past the floor, then on the cadence. Comparing against the
+                # count before this turn's pair, rather than testing equality with the
+                # floor, keeps the first pass reliable on a session whose stored count is
+                # odd — which the WS path can leave behind when a turn streams nothing.
+                crossed_floor = stored_before < MEMORY_MIN_MESSAGES <= stored
+                if crossed_floor or stored % MEMORY_EXTRACT_EVERY_MESSAGES == 0:
                     _fire_and_forget(_extract_and_save_memories(visitor_id, site, session_id, list(history_messages)))
                 # No `agent`/`trim_boundary`: this agent is discarded with the request, so
                 # staging a summary on it would trim history nobody reads again. The next
                 # SSE request re-reads the stored summary row and bounds its own replay
                 # through `restore_agent_history` — that is where SSE's shrink happens.
-                if len(history_messages) % ConversationSummarizer.MESSAGE_THRESHOLD == 0:
+                if stored % ConversationSummarizer.MESSAGE_THRESHOLD == 0:
                     _fire_and_forget(_maybe_summarize(session_id, site, list(history_messages)))
             # Release the concurrent-stream slot acquired by the endpoint.
             await release_sse_slot(site_token)

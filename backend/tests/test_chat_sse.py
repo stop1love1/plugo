@@ -8,8 +8,9 @@ network call ever fires.
 
 Also pins the parity SSE owes the WebSocket transport, since SSE is a documented
 alternative and not a lesser one: the same message size limit, a bounded page body, the
-stored conversation summary reaching the prompt, and the same background memory
-extraction / summarization thresholds.
+stored conversation summary reaching the prompt, and background memory extraction and
+summarization — the latter two on a cadence, since SSE has no session end to run them at,
+and per-turn would bill the operator an LLM round trip for every visitor message.
 """
 
 import asyncio
@@ -21,8 +22,14 @@ from httpx import AsyncClient
 from starlette.requests import Request as StarletteRequest
 
 from agent.core import ChatAgent
+from agent.memory import ConversationSummarizer
 from repositories import Repositories
-from routers.chat_sse import MAX_MESSAGE_CHARS, MAX_PAGE_TEXT_CHARS, ChatSSERequest
+from routers.chat_sse import (
+    MAX_MESSAGE_CHARS,
+    MAX_PAGE_TEXT_CHARS,
+    MEMORY_EXTRACT_EVERY_MESSAGES,
+    ChatSSERequest,
+)
 from utils.rate_limit import acquire_sse_slot
 
 # Distinct from other files' chunk ids — tests share a single sqlite DB
@@ -506,34 +513,59 @@ async def test_sse_resumed_session_uses_stored_summary(
     ]
 
 
-@pytest.mark.asyncio
-async def test_sse_completed_turn_extracts_memories(
-    db_repos: Repositories, test_site: dict, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Visitor memory is a headline feature; an SSE turn must feed it like a WS session does.
+async def _run_turn_and_capture_background(
+    db_repos: Repositories,
+    test_site: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    stored_turns: int,
+    visitor_id: str | None = None,
+) -> tuple[str, dict[str, list[dict]]]:
+    """Run one SSE turn on a session already holding `stored_turns` turns.
 
-    SSE is stateless, so a completed turn is the only hook available — there is no
-    end-of-session signal to defer to.
+    Returns the session id and what the two background helpers were handed, with the
+    dispatched tasks already drained.
     """
     await _approve_site(db_repos, test_site["id"])
-    session_id = await _seed_session(db_repos, test_site["id"], turns=1)  # 2 stored messages
+    session_id = await _seed_session(db_repos, test_site["id"], stored_turns)
     _record_agent_calls(monkeypatch)
     calls = _capture_background_helpers(monkeypatch)
     baseline = _background_baseline()
 
     await _run_core_stream(
         test_site["token"],
-        ChatSSERequest(message="hi again", session_id=session_id, visitor_id="visitor-1"),
+        ChatSSERequest(message="next question", session_id=session_id, visitor_id=visitor_id),
         db_repos,
     )
     await _drain_background(baseline)
+    return session_id, calls
+
+
+@pytest.mark.asyncio
+async def test_sse_extracts_memories_once_the_conversation_is_worth_it(
+    db_repos: Repositories, test_site: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Visitor memory is a headline feature; SSE must feed it like a WS session does.
+
+    The WS path extracts once, at session end, from a session holding at least 4 messages.
+    SSE cannot know which turn is the last, so it extracts as soon as a conversation
+    crosses that same floor — most widget conversations are short and would otherwise
+    never reach a wider cadence at all.
+    """
+    session_id, calls = await _run_turn_and_capture_background(
+        db_repos, test_site, monkeypatch, stored_turns=1, visitor_id="visitor-1"
+    )
 
     assert len(calls["memories"]) == 1
     extraction = calls["memories"][0]
     assert extraction["session_id"] == session_id
     assert extraction["visitor_id"] == f"{test_site['id']}:visitor-1"
-    # This turn's pair joins the two stored messages — the WS threshold of 4.
-    assert [m["content"] for m in extraction["messages"]] == ["question 0", "answer 0", "hi again", "Hello world"]
+    # This turn's pair joins the two stored messages — the WS floor of 4.
+    assert [m["content"] for m in extraction["messages"]] == [
+        "question 0",
+        "answer 0",
+        "next question",
+        "Hello world",
+    ]
     # 4 messages is under the summarization threshold.
     assert calls["summarize"] == []
 
@@ -542,7 +574,7 @@ async def test_sse_completed_turn_extracts_memories(
 async def test_sse_short_session_does_not_extract_memories(
     db_repos: Repositories, test_site: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Below the WS threshold there is nothing worth an extraction call."""
+    """Below the WS floor there is nothing worth an extraction call."""
     await _approve_site(db_repos, test_site["id"])
     _record_agent_calls(monkeypatch)
     calls = _capture_background_helpers(monkeypatch)
@@ -557,6 +589,38 @@ async def test_sse_short_session_does_not_extract_memories(
 
 
 @pytest.mark.asyncio
+async def test_sse_does_not_extract_memories_on_every_turn(
+    db_repos: Repositories, test_site: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Past the floor, extraction waits for the cadence.
+
+    Extraction is a full LLM round trip billed to the site operator. Firing it on every
+    turn would cost ~19 calls across a 20-turn conversation where the WS transport makes
+    one — a 19x amplification for anyone who moves an embed from WS to SSE.
+    """
+    _, calls = await _run_turn_and_capture_background(db_repos, test_site, monkeypatch, stored_turns=2)
+
+    # 4 stored + this turn's pair = 6: past the floor, short of the cadence.
+    assert calls["memories"] == []
+    assert calls["summarize"] == []
+
+
+@pytest.mark.asyncio
+async def test_sse_extracts_memories_again_on_the_cadence(
+    db_repos: Repositories, test_site: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """At the cadence it fires again, on the same beat as the summarizer."""
+    session_id, calls = await _run_turn_and_capture_background(db_repos, test_site, monkeypatch, stored_turns=9)
+
+    # 18 stored + this turn's pair = 20 = MEMORY_EXTRACT_EVERY_MESSAGES.
+    assert len(calls["memories"]) == 1
+    assert calls["memories"][0]["session_id"] == session_id
+    assert len(calls["memories"][0]["messages"]) == MEMORY_EXTRACT_EVERY_MESSAGES
+    # Extraction and summarization share the rhythm rather than running on two of them.
+    assert len(calls["summarize"]) == 1
+
+
+@pytest.mark.asyncio
 async def test_sse_summarizes_on_the_websocket_threshold(
     db_repos: Repositories, test_site: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -567,23 +631,13 @@ async def test_sse_summarizes_on_the_websocket_threshold(
     on the *next* request instead, where `restore_agent_history` bounds the replay by the
     stored row.
     """
-    await _approve_site(db_repos, test_site["id"])
-    session_id = await _seed_session(db_repos, test_site["id"], turns=9)  # 18 stored messages
-    _record_agent_calls(monkeypatch)
-    calls = _capture_background_helpers(monkeypatch)
-    baseline = _background_baseline()
-
-    await _run_core_stream(
-        test_site["token"],
-        ChatSSERequest(message="one more", session_id=session_id),
-        db_repos,
-    )
-    await _drain_background(baseline)
+    # 18 stored messages + this turn's pair = 20.
+    session_id, calls = await _run_turn_and_capture_background(db_repos, test_site, monkeypatch, stored_turns=9)
 
     assert len(calls["summarize"]) == 1
     dispatch = calls["summarize"][0]
     assert dispatch["session_id"] == session_id
-    assert len(dispatch["messages"]) == 20
+    assert len(dispatch["messages"]) == ConversationSummarizer.MESSAGE_THRESHOLD
     assert dispatch["agent"] is None
     assert dispatch["trim_boundary"] is None
 
