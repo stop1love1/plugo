@@ -2,6 +2,7 @@ import json
 from collections.abc import AsyncGenerator
 from typing import ClassVar
 
+from agent.memory import trim_start_index
 from agent.rag import rag_engine
 from agent.tools import tool_executor
 from config import settings
@@ -159,6 +160,9 @@ class ChatAgent:
         # invocation. Transports read this after the turn and persist it onto
         # the stored assistant message so analytics can aggregate it.
         self.last_tool_calls: list[dict] = []
+        # (summary text, trim boundary) handed over by the background summarizer and
+        # applied between turns — see the "Context trimming" block below.
+        self._staged_summary: tuple[str, dict | None] | None = None
 
     def _accumulate_usage(self, usage: dict | None) -> None:
         if not usage:
@@ -234,6 +238,55 @@ class ChatAgent:
                     "content": result_str,
                 }
             )
+
+    # --- Context trimming ---
+    # Once a summary covers the older part of a conversation, that part must stop
+    # being replayed verbatim — otherwise the prompt carries the history *and* a
+    # summary of it. Summarization runs as a background task while the transport keeps
+    # taking messages, so the trim it implies happens in three explicit steps instead
+    # of inside the background task: the transport reads the boundary when it dispatches
+    # a pass, the pass stages its result together with that boundary, and the transport
+    # applies it between turns. Call sites live in routers/chat.py.
+
+    def summary_boundary(self, keep_recent: int) -> dict | None:
+        """The oldest message that must survive once a summary covering the rest lands.
+
+        Read on the transport's own task at the moment the persisted-history snapshot is
+        handed to the summarizer, so the two agree on what that pass will cover. Returns
+        a *reference* to the message rather than an index: whatever is appended while the
+        summarizer runs sits after it and is therefore always kept, and a boundary an
+        earlier trim already removed is simply not found and ignored. Returns None when
+        there is nothing to trim. Pure — safe to call at any point.
+        """
+        index = trim_start_index(self.messages, keep_recent)
+        return self.messages[index] if index > 0 else None
+
+    def stage_summary(self, summary_text: str, boundary: dict | None) -> None:
+        """Hand this agent a finished summary and the boundary its pass was dispatched with.
+
+        Each pass carries its own boundary, so overlapping passes can't trim past what
+        they cover. Safe to call from a background task: only sets an attribute, never
+        touches ``self.messages``.
+        """
+        if summary_text:
+            self._staged_summary = (summary_text, boundary)
+
+    def apply_staged_summary(self) -> str | None:
+        """Drop the history a staged summary replaces; return that summary text.
+
+        Returns None when nothing is staged. Mutates ``self.messages`` in place, so it
+        must only be called between turns — never while a provider call is reading it.
+        """
+        staged = self._staged_summary
+        if staged is None:
+            return None
+        self._staged_summary = None
+        summary_text, boundary = staged
+        if boundary is not None:
+            start = next((i for i, msg in enumerate(self.messages) if msg is boundary), 0)
+            if start:
+                del self.messages[:start]
+        return summary_text
 
     # Patterns that indicate casual/chitchat — no knowledge lookup needed
     _CASUAL_PATTERNS: ClassVar[list[str]] = [

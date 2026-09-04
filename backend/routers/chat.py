@@ -8,7 +8,7 @@ from time import time
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from agent.core import ChatAgent
-from agent.memory import ConversationSummarizer, MemoryExtractor
+from agent.memory import ConversationSummarizer, MemoryExtractor, trim_messages_for_context
 from logging_config import logger
 from providers.factory import get_llm_provider
 from repositories import create_repos
@@ -89,6 +89,25 @@ def invalidate_site_cache(site_token: str | None = None):
         _site_cache.pop(site_token, None)
     else:
         _site_cache.clear()
+
+
+def restore_agent_history(agent: ChatAgent, stored_messages: list[dict], conversation_summary: str | None) -> None:
+    """Replay persisted history into the agent's LLM-facing message list.
+
+    When a summary already covers the older part of the conversation, only the tail the
+    summary leaves out is replayed: the summary itself goes into the system prompt, and
+    replaying what it replaces is exactly what made this feature grow the prompt instead
+    of shrinking it.
+
+    ``stored_messages`` is never mutated — the persisted session record keeps everything
+    for the dashboard's Chat Log and the analytics endpoints.
+    """
+    history = stored_messages
+    if conversation_summary:
+        history = trim_messages_for_context(stored_messages, ConversationSummarizer.KEEP_RECENT_MESSAGES)
+    for msg in history:
+        role = "user" if msg["role"] == "user" else "assistant"
+        agent.messages.append({"role": role, "content": msg["content"]})
 
 
 @router.websocket("/ws/chat")
@@ -258,6 +277,17 @@ async def _run_websocket_chat(
             chat_session = await repos.chat_sessions.create(session_data)
             session_id = chat_session["id"]
 
+        # Fetch conversation summary for resumed sessions. Read before the replay
+        # below, which the summary bounds.
+        conversation_summary = None
+        if resumed:
+            try:
+                existing_summary = await repos.conversation_summaries.get_by_session(session_id)
+                if existing_summary:
+                    conversation_summary = existing_summary["summary_text"]
+            except Exception:
+                pass  # conversation_summaries repo may not exist yet
+
         # Create or restore agent
         agent = ChatAgent(
             site_id=site["id"],
@@ -272,21 +302,9 @@ async def _run_websocket_chat(
 
         # Restore agent conversation history from saved messages
         if resumed and messages:
-            for msg in messages:
-                role = "user" if msg["role"] == "user" else "assistant"
-                agent.messages.append({"role": role, "content": msg["content"]})
+            restore_agent_history(agent, messages, conversation_summary)
 
         active_agents[session_id] = agent
-
-    # Fetch conversation summary for resumed sessions
-    conversation_summary = None
-    if resumed:
-        try:
-            existing_summary = await repos.conversation_summaries.get_by_session(session_id)
-            if existing_summary:
-                conversation_summary = existing_summary["summary_text"]
-        except Exception:
-            pass  # conversation_summaries repo may not exist yet
 
     # Send welcome with session info and previous messages
     await websocket.send_json(
@@ -381,14 +399,13 @@ async def _run_websocket_chat(
                 )
                 continue
 
-            # Re-fetch conversation summary periodically (after summarization may have run)
-            if len(messages) > 0 and len(messages) % 20 == 0:
-                try:
-                    existing_summary = await repos.conversation_summaries.get_by_session(session_id)
-                    if existing_summary:
-                        conversation_summary = existing_summary["summary_text"]
-                except Exception:
-                    pass
+            # Swap in a summary the background summarizer finished while we were taking
+            # messages: it goes into the system prompt and the history it covers leaves
+            # the agent. Done here — between turns, with no await in between — so the
+            # trim can never run under an in-flight provider call.
+            staged_summary = agent.apply_staged_summary()
+            if staged_summary:
+                conversation_summary = staged_summary
 
             await _handle_message(
                 websocket,
@@ -404,7 +421,17 @@ async def _run_websocket_chat(
 
             # Periodic summarization (every 20 messages)
             if len(messages) > 0 and len(messages) % 20 == 0:
-                _fire_and_forget(_maybe_summarize(session_id, site, list(messages)))
+                # Read the boundary here, on this task, so it lines up with the snapshot
+                # handed to the summarizer; anything appended while it runs stays.
+                _fire_and_forget(
+                    _maybe_summarize(
+                        session_id,
+                        site,
+                        list(messages),
+                        agent,
+                        agent.summary_boundary(ConversationSummarizer.KEEP_RECENT_MESSAGES),
+                    )
+                )
 
     except WebSocketDisconnect:
         pass
@@ -564,8 +591,21 @@ async def _extract_and_save_memories(visitor_id, site, session_id, messages):
         await repos.close()
 
 
-async def _maybe_summarize(session_id, site, messages):
-    """Background task: summarize long conversations."""
+async def _maybe_summarize(
+    session_id: str,
+    site: dict,
+    messages: list[dict],
+    agent: ChatAgent | None = None,
+    trim_boundary: dict | None = None,
+) -> None:
+    """Background task: summarize long conversations.
+
+    ``messages`` is a snapshot of the persisted history taken at dispatch time, and
+    ``trim_boundary`` (from ``ChatAgent.summary_boundary``) is the matching point in the
+    live agent's history. When an ``agent`` is given the finished summary is staged on it
+    along with that boundary, so the next turn sends the summary in place of the history
+    it covers (see ``ChatAgent.apply_staged_summary``).
+    """
     repos = await create_repos()
     try:
         summarizer = ConversationSummarizer()
@@ -588,6 +628,9 @@ async def _maybe_summarize(session_id, site, messages):
                     "total_message_count": len(messages),
                 },
             )
+            # Only sets an attribute — the trim itself happens on the transport's task.
+            if agent is not None:
+                agent.stage_summary(summary_text, trim_boundary)
             logger.info("Conversation summarized", session_id=session_id, messages_summarized=count)
     except Exception as e:
         logger.error("Summarization failed", error=str(e), session_id=session_id)

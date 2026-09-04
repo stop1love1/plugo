@@ -2,6 +2,10 @@
 
 Uses the site's LLM to extract structured facts from conversations
 and summarize long conversations to reduce token usage.
+
+A summary only reduces anything if the history it covers stops being sent as well, so
+this module also owns the trimming primitives the transports use to bound what reaches
+the LLM (``trim_messages_for_context`` / ``trim_start_index``).
 """
 
 import json
@@ -96,6 +100,76 @@ Return ONLY a valid JSON array, no other text."""
         except Exception as e:
             logger.error("Memory extraction failed", error=str(e))
             return []
+
+
+# Anthropic content-block types that only exist to carry a tool call or its result.
+_TOOL_BLOCK_TYPES = frozenset({"tool_use", "tool_result"})
+
+
+def _is_tool_exchange_message(msg: dict) -> bool:
+    """True for messages that exist only to carry a tool call or its result.
+
+    Covers the provider shapes ``ChatAgent._append_tool_messages`` writes: Anthropic
+    ``tool_use``/``tool_result`` content blocks, and the OpenAI-compatible assistant
+    ``tool_calls`` message plus its ``role: "tool"`` reply. The Gemini branch writes
+    plain prose with no structural marker, so it counts as ordinary conversation —
+    it carries no provider-level pairing that trimming could break, and
+    ``GeminiProvider.supports_tools`` is False so that branch is unreachable anyway.
+    """
+    if msg.get("role") == "tool":
+        return True
+    # ``tool_calls`` is overloaded: ``_append_tool_messages`` writes OpenAI tool-call
+    # objects (which carry an ``id``), while a *persisted* assistant message carries the
+    # analytics record ``{"name", "success"}`` under the same key. Only the former is
+    # part of a tool exchange; the latter is an ordinary assistant turn.
+    if any(isinstance(call, dict) and "id" in call for call in msg.get("tool_calls") or []):
+        return True
+    content = msg.get("content")
+    if isinstance(content, list):
+        return any(isinstance(block, dict) and block.get("type") in _TOOL_BLOCK_TYPES for block in content)
+    return False
+
+
+def _is_turn_start(msg: dict) -> bool:
+    """True when a trimmed conversation may begin at ``msg``.
+
+    Only a plain visitor message qualifies. Beginning on an assistant message, on a
+    ``tool_result`` whose ``tool_use`` was cut away, or on a ``role: "tool"`` reply
+    each produce a conversation the provider APIs reject.
+    """
+    return msg.get("role") == "user" and not _is_tool_exchange_message(msg)
+
+
+def trim_start_index(messages: list[dict], keep_recent: int) -> int:
+    """Index of the oldest message to keep when retaining the last ``keep_recent`` turns.
+
+    Returns 0 when nothing can be dropped. Tool-exchange messages do not count towards
+    ``keep_recent``: the persisted history a summary is built from holds only visitor and
+    assistant turns, so counting the same way keeps the two views of "how far back"
+    aligned. The index is then walked back to the nearest turn start, which is what
+    guarantees a tool result is never separated from the tool call it answers.
+    """
+    keep_recent = max(1, keep_recent)
+    start = len(messages)
+    kept = 0
+    for i in range(len(messages) - 1, -1, -1):
+        if not _is_tool_exchange_message(messages[i]):
+            kept += 1
+            if kept > keep_recent:
+                break
+        start = i
+    while start > 0 and not _is_turn_start(messages[start]):
+        start -= 1
+    return start
+
+
+def trim_messages_for_context(messages: list[dict], keep_recent: int) -> list[dict]:
+    """Return the tail of ``messages`` still worth sending once a summary covers the rest.
+
+    Never mutates the input: the persisted session record keeps the full history for the
+    dashboard's Chat Log and the analytics endpoints. Only the LLM-facing copy shrinks.
+    """
+    return list(messages[trim_start_index(messages, keep_recent) :])
 
 
 class ConversationSummarizer:
