@@ -77,14 +77,30 @@ def _persisted_history(turns: int) -> list[dict]:
     return history
 
 
-async def _drain_background_tasks(timeout: float = 10.0) -> None:
-    """Wait for `_fire_and_forget` tasks (the summarizer is one) to finish."""
+def _background_task_baseline() -> set[asyncio.Task]:
+    """Snapshot `routers.chat._background_tasks` so a drain can ignore foreign tasks."""
     from routers.chat import _background_tasks
 
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + timeout
-    while _background_tasks and loop.time() < deadline:
-        await asyncio.sleep(0.01)
+    return set(_background_tasks)
+
+
+async def _drain_background_tasks(baseline: set[asyncio.Task], timeout: float = 10.0) -> None:
+    """Await the `_fire_and_forget` tasks started since `baseline` — the summarizer is one.
+
+    `_background_tasks` is a module global whose entries are only discarded by a done
+    callback, so a task another test left behind on a now-closed loop would never clear.
+    Waiting on the whole set would hang until the deadline on every call; waiting only on
+    what this test started keeps that state out of the picture. A task of ours that really
+    does overrun the deadline is a failure, not something to proceed past silently.
+    """
+    from routers.chat import _background_tasks
+
+    pending = [task for task in _background_tasks if task not in baseline]
+    if not pending:
+        return
+    _, still_running = await asyncio.wait(pending, timeout=timeout)
+    if still_running:
+        raise AssertionError(f"background tasks still running after {timeout}s: {still_running}")
 
 
 class _FakeWebSocket:
@@ -186,6 +202,29 @@ def test_persisted_tool_call_records_count_as_ordinary_turns() -> None:
     assert trimmed == history[-KEEP:]
 
 
+def test_trim_declines_when_no_turn_start_precedes_the_cut() -> None:
+    """With no plain visitor message to cut at, the walk back reaches index 0 and nothing
+    is trimmed. Keeping more than intended is the only safe outcome — every alternative
+    orphans a tool result or opens the conversation on an assistant message — and it must
+    not run off the front of the list."""
+    agent = _make_agent()
+    tool_only = [
+        msg
+        for i in range(5)
+        for msg in (
+            {"role": "assistant", "content": [{"type": "tool_use", "id": f"c{i}", "name": "t", "input": {}}]},
+            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": f"c{i}", "content": "{}"}]},
+        )
+    ]
+    assistant_only = [{"role": "assistant", "content": f"answer {i}"} for i in range(10)]
+
+    for history in (tool_only, assistant_only):
+        assert trim_messages_for_context(history, 1) == history
+        assert trim_messages_for_context(history, KEEP) == history
+        agent.messages[:] = history
+        assert agent.summary_boundary(KEEP) is None
+
+
 def test_trim_leaves_short_conversations_alone() -> None:
     history = _persisted_history(2)
     assert trim_messages_for_context(history, KEEP) == history
@@ -229,8 +268,16 @@ async def test_summarization_trims_live_agent_history(db_repos: Repositories, te
 
 @pytest.mark.asyncio
 async def test_messages_arriving_after_the_snapshot_are_never_dropped(db_repos: Repositories, test_site: dict) -> None:
-    """The summarizer works from a snapshot while the socket keeps taking messages. The
-    boundary is pinned at dispatch, so later turns sit after it and always survive."""
+    """A boundary pinned at dispatch keeps everything appended after it, whenever the pass
+    that owns it finishes.
+
+    Deterministic rather than interleaved: `asyncio.create_task` doesn't start the
+    coroutine until the next await point, so the late turns land before the summarizer
+    runs at all. That ordering is the point — the boundary has to hold regardless of when
+    the pass completes. The genuinely concurrent path, where the summarizer really does
+    run while the socket takes messages, is covered by
+    `test_websocket_session_trims_context_once_summarized`.
+    """
     from routers.chat import _maybe_summarize
 
     session = await db_repos.chat_sessions.create({"site_id": test_site["id"]})
@@ -243,7 +290,7 @@ async def test_messages_arriving_after_the_snapshot_are_never_dropped(db_repos: 
         _maybe_summarize(session["id"], test_site, list(persisted), agent, agent.summary_boundary(KEEP))
     )
 
-    # Two more turns land while the summarizer runs.
+    # Two more turns land after the snapshot was taken.
     late_turns = [
         {"role": "user", "content": "late question"},
         {"role": "assistant", "content": "late answer"},
@@ -291,10 +338,15 @@ async def test_websocket_session_trims_context_once_summarized(
 
     monkeypatch.setattr(ChatAgent, "_build_system_prompt", _fake_build_system_prompt)
 
+    baseline = _background_task_baseline()
+
+    async def _drain() -> None:
+        await _drain_background_tasks(baseline)
+
     site = {**test_site, "is_approved": True}
     websocket = _FakeWebSocket(
         frames=[{"message": f"question {i}"} for i in range(21)],
-        on_receive=_drain_background_tasks,
+        on_receive=_drain,
     )
     ws_repos = await create_repos()
     await _run_websocket_chat(
@@ -304,7 +356,7 @@ async def test_websocket_session_trims_context_once_summarized(
         site["token"],
         first_data={"type": "init", "visitor_id": "visitor-1"},
     )
-    await _drain_background_tasks()
+    await _drain_background_tasks(baseline)
 
     assert len(turns) == 21
     # Turn 20 closes the window that triggers summarization and still sees everything;
@@ -335,6 +387,7 @@ async def _resume_and_capture_agent(site: dict, session_id: str) -> tuple[list[d
         if agent is not None:
             captured.extend(agent.messages)
 
+    baseline = _background_task_baseline()
     websocket = _FakeWebSocket(frames=[], on_receive=_capture)
     ws_repos = await create_repos()
     await _run_websocket_chat(
@@ -344,7 +397,7 @@ async def _resume_and_capture_agent(site: dict, session_id: str) -> tuple[list[d
         site["token"],
         first_data={"type": "init", "session_id": session_id, "visitor_id": "visitor-1"},
     )
-    await _drain_background_tasks()
+    await _drain_background_tasks(baseline)
     return captured, websocket.sent[0]["history"]
 
 
@@ -371,6 +424,36 @@ async def test_resume_with_summary_replays_only_the_uncovered_tail(db_repos: Rep
     assert len(sent_history) == len(persisted)
     stored = await db_repos.chat_sessions.get_by_id(session["id"])
     assert len(stored["messages"]) == len(persisted)
+
+
+@pytest.mark.asyncio
+async def test_resume_keeps_messages_the_summary_never_covered(db_repos: Repositories, test_site: dict) -> None:
+    """A summary only reaches as far as the pass that wrote it got.
+
+    Summarization fires every 20 stored messages, so a session can close with up to 19
+    more than the last pass took in. Trimming to a fixed recent tail would drop those —
+    they are in neither the summary nor the replayed history, and nothing else records
+    them for the model. The row's `message_count_summarized` says where the summary
+    actually stops, so the replay starts there.
+    """
+    session = await db_repos.chat_sessions.create({"site_id": test_site["id"]})
+    persisted = _persisted_history(29)  # 58 messages; the last pass ran at 40
+    covered = 40 - KEEP  # what that pass summarized
+    await db_repos.chat_sessions.update_messages(session["id"], persisted)
+    await db_repos.conversation_summaries.upsert_by_session(
+        session_id=session["id"],
+        data={
+            "site_id": test_site["id"],
+            "summary_text": SUMMARY_TEXT,
+            "message_count_summarized": covered,
+            "total_message_count": 40,
+        },
+    )
+
+    agent_messages, _ = await _resume_and_capture_agent({**test_site, "is_approved": True}, session["id"])
+
+    assert len(agent_messages) == len(persisted) - covered
+    assert agent_messages == [{"role": m["role"], "content": m["content"]} for m in persisted[covered:]]
 
 
 @pytest.mark.asyncio
@@ -401,6 +484,27 @@ def test_a_slow_summarizer_cannot_trim_past_what_it_covers() -> None:
     assert agent.apply_staged_summary() == SUMMARY_TEXT
     assert agent.messages[0] is first_boundary
     assert len(agent.messages) == KEEP + 12
+
+
+def test_a_summary_overtaken_by_a_later_pass_is_discarded() -> None:
+    """Out-of-order completion: a later pass already trimmed past this one's boundary, so
+    this summary covers less than the history that survived it. Applying its text anyway
+    would pair a broad tail with a narrow summary, so the whole pair is dropped."""
+    agent = _make_agent()
+    agent.messages.extend([{"role": m["role"], "content": m["content"]} for m in _persisted_history(12)])
+    overtaken_boundary = agent.summary_boundary(KEEP)  # pass A dispatched
+    agent.messages.extend([{"role": m["role"], "content": m["content"]} for m in _persisted_history(6)])
+
+    # Pass B is dispatched later, finishes first, and trims past A's boundary.
+    agent.stage_summary("a broader summary", agent.summary_boundary(KEEP))
+    assert agent.apply_staged_summary() == "a broader summary"
+    assert all(msg is not overtaken_boundary for msg in agent.messages)
+
+    # Pass A finishes afterwards. Its summary no longer describes what is left.
+    surviving_history = list(agent.messages)
+    agent.stage_summary(SUMMARY_TEXT, overtaken_boundary)
+    assert agent.apply_staged_summary() is None
+    assert agent.messages == surviving_history
 
 
 # --- Task 4 interaction: per-turn tool recording is untouched by trimming ------------

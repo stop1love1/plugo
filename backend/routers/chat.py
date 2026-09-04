@@ -91,7 +91,7 @@ def invalidate_site_cache(site_token: str | None = None):
         _site_cache.clear()
 
 
-def restore_agent_history(agent: ChatAgent, stored_messages: list[dict], conversation_summary: str | None) -> None:
+def restore_agent_history(agent: ChatAgent, stored_messages: list[dict], summary_row: dict | None) -> None:
     """Replay persisted history into the agent's LLM-facing message list.
 
     When a summary already covers the older part of the conversation, only the tail the
@@ -99,12 +99,19 @@ def restore_agent_history(agent: ChatAgent, stored_messages: list[dict], convers
     replaying what it replaces is exactly what made this feature grow the prompt instead
     of shrinking it.
 
+    How far a summary reaches is whatever the pass that wrote it covered, recorded on the
+    row as ``message_count_summarized``. Summarization fires every 20 stored messages, so
+    a session can close with up to 19 more than the last pass took in — those must still
+    be replayed, or they end up in neither the summary nor the agent.
+
     ``stored_messages`` is never mutated — the persisted session record keeps everything
     for the dashboard's Chat Log and the analytics endpoints.
     """
     history = stored_messages
-    if conversation_summary:
-        history = trim_messages_for_context(stored_messages, ConversationSummarizer.KEEP_RECENT_MESSAGES)
+    if summary_row and summary_row.get("summary_text"):
+        covered = int(summary_row.get("message_count_summarized") or 0)
+        keep_recent = max(ConversationSummarizer.KEEP_RECENT_MESSAGES, len(stored_messages) - covered)
+        history = trim_messages_for_context(stored_messages, keep_recent)
     for msg in history:
         role = "user" if msg["role"] == "user" else "assistant"
         agent.messages.append({"role": role, "content": msg["content"]})
@@ -280,11 +287,12 @@ async def _run_websocket_chat(
         # Fetch conversation summary for resumed sessions. Read before the replay
         # below, which the summary bounds.
         conversation_summary = None
+        summary_row = None
         if resumed:
             try:
-                existing_summary = await repos.conversation_summaries.get_by_session(session_id)
-                if existing_summary:
-                    conversation_summary = existing_summary["summary_text"]
+                summary_row = await repos.conversation_summaries.get_by_session(session_id)
+                if summary_row:
+                    conversation_summary = summary_row["summary_text"]
             except Exception:
                 pass  # conversation_summaries repo may not exist yet
 
@@ -302,7 +310,7 @@ async def _run_websocket_chat(
 
         # Restore agent conversation history from saved messages
         if resumed and messages:
-            restore_agent_history(agent, messages, conversation_summary)
+            restore_agent_history(agent, messages, summary_row)
 
         active_agents[session_id] = agent
 

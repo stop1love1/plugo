@@ -274,8 +274,13 @@ class ChatAgent:
     def apply_staged_summary(self) -> str | None:
         """Drop the history a staged summary replaces; return that summary text.
 
-        Returns None when nothing is staged. Mutates ``self.messages`` in place, so it
-        must only be called between turns — never while a provider call is reading it.
+        Returns None when nothing is staged, or when the staged pass has been overtaken:
+        if its boundary is no longer in the history, a later pass already trimmed past it,
+        so this summary is narrower than the tail that survives. Adopting its text would
+        pair a broad history with a narrow summary, so the pair is discarded instead.
+
+        Mutates ``self.messages`` in place, so it must only be called between turns —
+        never while a provider call is reading it.
         """
         staged = self._staged_summary
         if staged is None:
@@ -283,7 +288,9 @@ class ChatAgent:
         self._staged_summary = None
         summary_text, boundary = staged
         if boundary is not None:
-            start = next((i for i, msg in enumerate(self.messages) if msg is boundary), 0)
+            start = next((i for i, msg in enumerate(self.messages) if msg is boundary), None)
+            if start is None:
+                return None
             if start:
                 del self.messages[:start]
         return summary_text
