@@ -228,9 +228,7 @@ async def test_summarization_trims_live_agent_history(db_repos: Repositories, te
 
 
 @pytest.mark.asyncio
-async def test_messages_arriving_after_the_snapshot_are_never_dropped(
-    db_repos: Repositories, test_site: dict
-) -> None:
+async def test_messages_arriving_after_the_snapshot_are_never_dropped(db_repos: Repositories, test_site: dict) -> None:
     """The summarizer works from a snapshot while the socket keeps taking messages. The
     boundary is pinned at dispatch, so later turns sit after it and always survive."""
     from routers.chat import _maybe_summarize
@@ -351,9 +349,7 @@ async def _resume_and_capture_agent(site: dict, session_id: str) -> tuple[list[d
 
 
 @pytest.mark.asyncio
-async def test_resume_with_summary_replays_only_the_uncovered_tail(
-    db_repos: Repositories, test_site: dict
-) -> None:
+async def test_resume_with_summary_replays_only_the_uncovered_tail(db_repos: Repositories, test_site: dict) -> None:
     session = await db_repos.chat_sessions.create({"site_id": test_site["id"]})
     persisted = _persisted_history(12)
     await db_repos.chat_sessions.update_messages(session["id"], persisted)
