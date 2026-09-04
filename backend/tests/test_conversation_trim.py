@@ -468,6 +468,33 @@ async def test_resume_without_summary_replays_everything(db_repos: Repositories,
     assert len(agent_messages) == len(persisted)
 
 
+def test_replay_tolerates_a_stored_message_missing_its_content() -> None:
+    """A malformed stored row replays as empty rather than aborting the visitor's turn.
+
+    Both transports write `role` and `content` on every message, so this is defence in
+    depth — but it is defence the SSE path had before it moved onto this shared helper,
+    and a `KeyError` here would surface as a failed chat mid-request.
+    """
+    from routers.chat import restore_agent_history
+
+    agent = _make_agent()
+    restore_agent_history(
+        agent,
+        [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant"},
+            {"content": "orphaned content"},
+        ],
+        None,
+    )
+
+    assert agent.messages == [
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": ""},
+        {"role": "assistant", "content": "orphaned content"},
+    ]
+
+
 def test_a_slow_summarizer_cannot_trim_past_what_it_covers() -> None:
     """A summarizer slower than the twenty messages between passes leaves two passes in
     flight. Each carries its own boundary, so whichever lands trims to exactly what it

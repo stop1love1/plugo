@@ -192,20 +192,29 @@ async def _drain_background(baseline: set[asyncio.Task], timeout: float = 10.0) 
         raise AssertionError(f"background tasks still running after {timeout}s: {still_running}")
 
 
-def _stored_history(turns: int) -> list[dict]:
-    """A persisted session's message list: alternating visitor/assistant turns."""
+def _stored_history(turns: int, unanswered_question: bool = False) -> list[dict]:
+    """A persisted session's message list: alternating visitor/assistant turns.
+
+    With `unanswered_question`, a trailing visitor message with no reply makes the count
+    odd — what the WS path persists after a turn that streamed nothing (`routers/chat.py`
+    appends the visitor's message unconditionally but saves only on non-empty output, so
+    the *next* save writes the orphan too).
+    """
     history: list[dict] = []
     for i in range(turns):
         history.append({"role": "user", "content": f"question {i}", "timestamp": "2026-01-01T00:00:00Z"})
         history.append({"role": "assistant", "content": f"answer {i}", "timestamp": "2026-01-01T00:00:01Z"})
+    if unanswered_question:
+        history.append({"role": "user", "content": "unanswered", "timestamp": "2026-01-01T00:00:02Z"})
     return history
 
 
-async def _seed_session(db_repos: Repositories, site_id: str, turns: int) -> str:
+async def _seed_session(db_repos: Repositories, site_id: str, turns: int, unanswered_question: bool = False) -> str:
     """Create a session for `site_id` carrying `turns` stored visitor/assistant turns."""
     session = await db_repos.chat_sessions.create({"site_id": site_id, "visitor_id": f"{site_id}:visitor-1"})
-    if turns:
-        await db_repos.chat_sessions.update_messages(session["id"], _stored_history(turns))
+    history = _stored_history(turns, unanswered_question)
+    if history:
+        await db_repos.chat_sessions.update_messages(session["id"], history)
     return session["id"]
 
 
@@ -519,6 +528,7 @@ async def _run_turn_and_capture_background(
     monkeypatch: pytest.MonkeyPatch,
     stored_turns: int,
     visitor_id: str | None = None,
+    unanswered_question: bool = False,
 ) -> tuple[str, dict[str, list[dict]]]:
     """Run one SSE turn on a session already holding `stored_turns` turns.
 
@@ -526,7 +536,7 @@ async def _run_turn_and_capture_background(
     dispatched tasks already drained.
     """
     await _approve_site(db_repos, test_site["id"])
-    session_id = await _seed_session(db_repos, test_site["id"], stored_turns)
+    session_id = await _seed_session(db_repos, test_site["id"], stored_turns, unanswered_question)
     _record_agent_calls(monkeypatch)
     calls = _capture_background_helpers(monkeypatch)
     baseline = _background_baseline()
@@ -618,6 +628,31 @@ async def test_sse_extracts_memories_again_on_the_cadence(
     assert len(calls["memories"][0]["messages"]) == MEMORY_EXTRACT_EVERY_MESSAGES
     # Extraction and summarization share the rhythm rather than running on two of them.
     assert len(calls["summarize"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_sse_cadence_survives_an_odd_stored_message_count(
+    db_repos: Repositories, test_site: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A session whose stored count went odd must still hit the cadence.
+
+    The WS path can persist an odd count (a turn that streamed nothing leaves the
+    visitor's message to be saved alone), and the count stays odd for the rest of the
+    session's life. A `stored % cadence == 0` test would then never fire again — not a
+    skipped beat but a permanent one, silently ending memory extraction for that visitor.
+    So the cadence asks whether this turn *crossed* a multiple, not whether it landed on
+    one.
+    """
+    _, calls = await _run_turn_and_capture_background(
+        db_repos, test_site, monkeypatch, stored_turns=9, unanswered_question=True
+    )
+
+    # 18 + the orphaned question = 19 stored, + this turn's pair = 21: past 20, never on it.
+    assert len(calls["memories"]) == 1
+    assert len(calls["memories"][0]["messages"]) == 21
+    # Summarization deliberately keeps the WS turn loop's exact `% 20 == 0` test, so it
+    # does not fire here — that parity is intentional and not this cadence's business.
+    assert calls["summarize"] == []
 
 
 @pytest.mark.asyncio

@@ -241,13 +241,24 @@ async def _chat_stream_core(
                 # before FastAPI closes the request-scoped one.
                 stored = len(history_messages)
                 # See MEMORY_EXTRACT_EVERY_MESSAGES: once when this turn takes the
-                # conversation past the floor, then on the cadence. Comparing against the
-                # count before this turn's pair, rather than testing equality with the
-                # floor, keeps the first pass reliable on a session whose stored count is
-                # odd — which the WS path can leave behind when a turn streams nothing.
+                # conversation past the floor, then on the cadence.
+                #
+                # Both tests ask whether *this turn* crossed a line, rather than whether the
+                # new count lands exactly on one. A stored count can go odd — the WS path
+                # appends the visitor's message unconditionally but persists only when the
+                # response is non-empty, so the save after a turn that streamed nothing
+                # writes an odd number — and it stays odd for the rest of the session's
+                # life. An equality test against the floor would skip the first pass on such
+                # a session, and a `% cadence == 0` test would never fire again at all.
                 crossed_floor = stored_before < MEMORY_MIN_MESSAGES <= stored
-                if crossed_floor or stored % MEMORY_EXTRACT_EVERY_MESSAGES == 0:
+                crossed_cadence = (
+                    stored_before // MEMORY_EXTRACT_EVERY_MESSAGES < stored // MEMORY_EXTRACT_EVERY_MESSAGES
+                )
+                if crossed_floor or crossed_cadence:
                     _fire_and_forget(_extract_and_save_memories(visitor_id, site, session_id, list(history_messages)))
+                # Summarization keeps the WS turn loop's exact `% MESSAGE_THRESHOLD == 0`
+                # test, deliberately: the two transports must dispatch on the same beat.
+                #
                 # No `agent`/`trim_boundary`: this agent is discarded with the request, so
                 # staging a summary on it would trim history nobody reads again. The next
                 # SSE request re-reads the stored summary row and bounds its own replay

@@ -113,8 +113,10 @@ def restore_agent_history(agent: ChatAgent, stored_messages: list[dict], summary
         keep_recent = max(ConversationSummarizer.KEEP_RECENT_MESSAGES, len(stored_messages) - covered)
         history = trim_messages_for_context(stored_messages, keep_recent)
     for msg in history:
-        role = "user" if msg["role"] == "user" else "assistant"
-        agent.messages.append({"role": role, "content": msg["content"]})
+        # Tolerate a stored message missing either key: a malformed row should replay as
+        # empty, not abort the visitor's turn with a KeyError mid-request.
+        role = "user" if msg.get("role") == "user" else "assistant"
+        agent.messages.append({"role": role, "content": msg.get("content", "")})
 
 
 @router.websocket("/ws/chat")
