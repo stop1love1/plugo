@@ -331,7 +331,7 @@ class ChatAgent:
     # up when a vowel carries a breve, horn, hook-above, dot-below, or tilde mark
     # (or a circumflex combined with one of those), which none of the widget's
     # other eight languages (en, ja, ko, zh, fr, de, es, th) produce.
-    _VIETNAMESE_ONLY_CHARS: ClassVar[frozenset[str]] = frozenset("ãảạăằắẳẵặầấẩẫậẽẻẹềếểễệĩỉịõỏọồốổỗộơờớởỡợũủụừứửữựỹỷỵđ")
+    _VIETNAMESE_ONLY_CHARS: ClassVar[frozenset[str]] = frozenset("ãảạăằắẳẵặầấẩẫậẽẻẹềếểễệĩỉịõỏọồốổỗộơờớởỡợũủụưừứửữựỹỷỵđ")
 
     @staticmethod
     def _is_likely_vietnamese(text: str) -> bool:

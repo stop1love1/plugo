@@ -443,6 +443,12 @@ def test_detects_vietnamese_without_diacritics():
         # Accented French — uses the shared Latin diacritics (à, é, è, ê, â, î) that
         # this detector must not treat as Vietnamese-exclusive.
         ("Où est le café ? C'est très intéressant et généreux.", False),
+        # Bare "ư" (u-with-horn, no tone mark) as the ONLY Vietnamese signal: no word
+        # marker, no other diacritic. Regression for a gap where the horn-only form
+        # of "ư" was missing from `_VIETNAMESE_ONLY_CHARS` (its sibling "ơ" was
+        # present, "ư" was not), so a message like this fell all the way through to
+        # the English fallback.
+        ("tư", True),
     ],
 )
 def test_is_likely_vietnamese_language_table(text: str, expected: bool) -> None:
@@ -451,3 +457,33 @@ def test_is_likely_vietnamese_language_table(text: str, expected: bool) -> None:
     non-Vietnamese visitor (JA/KO/ZH/FR/...) wrongly gets the Vietnamese fallback."""
 
     assert ChatAgent._is_likely_vietnamese(text) is expected
+
+
+def test_vietnamese_only_chars_covers_every_breve_horn_hook_dot_tilde_vowel() -> None:
+    """Enumerate every character `_VIETNAMESE_ONLY_CHARS`'s own comment claims to
+    cover — a bare breve/horn vowel (ă/ơ/ư and all their tone-marked forms), or any
+    vowel carrying a hook-above, dot-below, or tilde mark, or a circumflex combined
+    with one of those — and assert each is actually present.
+
+    A plain "does this set look right" read missed that bare "ư" (U+01B0) was absent
+    while its sibling bare "ơ" was present; this membership check is the guard that
+    should catch the next such gap instead of relying on eyeballing the literal.
+    """
+    expected = set(
+        "ăằắẳẵặ"  # ă: bare (ngang) + 5 tones
+        "ơờớởỡợ"  # ơ: bare (ngang) + 5 tones
+        "ưừứửữự"  # ư: bare (ngang) + 5 tones
+        "ầấẩẫậ"  # â: tone-marked only (bare â is shared with French, excluded)
+        "ềếểễệ"  # ê: tone-marked only
+        "ồốổỗộ"  # ô: tone-marked only
+        "ãảạ"  # plain a: tilde/hook-above/dot-below only (à/á excluded, shared with fr/es)
+        "ẽẻẹ"  # plain e: tilde/hook-above/dot-below only
+        "ĩỉị"  # plain i: tilde/hook-above/dot-below only
+        "õỏọ"  # plain o: tilde/hook-above/dot-below only
+        "ũủụ"  # plain u: tilde/hook-above/dot-below only
+        "ỹỷỵ"  # plain y: tilde/hook-above/dot-below only
+        "đ"
+    )
+
+    missing = expected - ChatAgent._VIETNAMESE_ONLY_CHARS
+    assert missing == set(), f"missing Vietnamese-exclusive characters: {sorted(missing)}"
