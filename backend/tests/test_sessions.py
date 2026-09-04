@@ -79,8 +79,9 @@ async def test_get_session_not_found(client, auth_headers):
     ],
 )
 @pytest.mark.asyncio
-async def test_submit_feedback_recorded(client, test_site, test_session, message_index, rating):
-    """POST /api/sessions/{id}/feedback with a valid rating returns 200 + 'Feedback recorded'.
+async def test_submit_feedback_recorded(client, db_repos, test_site, test_session, message_index, rating):
+    """POST /api/sessions/{id}/feedback with a valid rating returns 200 + 'Feedback recorded',
+    and the rating is actually persisted on the stored message — not just echoed in the response.
 
     Feedback is a widget action authorized by the site token (sent as a bearer),
     not the admin JWT — so we authenticate the way the embedded widget does."""
@@ -91,6 +92,9 @@ async def test_submit_feedback_recorded(client, test_site, test_session, message
     )
     assert response.status_code == 200
     assert response.json()["message"] == "Feedback recorded"
+
+    stored = await db_repos.chat_sessions.get_by_id(test_session["id"])
+    assert stored["messages"][message_index]["feedback"] == rating
 
 
 @pytest.mark.asyncio
