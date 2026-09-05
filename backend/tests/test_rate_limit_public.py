@@ -215,25 +215,75 @@ async def test_feedback_site_token_limit_fires_below_the_ip_ceiling(
 
 
 @pytest.mark.asyncio
+async def test_sse_site_token_limit_fires_below_the_ip_ceiling(
+    clients_by_ip: Callable[[str], AsyncClient],
+) -> None:
+    """The same for the SSE stream's per-token limit, which no other test binds.
+
+    Its sibling above rotates the token, so only the per-IP ceiling can fire
+    there; `test_chat_sse.py` deliberately doesn't exercise the 429 either.
+    Without this, deleting `@limiter.limit(settings.rate_limit_chat, ...)` from
+    the route would leave the whole suite green — one of the four decorators
+    this task turns on would be unguarded.
+    """
+    token_limit = _limit_amount(settings.rate_limit_chat)
+    ip_limit = _limit_amount(settings.rate_limit_public_ip)
+    assert token_limit < ip_limit, (
+        f"this test only discriminates while the per-token limit binds first "
+        f"({token_limit} vs per-IP {ip_limit}) — adjust config.json → rate_limit"
+    )
+
+    caller = clients_by_ip("203.0.113.16")
+
+    with _rate_limiting_enabled():
+        statuses = [
+            (
+                await caller.post(
+                    "/api/chat/sse-noisy-tenant/stream",
+                    json={"message": "hello"},
+                )
+            ).status_code
+            for _ in range(token_limit + 1)
+        ]
+        # Same IP, a different tenant: allowed, so what fired above was the
+        # per-token bucket and the per-IP ceiling still has headroom.
+        neighbour_same_ip = await caller.post(
+            "/api/chat/sse-quiet-tenant/stream",
+            json={"message": "hello"},
+        )
+
+    assert set(statuses[:token_limit]) == {404}, f"expected the allowance to reach the endpoint, got {set(statuses)}"
+    assert statuses[token_limit] == 429, "the SSE per-token limit no longer fires — was its decorator dropped?"
+    assert neighbour_same_ip.status_code == 404, "a second tenant sharing the noisy tenant's IP was starved"
+
+
+@pytest.mark.asyncio
 async def test_bursty_dashboard_route_is_not_rate_limited(
     clients_by_ip: Callable[[str], AsyncClient],
     auth_headers: dict[str, str],
 ) -> None:
     """An admin route the dashboard calls once per rendered item must not be limited.
 
-    `limiter.py` passes `default_limits`, which reads as an app-wide 60/minute
-    per-IP limit — it isn't one, because slowapi only consults `default_limits`
-    from `SlowAPIMiddleware` and main.py doesn't install it. That distinction
-    decides the blast radius of the limiter's `key_style="endpoint"`: under
-    url-scoping a per-path bucket hides a burst, under endpoint-scoping every
-    call to one route shares a bucket, and a Flows page rendering one screenshot
-    per step would 429 the admin on their own dashboard.
+    The Flows page renders one screenshot request per step, so this route is
+    reached in bursts. `key_style="endpoint"` means every call to it would share
+    a single per-IP bucket if it ever came under a per-window limit — a 20-step
+    flow rendered three times in a minute would then 429 the admin on their own
+    dashboard. Nothing limits it today: it carries no `@limiter.limit(...)`, and
+    slowapi reaches a route only through that decorator or `SlowAPIMiddleware`,
+    which main.py doesn't install.
 
-    So this drives more requests at a representative burst route than the
-    default limit allows and asserts none is refused — it fails the moment
-    anything (that middleware, or a decorator added without regard for the
-    call pattern) puts this route under a per-IP window.
+    Two ways that could change, and this test covers both:
+
+    * someone decorates this route without weighing its call pattern — the
+      burst below outruns any per-window limit they'd plausibly reach for;
+    * `default_limits` comes back to `limiter.py` *and* someone installs that
+      middleware, which together put every route under one bucket. Only the
+      pair is dangerous, and the limits list is the half a test can see, so the
+      assertion below pins it empty. (It was non-empty until the argument was
+      removed as misleading — see the comment in `limiter.py`.)
     """
+    from main import limiter
+
     burst = _limit_amount(settings.rate_limit_default) + 1
     admin = clients_by_ip("203.0.113.15")
 
@@ -250,3 +300,7 @@ async def test_bursty_dashboard_route_is_not_rate_limited(
 
     # 404 (no such screenshot file) — the request reached the handler every time.
     assert set(statuses) == {404}, f"a {burst}-request dashboard burst was refused: {sorted(set(statuses))}"
+    assert limiter._default_limits == [], (
+        "limiter.py grew default limits again — harmless alone, but installing "
+        "SlowAPIMiddleware would then put this burst route under one per-IP bucket"
+    )

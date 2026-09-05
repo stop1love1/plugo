@@ -91,10 +91,9 @@ class Settings(BaseSettings):
     # across them. Those endpoints are *also* limited per site_token for tenant
     # fairness, but a site_token is caller-supplied, so rotating it mints a fresh
     # bucket; the IP-keyed limit is what a single source cannot rotate away.
-    # Deliberately well above every
-    # per-tenant allowance so a well-behaved tenant always meets its own fairness
-    # limit first — deployments whose visitors share an egress IP raise this one
-    # without loosening tenant fairness.
+    # Deliberately well above every per-tenant allowance so a well-behaved tenant
+    # always meets its own fairness limit first — deployments whose visitors share
+    # an egress IP raise this one without loosening tenant fairness.
     rate_limit_public_ip: str = _get("rate_limit", "public_ip", "120/minute")
     # Max simultaneous open SSE streams per site_token. Caps the long-lived
     # connection footprint that slowapi's per-window limiter can't see.
