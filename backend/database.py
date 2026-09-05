@@ -1,5 +1,7 @@
 import contextlib
+from typing import Any
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -7,6 +9,24 @@ from config import settings
 
 engine = create_async_engine(settings.database_url, echo=False)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+
+@event.listens_for(engine.sync_engine, "connect")
+def _enable_sqlite_foreign_keys(dbapi_connection: Any, _connection_record: Any) -> None:
+    """Turn on foreign-key enforcement for every SQLite connection.
+
+    SQLite ships with `PRAGMA foreign_keys` OFF and the setting is per-connection,
+    so without this hook every `ForeignKey(..., ondelete="CASCADE")` declared on our
+    models is inert: deleting a site would leave its knowledge chunks, chat sessions,
+    tools, flows, memories and crawl jobs behind as orphans.
+    """
+    if not settings.database_url.startswith("sqlite"):
+        return
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA foreign_keys=ON")
+    finally:
+        cursor.close()
 
 
 class Base(DeclarativeBase):

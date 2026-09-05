@@ -2,6 +2,7 @@ import json
 from collections.abc import AsyncGenerator
 from typing import ClassVar
 
+from agent.memory import trim_start_index
 from agent.rag import rag_engine
 from agent.tools import tool_executor
 from config import settings
@@ -153,6 +154,15 @@ class ChatAgent:
         # Structured citations from the most recent turn (deduped by URL, max score kept).
         # Router reads this after streaming to emit a dedicated {"type":"citations"} event.
         self.last_citations: list[dict] = []
+        # Tool invocations executed during the most recent turn, as
+        # [{"name": str, "success": bool}]. Only tools that actually ran are
+        # recorded — a hallucinated name with no matching _meta is not an
+        # invocation. Transports read this after the turn and persist it onto
+        # the stored assistant message so analytics can aggregate it.
+        self.last_tool_calls: list[dict] = []
+        # (summary text, trim boundary) handed over by the background summarizer and
+        # applied between turns — see the "Context trimming" block below.
+        self._staged_summary: tuple[str, dict | None] | None = None
 
     def _accumulate_usage(self, usage: dict | None) -> None:
         if not usage:
@@ -164,6 +174,14 @@ class ChatAgent:
         else:
             self.total_usage["input_tokens"] += in_t
             self.total_usage["output_tokens"] += out_t
+
+    def _record_tool_call(self, name: str, tool_result: dict | None) -> None:
+        """Record one executed tool invocation for this turn.
+
+        ``tool_executor.execute_tool`` reports outcome via ``"success"``; a result
+        without that key (e.g. an unsupported HTTP method) is counted as a failure.
+        """
+        self.last_tool_calls.append({"name": name, "success": bool((tool_result or {}).get("success", False))})
 
     def _append_tool_messages(self, tc: dict, result_str: str):
         """Append tool call assistant message and tool result in the correct format for the active provider."""
@@ -221,6 +239,62 @@ class ChatAgent:
                 }
             )
 
+    # --- Context trimming ---
+    # Once a summary covers the older part of a conversation, that part must stop
+    # being replayed verbatim — otherwise the prompt carries the history *and* a
+    # summary of it. Summarization runs as a background task while the transport keeps
+    # taking messages, so the trim it implies happens in three explicit steps instead
+    # of inside the background task: the transport reads the boundary when it dispatches
+    # a pass, the pass stages its result together with that boundary, and the transport
+    # applies it between turns. Call sites live in routers/chat.py.
+
+    def summary_boundary(self, keep_recent: int) -> dict | None:
+        """The oldest message that must survive once a summary covering the rest lands.
+
+        Read on the transport's own task at the moment the persisted-history snapshot is
+        handed to the summarizer, so the two agree on what that pass will cover. Returns
+        a *reference* to the message rather than an index: whatever is appended while the
+        summarizer runs sits after it and is therefore always kept, and a boundary an
+        earlier trim already removed is simply not found and ignored. Returns None when
+        there is nothing to trim. Pure — safe to call at any point.
+        """
+        index = trim_start_index(self.messages, keep_recent)
+        return self.messages[index] if index > 0 else None
+
+    def stage_summary(self, summary_text: str, boundary: dict | None) -> None:
+        """Hand this agent a finished summary and the boundary its pass was dispatched with.
+
+        Each pass carries its own boundary, so overlapping passes can't trim past what
+        they cover. Safe to call from a background task: only sets an attribute, never
+        touches ``self.messages``.
+        """
+        if summary_text:
+            self._staged_summary = (summary_text, boundary)
+
+    def apply_staged_summary(self) -> str | None:
+        """Drop the history a staged summary replaces; return that summary text.
+
+        Returns None when nothing is staged, or when the staged pass has been overtaken:
+        if its boundary is no longer in the history, a later pass already trimmed past it,
+        so this summary is narrower than the tail that survives. Adopting its text would
+        pair a broad history with a narrow summary, so the pair is discarded instead.
+
+        Mutates ``self.messages`` in place, so it must only be called between turns —
+        never while a provider call is reading it.
+        """
+        staged = self._staged_summary
+        if staged is None:
+            return None
+        self._staged_summary = None
+        summary_text, boundary = staged
+        if boundary is not None:
+            start = next((i for i, msg in enumerate(self.messages) if msg is boundary), None)
+            if start is None:
+                return None
+            if start:
+                del self.messages[:start]
+        return summary_text
+
     # Patterns that indicate casual/chitchat — no knowledge lookup needed
     _CASUAL_PATTERNS: ClassVar[list[str]] = [
         # Greetings
@@ -250,6 +324,15 @@ class ChatAgent:
                     return True
         return False
 
+    # Vietnamese-exclusive precomposed diacritic vowels, plus "đ". Deliberately
+    # excludes bare acute/grave (à á è é ì í ò ó ù ú) and bare circumflex (â ê ô),
+    # since French and Spanish also use those — including them would misclassify
+    # accented French/Spanish text as Vietnamese. Every character below only shows
+    # up when a vowel carries a breve, horn, hook-above, dot-below, or tilde mark
+    # (or a circumflex combined with one of those), which none of the widget's
+    # other eight languages (en, ja, ko, zh, fr, de, es, th) produce.
+    _VIETNAMESE_ONLY_CHARS: ClassVar[frozenset[str]] = frozenset("ãảạăằắẳẵặầấẩẫậẽẻẹềếểễệĩỉịõỏọồốổỗộơờớởỡợũủụưừứửữựỹỷỵđ")
+
     @staticmethod
     def _is_likely_vietnamese(text: str) -> bool:
         lowered = text.lower()
@@ -268,7 +351,9 @@ class ChatAgent:
             "o dau",
             "khong",
         )
-        return any(marker in lowered for marker in vietnamese_markers) or any(ord(ch) > 127 for ch in text)
+        if any(marker in lowered for marker in vietnamese_markers):
+            return True
+        return any(ch in ChatAgent._VIETNAMESE_ONLY_CHARS for ch in lowered)
 
     _DEFAULT_NO_KNOWLEDGE_VI: ClassVar[str] = (
         "Xin lỗi, mình chưa có thông tin về vấn đề này. "
@@ -300,8 +385,9 @@ class ChatAgent:
         as context, so the transport layer (WS/SSE) can emit a structured
         citations event. We no longer ask the LLM to format a "Sources:" tail.
         """
-        # Reset citations — we collect them fresh per turn.
+        # Reset per-turn accumulators — both are collected fresh for each turn.
         self.last_citations = []
+        self.last_tool_calls = []
 
         # --- Visitor memory ---
         # Memory key/value pairs originate from earlier visitor turns — fence as untrusted.
@@ -339,7 +425,10 @@ class ChatAgent:
         if page_context:
             safe_url = _neutralize_fence_markers(str(page_context.get("url", "N/A")))
             safe_title = _neutralize_fence_markers(str(page_context.get("title", "N/A")))
-            safe_page_text = _neutralize_fence_markers(page_context.get("pageText", "")[:1500])
+            # `pageText` comes straight off the wire: a client can send a number, a list,
+            # or an explicit null, any of which would make the slice raise mid-request.
+            raw_page_text = page_context.get("pageText", "")
+            safe_page_text = _neutralize_fence_markers(raw_page_text[:1500] if isinstance(raw_page_text, str) else "")
             context_body = f"- URL: {safe_url}\n- Title: {safe_title}\n- Page content:\n{safe_page_text}"
             context_section = "## Current Page\n" + _fence_untrusted("PAGE_CONTEXT", context_body)
 
@@ -489,8 +578,12 @@ class ChatAgent:
             conversation_summary,
         )
 
-        # Casual messages (greetings, thanks, etc.) bypass knowledge check — let the LLM respond naturally
-        if not has_knowledge_match and not self._is_casual_message(message):
+        # "Usable tools" for this turn: the same condition the tool loop below uses.
+        has_usable_tools = bool(tools) and self.supports_tools
+
+        # Casual messages (greetings, thanks, etc.) bypass knowledge check — let the LLM respond naturally.
+        # A site with usable tools but no knowledge match still has something to work with (Action Mode).
+        if not has_knowledge_match and not self._is_casual_message(message) and not has_usable_tools:
             fallback = self._no_knowledge_response(message)
             self.messages.append({"role": "assistant", "content": fallback})
             for token in fallback:
@@ -501,7 +594,7 @@ class ChatAgent:
         max_tool_rounds = 3
         round_count = 0
 
-        if tools and self.supports_tools:
+        if has_usable_tools:
             result = await self.provider.chat(
                 messages=self.messages,
                 system_prompt=system_prompt,
@@ -519,6 +612,7 @@ class ChatAgent:
                         yield f"\n\n> Calling **{tc['name']}**...\n\n"
 
                         tool_result = await tool_executor.execute_tool(tool_meta, tc["arguments"])
+                        self._record_tool_call(tc["name"], tool_result)
                         result_str = json.dumps(tool_result, ensure_ascii=False)
                         self._append_tool_messages(tc, result_str)
                         tool_called = True
@@ -574,12 +668,14 @@ class ChatAgent:
             conversation_summary,
         )
 
-        if not has_knowledge_match and not self._is_casual_message(message):
+        effective_tools = tools if (tools and self.supports_tools) else None
+
+        # A site with usable tools but no knowledge match still has something to work with (Action Mode).
+        if not has_knowledge_match and not self._is_casual_message(message) and not effective_tools:
             fallback = self._no_knowledge_response(message)
             self.messages.append({"role": "assistant", "content": fallback})
             return fallback
 
-        effective_tools = tools if (tools and self.supports_tools) else None
         result = await self.provider.chat(
             messages=self.messages,
             system_prompt=system_prompt,
@@ -597,6 +693,7 @@ class ChatAgent:
                 tool_meta = next((t["_meta"] for t in tools if t["name"] == tc["name"]), None)
                 if tool_meta:
                     tool_result = await tool_executor.execute_tool(tool_meta, tc["arguments"])
+                    self._record_tool_call(tc["name"], tool_result)
                     result_str = json.dumps(tool_result, ensure_ascii=False)
                     self._append_tool_messages(tc, result_str)
                     tool_called = True

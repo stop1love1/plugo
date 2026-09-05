@@ -1,24 +1,17 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from auth import TokenData, get_current_user
+from config import settings
+from limiter import limiter
 from logging_config import logger
 from repositories import Repositories, get_repos
+from utils.rate_limit import extract_bearer_token, site_token_key
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
 # Upper bound on page size so a client can't request an unbounded result set.
 MAX_PER_PAGE = 100
-
-
-def _extract_bearer_token(authorization: str | None) -> str | None:
-    """Return the token from an `Authorization: Bearer <token>` header, or None."""
-    if not authorization:
-        return None
-    parts = authorization.split(" ", 1)
-    if len(parts) == 2 and parts[0].lower() == "bearer":
-        return parts[1].strip() or None
-    return None
 
 
 @router.get("")
@@ -50,35 +43,41 @@ class FeedbackRequest(BaseModel):
 
 
 @router.post("/{session_id}/feedback")
+@limiter.limit(settings.rate_limit_default, key_func=site_token_key)
 async def submit_feedback(
     session_id: str,
     data: FeedbackRequest,
+    request: Request,
     repos: Repositories = Depends(get_repos),
     authorization: str | None = Header(default=None),
     site_token: str | None = None,
 ):
     """Widget feedback submission.
 
-    Site token is read from the ``Authorization: Bearer <site_token>`` header.
-    The legacy ``?site_token=...`` query param is still accepted for one release
-    cycle; using it logs a deprecation warning so we can remove it safely.
+    Site token is read from the ``Authorization: Bearer <site_token>`` header
+    and is now required — a request with no token is rejected before the
+    session is even looked up, so an unauthenticated caller can't use this
+    endpoint to probe which session ids exist. The legacy ``?site_token=...``
+    query param is still accepted for one release cycle; using it logs a
+    deprecation warning so we can remove it safely.
     """
-    session = await repos.chat_sessions.get_by_id(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    header_token = _extract_bearer_token(authorization)
+    header_token = extract_bearer_token(authorization)
     resolved_token = header_token or site_token
+    if not resolved_token:
+        raise HTTPException(status_code=401, detail="Site token required")
     if site_token and not header_token:
         logger.warning(
             "Deprecated feedback site_token query param used",
             session_id=session_id,
         )
 
-    if resolved_token:
-        site = await repos.sites.get_by_token(resolved_token)
-        if not site or site.get("id") != session.get("site_id"):
-            raise HTTPException(status_code=403, detail="Session does not belong to this site")
+    session = await repos.chat_sessions.get_by_id(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    site = await repos.sites.get_by_token(resolved_token)
+    if not site or site.get("id") != session.get("site_id"):
+        raise HTTPException(status_code=403, detail="Session does not belong to this site")
 
     messages = session.get("messages", [])
     if data.message_index >= len(messages):

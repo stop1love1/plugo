@@ -74,7 +74,21 @@ def _clean_doc(doc: dict) -> dict:
 
 # --- Site ---
 class MongoSiteRepo(BaseSiteRepo):
+    # Collections whose documents carry a `site_id` and are therefore owned by the
+    # site. `flow_steps` is deliberately absent: steps reference a flow, not a site,
+    # so they are cleaned up via their parent flow (see `delete`).
+    _SITE_SCOPED_COLLECTIONS = (
+        "knowledge_chunks",
+        "chat_sessions",
+        "tools",
+        "crawl_jobs",
+        "visitor_memories",
+        "conversation_summaries",
+        "flows",
+    )
+
     def __init__(self, db: AsyncIOMotorDatabase):
+        self.db = db
         self.col = db["sites"]
 
     async def create(self, data: dict) -> dict:
@@ -151,6 +165,25 @@ class MongoSiteRepo(BaseSiteRepo):
         return _clean_doc(result) if result else None
 
     async def delete(self, site_id: str) -> bool:
+        """Delete the site and everything scoped to it.
+
+        Mongo has no foreign keys, so the cascade that SQLite gets from
+        `ON DELETE CASCADE` has to be spelled out here. Dependents are removed
+        before the site document itself: there is no multi-document transaction to
+        lean on, and a half-finished cascade that still has its site row is
+        recoverable (delete again) whereas orphaned rows are invisible forever.
+        """
+        if not await self.col.find_one({"_id": site_id}, {"_id": 1}):
+            return False
+
+        # flow_steps hang off flows, which hang off the site — resolve that hop first.
+        flow_ids = [doc["_id"] async for doc in self.db["flows"].find({"site_id": site_id}, {"_id": 1})]
+        if flow_ids:
+            await self.db["flow_steps"].delete_many({"flow_id": {"$in": flow_ids}})
+
+        for name in self._SITE_SCOPED_COLLECTIONS:
+            await self.db[name].delete_many({"site_id": site_id})
+
         result = await self.col.delete_one({"_id": site_id})
         return result.deleted_count > 0
 

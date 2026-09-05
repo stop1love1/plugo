@@ -173,7 +173,9 @@ async def update_site(
         await verify_site_model_config(provider, model)
 
     site = await repos.sites.update(site_id, update_payload)
-    invalidate_site_cache()  # Clear all since we don't know token from site_id easily
+    # The token isn't editable (SiteUpdate has no `token` field), so the value
+    # fetched before the update is still valid — evict only this site's entry.
+    invalidate_site_cache(existing_site["token"])
     try:
         await repos.audit_logs.create(
             {
@@ -218,10 +220,32 @@ async def delete_site(
     repos: Repositories = Depends(get_repos),
     user: TokenData = Depends(get_current_user),
 ):
+    # Fetch first: the record (and its token) disappears from the DB the moment
+    # `delete` succeeds, and the cache eviction below needs that token.
+    existing_site = await repos.sites.get_by_id(site_id)
+    if not existing_site:
+        raise HTTPException(status_code=404, detail="Site not found")
+
+    # The repo cascade removes every DB record owned by the site; if it fails the
+    # request must fail, so it is deliberately not wrapped.
     ok = await repos.sites.delete(site_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Site not found")
-    invalidate_site_cache()  # Clear all since we don't know token from site_id easily
+    # Must happen immediately after the commit: until the cache is flushed a widget
+    # request can still resolve the deleted site by token, and its chat_session insert
+    # would now hit the foreign key. Nothing slow may come between these two lines.
+    invalidate_site_cache(existing_site["token"])
+
+    # The vector collection is secondary storage — a failure here leaves a stale
+    # `site_<id>` collection behind, which is worth a warning but not a 500 on a
+    # deletion the database has already committed.
+    from agent.rag import rag_engine
+
+    try:
+        await rag_engine.delete_site(site_id)
+    except Exception as e:
+        logger.warning("Failed to delete vector collection for site", site_id=site_id, error=str(e))
+
     try:
         await repos.audit_logs.create(
             {

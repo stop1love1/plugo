@@ -6,6 +6,11 @@ flow, SSE is stateless: each request creates a transient agent with history
 loaded from DB and is NOT registered in `active_agents` — multiple concurrent
 SSE requests on the same session are independent.
 
+That statelessness changes where the shared behaviour hangs, not whether it runs: the
+size limits, the summary the prompt carries, and the background memory/summarization
+work all match the WS path, but a completed turn is the only hook for them — so the
+background work runs on a cadence rather than at a session end that never arrives.
+
 Events emitted (per the EventSource spec):
     event: token       data: <plain text>
     event: citations   data: <JSON {"items": [...]}>
@@ -21,23 +26,53 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from agent.core import ChatAgent
+from agent.memory import ConversationSummarizer
 from config import settings
 from logging_config import logger
 from repositories import Repositories, get_repos
-from routers.chat import get_cached_site
+from routers.chat import (
+    MAX_PAGE_TEXT_CHARS,
+    _clamp_page_context,
+    _extract_and_save_memories,
+    _fire_and_forget,
+    _maybe_summarize,
+    crossed_multiple,
+    get_cached_site,
+    restore_agent_history,
+)
 from utils.cors import validate_site_origin
 from utils.pricing import estimate_cost
 from utils.rate_limit import acquire_sse_slot, release_sse_slot, site_token_key
 
 router = APIRouter()
 
+# The same ceiling the WS turn loop enforces, so neither transport is the soft way in.
+MAX_MESSAGE_CHARS = 10000
+
+# `MAX_PAGE_TEXT_CHARS` and `_clamp_page_context` live on the WS module now — one clamp,
+# applied identically by both transports — and are re-exported from here for callers that
+# already reach for them on the SSE module.
+__all__ = ["MAX_MESSAGE_CHARS", "MAX_PAGE_TEXT_CHARS", "ChatSSERequest", "register_routes", "router"]
+
+# Memory extraction on a cadence, because SSE has no session end to hang it on.
+#
+# The WS path extracts exactly once per conversation, when the socket closes, from any
+# session holding at least MEMORY_MIN_MESSAGES. SSE cannot know which turn is the last, so
+# it extracts as soon as a conversation is worth extracting from — the same floor — and
+# then on the same 20-message rhythm the summarizer runs on, sharing that beat rather than
+# inventing a second one. Extracting every turn instead would bill the site operator a full
+# LLM round trip per visitor message: ~19 calls across a 20-turn conversation where the WS
+# transport makes one.
+MEMORY_MIN_MESSAGES = 4
+MEMORY_EXTRACT_EVERY_MESSAGES = ConversationSummarizer.MESSAGE_THRESHOLD
+
 
 class ChatSSERequest(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1, max_length=MAX_MESSAGE_CHARS)
     session_id: str | None = None
     visitor_id: str | None = None
     page_context: dict | None = None
@@ -77,16 +112,28 @@ async def _chat_stream_core(
     # spoofing.
     raw_visitor_id = body.visitor_id or ""
     sanitized = re.sub(r"[^a-zA-Z0-9_-]", "", str(raw_visitor_id))[:64] if raw_visitor_id else ""
+    # Whether the id is one the *client* holds, or one we minted for this request alone.
+    # SSE is stateless, so the fallback uuid never reaches the visitor and no later request
+    # can present it: memories keyed by it are rows nothing will ever read back. Extraction
+    # is a billed LLM round trip, so an unaddressable visitor gets no extraction — see the
+    # dispatch below. Everything else (the stored session, the prompt) still uses the id.
+    visitor_is_addressable = bool(sanitized)
     if not sanitized:
         sanitized = str(uuid.uuid4())
     visitor_id = f"{site['id']}:{sanitized}"
 
     session_id = body.session_id
     history_messages: list[dict] = []
+    summary_row: dict | None = None
     if session_id:
         existing = await repos.chat_sessions.get_by_id(session_id)
         if existing and existing.get("site_id") == site["id"]:
             history_messages = list(existing.get("messages") or [])
+            try:
+                summary_row = await repos.conversation_summaries.get_by_session(session_id)
+            except Exception as e:
+                # A missing summary must never cost the visitor their turn.
+                logger.warning("SSE: load conversation summary failed", session_id=session_id, error=str(e))
         else:
             session_id = None
     if not session_id:
@@ -104,9 +151,12 @@ async def _chat_stream_core(
         bot_rules=site.get("bot_rules", ""),
         response_language=site.get("response_language", "auto"),
     )
-    for m in history_messages:
-        role = "user" if m.get("role") == "user" else "assistant"
-        agent.messages.append({"role": role, "content": m.get("content", "")})
+    # Replay bounded by whatever the stored summary already covers — the SSE equivalent
+    # of the WS path's between-turn trim, since a summary that is sent *alongside* the
+    # history it covers grows the prompt instead of shrinking it.
+    restore_agent_history(agent, history_messages, summary_row)
+    conversation_summary = (summary_row or {}).get("summary_text") or None
+    page_context = _clamp_page_context(body.page_context)
 
     async def event_stream() -> AsyncIterator[dict]:
         # Always persist whatever we streamed — on normal completion, on
@@ -118,9 +168,10 @@ async def _chat_stream_core(
         try:
             async for tok in agent.stream_response(
                 message=body.message,
-                page_context=body.page_context,
+                page_context=page_context,
                 repos=repos,
                 visitor_id=visitor_id,
+                conversation_summary=conversation_summary,
             ):
                 full_response += tok
                 yield {"event": "token", "data": tok}
@@ -141,6 +192,7 @@ async def _chat_stream_core(
         finally:
             # Persist only if we actually got some output. Mirrors the WS path.
             if full_response.strip():
+                stored_before = len(history_messages)
                 history_messages.append(
                     {
                         "role": "user",
@@ -148,13 +200,16 @@ async def _chat_stream_core(
                         "timestamp": datetime.now(UTC).isoformat(),
                     }
                 )
-                history_messages.append(
-                    {
-                        "role": "assistant",
-                        "content": full_response,
-                        "timestamp": datetime.now(UTC).isoformat(),
-                    }
-                )
+                assistant_msg: dict = {
+                    "role": "assistant",
+                    "content": full_response,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                }
+                # Structured tool-invocation record for this turn (analytics reads it).
+                # Copied so a later turn's reset can't mutate what we persisted.
+                if agent.last_tool_calls:
+                    assistant_msg["tool_calls"] = list(agent.last_tool_calls)
+                history_messages.append(assistant_msg)
                 try:
                     await repos.chat_sessions.update_messages(session_id, history_messages)
                 except Exception as e:
@@ -174,6 +229,32 @@ async def _chat_stream_core(
                                 session_id=session_id,
                                 error=str(e),
                             )
+
+                # Background follow-ups. Both helpers open their own `repos`, which is what
+                # makes them safe here: this generator's `finally` is the last thing to run
+                # before FastAPI closes the request-scoped one.
+                stored = len(history_messages)
+                # See MEMORY_EXTRACT_EVERY_MESSAGES: once when this turn takes the
+                # conversation past the floor, then on the cadence. Both tests ask whether
+                # *this turn* crossed a line rather than whether the new count lands exactly
+                # on one — see `crossed_multiple` for why an odd count makes the difference
+                # permanent.
+                crossed_floor = stored_before < MEMORY_MIN_MESSAGES <= stored
+                crossed_cadence = crossed_multiple(stored_before, stored, MEMORY_EXTRACT_EVERY_MESSAGES)
+                # Skipped for a minted visitor id: the extraction would still cost a full
+                # LLM round trip, and would write `visitor_memories` rows under a key no
+                # later request can present.
+                if visitor_is_addressable and (crossed_floor or crossed_cadence):
+                    _fire_and_forget(_extract_and_save_memories(visitor_id, site, session_id, list(history_messages)))
+                # Summarization is keyed by session, not visitor, so it runs for anonymous
+                # requests too — and on the same crossing test the WS turn loop now uses.
+                #
+                # No `agent`/`trim_boundary`: this agent is discarded with the request, so
+                # staging a summary on it would trim history nobody reads again. The next
+                # SSE request re-reads the stored summary row and bounds its own replay
+                # through `restore_agent_history` — that is where SSE's shrink happens.
+                if crossed_multiple(stored_before, stored, ConversationSummarizer.MESSAGE_THRESHOLD):
+                    _fire_and_forget(_maybe_summarize(session_id, site, list(history_messages)))
             # Release the concurrent-stream slot acquired by the endpoint.
             await release_sse_slot(site_token)
             if not streamed_ok:

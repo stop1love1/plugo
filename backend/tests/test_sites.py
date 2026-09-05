@@ -1,5 +1,8 @@
 """Tests for Sites CRUD flow and the per-site origin validator."""
 
+import contextlib
+import uuid
+
 import pytest
 
 from utils.cors import validate_site_origin
@@ -109,6 +112,64 @@ async def test_update_site_not_found(client, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_update_site_evicts_only_its_own_cache_entry(client, auth_headers, db_repos, test_site):
+    """Updating one site must not evict a different site's cached config. On a
+    multi-tenant server, `invalidate_site_cache()` with no token flushes everyone."""
+    from time import time
+
+    from routers.chat import _site_cache
+
+    other_site = await db_repos.sites.create({"name": "Other Site", "url": "https://other.example.com"})
+    try:
+        # Seed both cache entries directly, the way `get_cached_site` would.
+        _site_cache[test_site["token"]] = (dict(test_site), time())
+        _site_cache[other_site["token"]] = (dict(other_site), time())
+
+        response = await client.put(
+            f"/api/sites/{test_site['id']}",
+            json={"name": "Renamed"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+        assert test_site["token"] not in _site_cache
+        assert other_site["token"] in _site_cache
+    finally:
+        _site_cache.pop(test_site["token"], None)
+        _site_cache.pop(other_site["token"], None)
+        await db_repos.sites.delete(other_site["id"])
+
+
+@pytest.mark.asyncio
+async def test_delete_site_evicts_only_its_own_cache_entry(client, auth_headers, db_repos, monkeypatch):
+    """Deleting one site must not evict a different site's cached config."""
+    from time import time
+
+    from agent.rag import rag_engine
+    from routers.chat import _site_cache
+
+    async def _noop(site_id: str) -> None:
+        return None
+
+    monkeypatch.setattr(rag_engine, "delete_site", _noop)
+
+    doomed = await db_repos.sites.create({"name": "Doomed Site", "url": "https://doomed.example.com"})
+    keeper = await db_repos.sites.create({"name": "Keeper Site", "url": "https://keeper.example.com"})
+    try:
+        _site_cache[doomed["token"]] = (dict(doomed), time())
+        _site_cache[keeper["token"]] = (dict(keeper), time())
+
+        response = await client.delete(f"/api/sites/{doomed['id']}", headers=auth_headers)
+        assert response.status_code == 200
+
+        assert doomed["token"] not in _site_cache
+        assert keeper["token"] in _site_cache
+    finally:
+        _site_cache.pop(keeper["token"], None)
+        await db_repos.sites.delete(keeper["id"])
+
+
+@pytest.mark.asyncio
 async def test_update_site_rejects_non_working_model(client, auth_headers, test_site, monkeypatch):
     """PUT /api/sites/{site_id} should reject model configs that fail verification."""
 
@@ -156,6 +217,270 @@ async def test_delete_site_not_found(client, auth_headers):
     """DELETE /api/sites/{site_id} with invalid id should return 404."""
     response = await client.delete("/api/sites/nonexistent-id", headers=auth_headers)
     assert response.status_code == 404
+
+
+# --- Cascade cleanup on site deletion ---
+
+
+@contextlib.asynccontextmanager
+async def _repos():
+    """Repos on their own session, closed afterwards.
+
+    Deliberately not the `db_repos` fixture: the post-delete assertions must run on
+    a session that has never seen the seeded rows, or the ORM identity map could
+    hand back a row the request already deleted.
+    """
+    from repositories import create_repos
+
+    repos = await create_repos()
+    try:
+        yield repos
+    finally:
+        await repos.close()
+
+
+async def _seed_site_with_dependents() -> dict:
+    """Create a site plus one row in every table that hangs off it."""
+    async with _repos() as repos:
+        site = await repos.sites.create({"name": "Cascade Site", "url": "https://cascade.test"})
+        site_id = site["id"]
+        chunk = await repos.knowledge.create(
+            {
+                "site_id": site_id,
+                "source_url": "https://cascade.test/page",
+                "title": "Page",
+                "content": "some knowledge",
+                "content_hash": uuid.uuid4().hex,
+            }
+        )
+        tool = await repos.tools.create(
+            {
+                "site_id": site_id,
+                "name": "lookup",
+                "description": "Look something up",
+                "method": "GET",
+                "url": "https://api.cascade.test/lookup",
+            }
+        )
+        session = await repos.chat_sessions.create(
+            {"site_id": site_id, "visitor_id": "visitor-1", "messages": [{"role": "user", "content": "hi"}]}
+        )
+        job = await repos.crawl_jobs.create({"site_id": site_id, "start_url": "https://cascade.test"})
+        memory = await repos.visitor_memories.create(
+            {"visitor_id": "visitor-1", "site_id": site_id, "category": "identity", "key": "name", "value": "Ada"}
+        )
+        summary = await repos.conversation_summaries.create(
+            {"session_id": session["id"], "site_id": site_id, "summary_text": "they said hi"}
+        )
+        flow = await repos.flows.create({"site_id": site_id, "name": "Onboarding"})
+        step = await repos.flow_steps.create({"flow_id": flow["id"], "step_order": 1, "title": "Step one"})
+    return {
+        "site": site,
+        "chunk": chunk,
+        "tool": tool,
+        "session": session,
+        "job": job,
+        "memory": memory,
+        "summary": summary,
+        "flow": flow,
+        "step": step,
+    }
+
+
+async def _assert_site_and_dependents_gone(seeded: dict) -> None:
+    """Re-read everything the site owned and assert none of it survived."""
+    async with _repos() as repos:
+        site_id = seeded["site"]["id"]
+        assert await repos.sites.get_by_id(site_id) is None
+        assert (await repos.knowledge.list_by_site(site_id))["total"] == 0
+        assert await repos.tools.list_by_site(site_id) == []
+        assert await repos.chat_sessions.list_by_site(site_id) == []
+        assert await repos.crawl_jobs.list_by_site(site_id) == []
+        assert await repos.visitor_memories.list_by_site(site_id) == []
+        assert await repos.conversation_summaries.get_by_session(seeded["session"]["id"]) is None
+        assert await repos.flows.list_by_site(site_id) == []
+        assert await repos.flow_steps.list_by_flow(seeded["flow"]["id"]) == []
+
+
+@pytest.mark.asyncio
+async def test_delete_site_cascades_dependent_records(client, auth_headers, monkeypatch):
+    """DELETE /api/sites/{id} must take every site-scoped record with it, and drop
+    the site's vector collection."""
+    from agent.rag import rag_engine
+
+    dropped_collections: list[str] = []
+
+    async def _record_delete(site_id: str) -> None:
+        dropped_collections.append(site_id)
+
+    monkeypatch.setattr(rag_engine, "delete_site", _record_delete)
+
+    seeded = await _seed_site_with_dependents()
+
+    response = await client.delete(f"/api/sites/{seeded['site']['id']}", headers=auth_headers)
+    assert response.status_code == 200
+
+    await _assert_site_and_dependents_gone(seeded)
+    assert dropped_collections == [seeded["site"]["id"]]
+
+
+@pytest.mark.asyncio
+async def test_delete_site_survives_vector_store_failure(client, auth_headers, monkeypatch):
+    """A ChromaDB failure is secondary: the DB deletion still commits and the
+    request still succeeds."""
+    from agent.rag import rag_engine
+
+    async def _boom(site_id: str) -> None:
+        raise RuntimeError("chroma is down")
+
+    monkeypatch.setattr(rag_engine, "delete_site", _boom)
+
+    seeded = await _seed_site_with_dependents()
+
+    response = await client.delete(f"/api/sites/{seeded['site']['id']}", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json()["message"] == "Site deleted"
+
+    await _assert_site_and_dependents_gone(seeded)
+
+
+@pytest.mark.asyncio
+async def test_delete_site_leaves_other_sites_untouched(client, auth_headers, monkeypatch):
+    """The cascade must be scoped to the deleted site — this is a multi-tenant store."""
+    from agent.rag import rag_engine
+
+    async def _noop(site_id: str) -> None:
+        return None
+
+    monkeypatch.setattr(rag_engine, "delete_site", _noop)
+
+    doomed = await _seed_site_with_dependents()
+    keeper = await _seed_site_with_dependents()
+
+    response = await client.delete(f"/api/sites/{doomed['site']['id']}", headers=auth_headers)
+    assert response.status_code == 200
+
+    await _assert_site_and_dependents_gone(doomed)
+
+    async with _repos() as repos:
+        keeper_id = keeper["site"]["id"]
+        assert (await repos.knowledge.list_by_site(keeper_id))["total"] == 1
+        assert len(await repos.tools.list_by_site(keeper_id)) == 1
+        assert len(await repos.chat_sessions.list_by_site(keeper_id)) == 1
+        assert len(await repos.crawl_jobs.list_by_site(keeper_id)) == 1
+        assert len(await repos.visitor_memories.list_by_site(keeper_id)) == 1
+        assert await repos.conversation_summaries.get_by_session(keeper["session"]["id"]) is not None
+        assert len(await repos.flows.list_by_site(keeper_id)) == 1
+        assert len(await repos.flow_steps.list_by_flow(keeper["flow"]["id"])) == 1
+        await repos.sites.delete(keeper_id)
+
+
+# --- MongoDB cascade (Mongo has no FKs, so MongoSiteRepo.delete does it by hand) ---
+# The suite runs against SQLite only, so the Mongo path is covered by a unit test
+# over MongoSiteRepo.delete driven by an in-memory stand-in for the Motor database.
+
+
+class _FakeDeleteResult:
+    def __init__(self, deleted_count: int):
+        self.deleted_count = deleted_count
+
+
+class _FakeCollection:
+    """Minimal Motor-collection stand-in: equality filters plus `$in`."""
+
+    def __init__(self, docs: list[dict]):
+        self.docs = docs
+
+    @staticmethod
+    def _matches(doc: dict, query: dict) -> bool:
+        for key, condition in query.items():
+            if isinstance(condition, dict) and "$in" in condition:
+                if doc.get(key) not in condition["$in"]:
+                    return False
+            elif doc.get(key) != condition:
+                return False
+        return True
+
+    async def find_one(self, query: dict, _projection: dict | None = None) -> dict | None:
+        return next((doc for doc in self.docs if self._matches(doc, query)), None)
+
+    def find(self, query: dict, _projection: dict | None = None):
+        matched = [doc for doc in self.docs if self._matches(doc, query)]
+
+        async def _cursor():
+            for doc in matched:
+                yield doc
+
+        return _cursor()
+
+    async def delete_many(self, query: dict) -> _FakeDeleteResult:
+        kept = [doc for doc in self.docs if not self._matches(doc, query)]
+        removed = len(self.docs) - len(kept)
+        self.docs[:] = kept
+        return _FakeDeleteResult(removed)
+
+    async def delete_one(self, query: dict) -> _FakeDeleteResult:
+        for index, doc in enumerate(self.docs):
+            if self._matches(doc, query):
+                del self.docs[index]
+                return _FakeDeleteResult(1)
+        return _FakeDeleteResult(0)
+
+
+class _FakeMongoDB:
+    def __init__(self, collections: dict[str, list[dict]]):
+        self._collections = {name: _FakeCollection(docs) for name, docs in collections.items()}
+
+    def __getitem__(self, name: str) -> _FakeCollection:
+        return self._collections.setdefault(name, _FakeCollection([]))
+
+
+@pytest.mark.asyncio
+async def test_mongo_site_repo_delete_cascades():
+    """MongoSiteRepo.delete must clear every site-scoped collection itself."""
+    from repositories.mongo_repo import MongoSiteRepo
+
+    db = _FakeMongoDB(
+        {
+            "sites": [{"_id": "s1"}, {"_id": "s2"}],
+            "knowledge_chunks": [{"_id": "k1", "site_id": "s1"}, {"_id": "k2", "site_id": "s2"}],
+            "chat_sessions": [{"_id": "c1", "site_id": "s1"}],
+            "tools": [{"_id": "t1", "site_id": "s1"}],
+            "crawl_jobs": [{"_id": "j1", "site_id": "s1"}],
+            "visitor_memories": [{"_id": "m1", "site_id": "s1"}],
+            "conversation_summaries": [{"_id": "cs1", "site_id": "s1"}],
+            "flows": [{"_id": "f1", "site_id": "s1"}, {"_id": "f2", "site_id": "s2"}],
+            "flow_steps": [{"_id": "st1", "flow_id": "f1"}, {"_id": "st2", "flow_id": "f2"}],
+        }
+    )
+
+    assert await MongoSiteRepo(db).delete("s1") is True
+
+    assert db["sites"].docs == [{"_id": "s2"}]
+    assert db["knowledge_chunks"].docs == [{"_id": "k2", "site_id": "s2"}]
+    for name in ("chat_sessions", "tools", "crawl_jobs", "visitor_memories", "conversation_summaries"):
+        assert db[name].docs == []
+    assert db["flows"].docs == [{"_id": "f2", "site_id": "s2"}]
+    # Steps hang off flows, not sites: only the deleted site's flow loses its steps.
+    assert db["flow_steps"].docs == [{"_id": "st2", "flow_id": "f2"}]
+
+
+@pytest.mark.asyncio
+async def test_mongo_site_repo_delete_unknown_site_touches_nothing():
+    """An unknown site id must report False and leave every collection alone."""
+    from repositories.mongo_repo import MongoSiteRepo
+
+    db = _FakeMongoDB(
+        {
+            "sites": [{"_id": "s1"}],
+            "knowledge_chunks": [{"_id": "k1", "site_id": "s1"}],
+        }
+    )
+
+    assert await MongoSiteRepo(db).delete("ghost") is False
+
+    assert db["sites"].docs == [{"_id": "s1"}]
+    assert db["knowledge_chunks"].docs == [{"_id": "k1", "site_id": "s1"}]
 
 
 @pytest.mark.parametrize(
