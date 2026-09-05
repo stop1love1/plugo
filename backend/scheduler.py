@@ -104,13 +104,25 @@ async def _scheduler_loop():
                     exclude_raw = site.get("crawl_exclude_patterns", "")
                     exclude_patterns = [p.strip() for p in exclude_raw.split("\n") if p.strip()] if exclude_raw else []
 
-                    job = await repos.crawl_jobs.create(
-                        {
-                            "site_id": site_id,
-                            "start_url": crawl_url,
-                        }
-                    )
-                    await repos.sites.update(site_id, {"crawl_status": "running"})
+                    # The site list is read once per tick and the jobs are created later,
+                    # so a site deleted in between is still in `sites` while its row is
+                    # gone — and the foreign key makes that create raise. Handle it here
+                    # instead of letting it unwind into the loop's catch-all: that way
+                    # the failure is logged against the site it belongs to.
+                    try:
+                        job = await repos.crawl_jobs.create(
+                            {
+                                "site_id": site_id,
+                                "start_url": crawl_url,
+                            }
+                        )
+                        await repos.sites.update(site_id, {"crawl_status": "running"})
+                    except Exception as e:
+                        logger.error("Auto-crawl job creation failed", site_id=site_id, error=str(e))
+                        # A failed commit leaves this tick's session pending-rollback, so
+                        # the remaining sites would only produce more of the same. Stop
+                        # scheduling; the next tick builds a fresh session.
+                        break
 
                     logger.info(
                         "Auto-crawl triggered",
