@@ -424,10 +424,16 @@ async def _run_websocket_chat(
             return
         # The per-address ceiling covers this message too. Without it a client could
         # carry one message per connection and never reach the turn loop's check at
-        # all — the exact reconnect bypass the ceiling exists to close. The
-        # per-session window is deliberately not applied here: this connection's
-        # bucket is necessarily empty (a resumed session's was dropped at the
-        # previous disconnect), so it could never refuse a first message anyway.
+        # all — the exact reconnect bypass the ceiling exists to close.
+        #
+        # The per-session window is deliberately not applied here. It could never
+        # *refuse* a first message — this connection's bucket is necessarily empty,
+        # a resumed session's having been dropped at the previous disconnect — but
+        # skipping it also means this message never *consumes* a slot, so a client
+        # using this path gets 21 messages per connection against a 20-message
+        # window. That is pre-existing behaviour and costs nothing in abuse terms
+        # (the ceiling counts this message either way); it is one extra message of
+        # slack in the fairness window, not a hole in the ceiling.
         if not get_ws_ip_ceiling().is_allowed(client_ip):
             await websocket.send_json({"type": "error", "message": WS_RATE_LIMITED_MESSAGE})
         else:

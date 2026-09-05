@@ -131,6 +131,14 @@ class _SlidingWindow:
     # nothing stops a burst of distinct keys arriving faster than they expire,
     # so cap the dict outright — same reasoning as `_session_resume_locks` in
     # `routers/chat.py`. See `_evict` for why the eviction order matters.
+    #
+    # Read this as a bound on *keys*, not on memory: each key holds up to `max`
+    # timestamps, and `max` differs sharply per subclass. At the session
+    # limiter's 20 the worst case is 200k floats; at the ceiling's configured
+    # 300 it is 3M — an order of magnitude more than the key count alone
+    # suggests. Both are unreachable in practice (they need that many distinct
+    # keys live within one window), but size any change to MAX_KEYS against the
+    # subclass with the largest `max`, not against this number.
     MAX_KEYS = 10_000
 
     def __init__(self, window_seconds: int, max_requests: int) -> None:
@@ -377,7 +385,8 @@ def _reset_ws_ip_ceiling_for_tests(window_seconds: int | None = None, max_reques
 
     The ceiling is process-global, so the suite resets it between tests (see the
     autouse fixture in `tests/conftest.py`); ceiling tests additionally shrink it
-    so they can reach it without driving 120 real chat turns.
+    so they can reach it without driving a full window's worth of real chat turns
+    (300 at the configured `rate_limit.ws_public_ip`).
     """
     global _ws_ip_ceiling
     window, cap = _default_ws_ip_ceiling()

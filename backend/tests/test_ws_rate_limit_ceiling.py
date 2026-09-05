@@ -21,7 +21,7 @@ every test below pins the *bucket*, never just the refusal:
 **Isolation.** The ceiling is process-global and, unlike slowapi's limiter, has no
 `enabled` switch to turn off. `conftest.py`'s autouse `_reset_ws_ip_ceiling` fixture
 rebuilds it before every test; these tests additionally resize it inside their own bodies
-(reaching 120 messages through the real turn loop would mean 120 chat turns) and drive
+(reaching the configured ceiling through the real turn loop would mean 300 chat turns) and drive
 their traffic from an RFC 5737 documentation address unique to the test, so their buckets
 are unreachable from any other test even if the reset were skipped.
 """

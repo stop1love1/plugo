@@ -11,7 +11,15 @@ from fastapi import WebSocketDisconnect
 from httpx import ASGITransport, AsyncClient
 from starlette.datastructures import Address
 
-# Add backend directory to path so imports work
+# Add backend directory to path so imports work.
+#
+# Deliberately NOT normalized — do not "tidy" this to abspath()/resolve(). The
+# literal `tests/..` prefix ends up on `config.__file__`, and `config.py`'s
+# `_dotenv` block relies on it: `Path(...).parent.parent` walks `..` lexically,
+# so the project-root `.env` is missed and a developer's real USERNAME/PASSWORD
+# never reach `Settings`. Normalizing this line would silently start feeding
+# untracked per-developer secrets into the suite. See the comment on `_dotenv` in
+# `backend/config.py`, which explains the contract this line half-implements.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # Override env before importing app
