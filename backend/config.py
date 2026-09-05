@@ -21,9 +21,16 @@ if not _dotenv:
     _dotenv = dotenv_values(".env")
 
 # --- Load config.json ---
+# `.resolve()` is load-bearing, not decoration. `__file__` carries whatever path
+# the importer put on sys.path, and `pathlib` walks `..` lexically rather than
+# collapsing it: `tests/../config.py` (which is exactly what tests/conftest.py
+# inserts) makes `.parent.parent` land in `tests/` instead of the project root,
+# so every candidate below misses and *every* setting silently falls back to its
+# hard-coded default. That made config.json a no-op for the whole test suite.
+_HERE = Path(__file__).resolve()
 _CONFIG_PATHS = [
-    Path(__file__).parent.parent / "config.json",  # project root
-    Path(__file__).parent / "config.json",  # backend/
+    _HERE.parent.parent / "config.json",  # project root
+    _HERE.parent / "config.json",  # backend/
     Path("config.json"),  # cwd
 ]
 
@@ -95,6 +102,29 @@ class Settings(BaseSettings):
     # always meets its own fairness limit first — deployments whose visitors share
     # an egress IP raise this one without loosening tenant fairness.
     rate_limit_public_ip: str = _get("rate_limit", "public_ip", "120/minute")
+    # The same ceiling for WebSocket *messages*, which needs its own value even
+    # though a WS message and an SSE chat request cost exactly the same (one LLM
+    # turn). What differs is the population sharing one address, and a ceiling is
+    # sized by legitimate aggregate rate, not by cost per event: the widget speaks
+    # WebSocket exclusively (`frontend/src/widget/ui/App.tsx`), so every visitor
+    # lands here while the SSE route carries only direct API consumers.
+    #
+    # Sizing, from the message rate rather than the HTTP one. The widget disables
+    # its own input while a reply streams (`ui/Window.tsx`), so a legitimate
+    # visitor cannot send again until the LLM finishes — a hard floor of roughly
+    # 8-10s per turn once reading and typing are counted, i.e. ~6 messages/minute
+    # flat out and 2-4 typically. At 300/minute one address comfortably carries
+    # ~50 simultaneously engaged chatters, which is what a corporate NAT or a
+    # CGNAT block needs. Dividing by the per-session window instead gives the
+    # abuse view: 300/20 means one address may run 15 sessions all at their own
+    # maximum, a bounded multiplier on the reconnect it exists to catch.
+    #
+    # Note this cannot rescue the topology where `FORWARDED_ALLOW_IPS` is unset
+    # and a reverse proxy fronts the backend — every visitor then presents as the
+    # proxy and shares one bucket, and no finite value fixes that. Configuring
+    # that variable does (see .env.example); this value keeps a small-to-medium
+    # deployment working in the meantime.
+    rate_limit_ws_public_ip: str = _get("rate_limit", "ws_public_ip", "300/minute")
     # Max simultaneous open SSE streams per site_token. Caps the long-lived
     # connection footprint that slowapi's per-window limiter can't see.
     rate_limit_sse_concurrent: int = _get("rate_limit", "sse_concurrent", 10)

@@ -57,6 +57,7 @@
     "crawl": "5/minute",
     "auth": "5/minute",
     "public_ip": "120/minute",
+    "ws_public_ip": "300/minute",
     "sse_concurrent": 10
   },
   "session": {

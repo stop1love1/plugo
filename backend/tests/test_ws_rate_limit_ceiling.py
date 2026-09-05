@@ -282,22 +282,52 @@ def test_ip_ceiling_registry_is_bounded_and_evicts_the_coldest_first() -> None:
     assert not limiter.is_allowed("198.51.100.1")
 
 
-def test_ws_ip_ceiling_uses_the_configured_public_ip_limit() -> None:
-    """The ceiling's allowance is `config.json → rate_limit.public_ip`, not a literal.
+def test_ws_ip_ceiling_uses_its_own_configured_limit() -> None:
+    """The ceiling's allowance is `config.json → rate_limit.ws_public_ip`, not a literal.
 
-    Same key the SSE and feedback routes carry, because a WS message and an SSE chat
-    request are the same unit of work. The tests above shrink the ceiling to reach it
-    cheaply, so without this nothing would notice the configured value being ignored.
+    Its own key rather than the HTTP routes' `public_ip`. The per-event cost is
+    identical — one LLM turn either way — but a ceiling is sized by the legitimate
+    aggregate rate at the granularity it keys on, and the widget speaks WebSocket
+    exclusively (`frontend/src/widget/ui/App.tsx`), so every visitor behind a shared
+    address lands here while `public_ip`'s routes carry only direct API consumers.
+
+    The tests above shrink the ceiling to reach it cheaply, so without this nothing
+    would notice the configured value being ignored.
     """
     _reset_ws_ip_ceiling_for_tests()
-    configured = parse(settings.rate_limit_public_ip)
+    configured = parse(settings.rate_limit_ws_public_ip)
     ceiling = get_ws_ip_ceiling()
 
     assert ceiling.max == configured.amount
     assert ceiling.window == configured.get_expiry()
-    # Same relationship the HTTP routes hold: a single well-behaved session always meets
-    # its own fairness window first, and the ceiling only catches what that can't see.
-    assert ceiling.max > WS_RATE_LIMIT_MAX, (
-        f"the per-address ceiling ({ceiling.max}) is at or below one session's own window "
-        f"({WS_RATE_LIMIT_MAX}) — adjust config.json → rate_limit.public_ip"
+
+
+def test_ws_ip_ceiling_is_sized_for_shared_egress_addresses() -> None:
+    """Pins the two sizing relationships `backend/config.py` argues from.
+
+    Neither is arbitrary, and both are silently breakable by editing one number in
+    config.json — which is exactly when someone should have to read the reasoning.
+
+    * **Above one session's own window**, or the ceiling would pre-empt the fairness
+      limit and a single well-behaved visitor would meet the abuse cap first. Same
+      relationship the HTTP routes hold between `default`/`chat` and `public_ip`.
+    * **Enough concurrent chatters behind one address.** The widget disables its input
+      while a reply streams, so a visitor cannot exceed roughly 6 messages/minute; a
+      corporate NAT or CGNAT block needs room for tens of them at once. Sizing this
+      from the HTTP ceiling instead (120/minute) would leave ~20, which is where a
+      NAT'd office starts seeing its messages silently refused.
+    """
+    ceiling = get_ws_ip_ceiling()
+    per_minute = ceiling.max * 60 // ceiling.window
+
+    assert per_minute > WS_RATE_LIMIT_MAX, (
+        f"the per-address ceiling ({per_minute}/min) is at or below one session's own "
+        f"window ({WS_RATE_LIMIT_MAX}/min) — it would fire before the fairness limit"
+    )
+    # 6/minute is the fastest a streaming-gated visitor can go; 40 of them at once is
+    # the shared-egress headroom the value was chosen for.
+    assert per_minute // 6 >= 40, (
+        f"{per_minute}/min leaves room for only {per_minute // 6} simultaneously engaged "
+        f"visitors behind one egress address — too tight for a NAT'd office; see the "
+        f"sizing note on rate_limit_ws_public_ip in backend/config.py"
     )

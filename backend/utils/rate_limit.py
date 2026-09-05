@@ -253,7 +253,7 @@ class ClientIPWSRateLimiter(_SlidingWindow):
     — with `MAX_KEYS` as the backstop for a burst of distinct addresses.
     """
 
-    def __init__(self, window_seconds: int = 60, max_requests: int = 120) -> None:
+    def __init__(self, window_seconds: int = 60, max_requests: int = 300) -> None:
         super().__init__(window_seconds, max_requests)
 
     def is_allowed(self, client_ip: str) -> bool:
@@ -341,20 +341,26 @@ def _reset_sse_guard_for_tests(max_per_token: int | None = None) -> None:
 def _default_ws_ip_ceiling() -> tuple[int, int]:
     """(window_seconds, max_messages) for the WS per-address ceiling.
 
-    Reuses `rate_limit.public_ip` rather than adding a WS-only key: a WebSocket
-    message and an SSE chat request are the same unit of work (one LLM turn), so
-    a client that switches transports should meet the same ceiling either way.
-    Parsed with the parser slowapi itself uses, so the two transports can't drift
-    apart. Falls back to the documented 120/minute when settings or the string
-    are unavailable, mirroring `_default_sse_cap`.
+    Its own key, `rate_limit.ws_public_ip`, rather than the HTTP routes'
+    `public_ip`. The two carry identical work per event — one LLM turn — but a
+    ceiling is sized by the legitimate aggregate rate at the granularity it keys
+    on, and that differs: the widget speaks WebSocket exclusively, so every
+    visitor behind a shared address lands on this limit, while `public_ip`'s
+    routes carry only direct API consumers. `backend/config.py` carries the
+    arithmetic.
+
+    Parsed with the parser slowapi itself uses, so the WS ceiling stays
+    expressible in the same units as every other `rate_limit` entry. Falls back
+    to the documented 300/minute when settings or the string are unavailable,
+    mirroring `_default_sse_cap`.
     """
     try:
         from config import settings
 
-        item = parse(settings.rate_limit_public_ip)
+        item = parse(settings.rate_limit_ws_public_ip)
         return int(item.get_expiry()), int(item.amount)
     except Exception:
-        return 60, 120
+        return 60, 300
 
 
 _ws_ip_ceiling = ClientIPWSRateLimiter(*_default_ws_ip_ceiling())
