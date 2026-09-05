@@ -264,6 +264,13 @@ async def _run_websocket_chat(
     raw_visitor_id = first_data.get("visitor_id", "")
     # Only allow alphanumeric, hyphens, underscores
     sanitized = re.sub(r"[^a-zA-Z0-9_-]", "", str(raw_visitor_id))[:64] if raw_visitor_id else ""
+    # Whether this id is one the *client* holds, or one we minted for this connection alone.
+    # Mirrors chat_sse.py's visitor_is_addressable: the fallback uuid below never reaches the
+    # visitor, so no later connection can present it back — memories keyed by it would be rows
+    # nothing ever reads again, and extraction is a billed LLM round trip. An unaddressable
+    # visitor gets no session-end extraction (see the dispatch in the `finally` block below).
+    # Everything else (the stored session, the prompt) still uses the id.
+    visitor_is_addressable = bool(sanitized)
     if not sanitized:
         sanitized = str(uuid.uuid4())
     # Scope to this site to prevent cross-site memory access
@@ -310,9 +317,16 @@ async def _run_websocket_chat(
                     resumed = True
                     # Clear ended_at since session is being resumed
                     await repos.chat_sessions.set_ended(session_id, clear=True)
-                    # Use visitor_id from existing session if not provided
-                    if not visitor_id:
-                        visitor_id = existing_session.get("visitor_id")
+                    # `visitor_id` is never falsy by this point (the uuid4() fallback above
+                    # guarantees that), so a branch here inheriting `existing_session`'s stored
+                    # visitor_id would never run. Deliberately not made live either: the SSE
+                    # fix established that inheriting a stored id is the wrong fix on its own,
+                    # because the session row can itself hold a minted throwaway id — inheriting
+                    # would hand back exactly the unreachable id this fix removes, and an
+                    # inherited id is indistinguishable from a client-supplied one at the
+                    # `visitor_is_addressable` gate above. This connection's own sanitized input
+                    # is what decides addressability, not what a prior connection happened to
+                    # store.
                     logger.info("Session resumed", session_id=session_id, message_count=len(messages))
 
         # Create new session if not resuming
@@ -504,8 +518,11 @@ async def _run_websocket_chat(
         _ws_rate_limiter.cleanup(session_id, site_token)
         await repos.close()
 
-        # Background: extract memories from this conversation
-        if visitor_id and messages and len(messages) >= 4:
+        # Background: extract memories from this conversation. Skipped for a minted visitor
+        # id: see visitor_is_addressable above — the extraction would still cost a full LLM
+        # round trip, and would write visitor_memories rows under a key no later connection
+        # can present.
+        if visitor_is_addressable and messages and len(messages) >= 4:
             _fire_and_forget(_extract_and_save_memories(visitor_id, site, session_id, list(messages)))
 
 
