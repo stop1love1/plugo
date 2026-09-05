@@ -14,7 +14,7 @@ from providers.factory import get_llm_provider
 from repositories import create_repos
 from utils.cors import validate_site_origin
 from utils.pricing import estimate_cost
-from utils.rate_limit import SiteTokenWSRateLimiter
+from utils.rate_limit import SiteTokenWSRateLimiter, get_ws_ip_ceiling, ws_client_ip
 
 router = APIRouter()
 
@@ -53,11 +53,23 @@ def _fire_and_forget(coro):
 
 
 # --- WebSocket rate limiting ---
-# Bucket per (site_token, session) so one tenant's traffic can't starve another's.
+# Two stacked limits, mirroring the pair the public HTTP routes carry (see the
+# `utils/rate_limit.py` module docstring):
+#   * per (site_token, session) — tenant fairness, the limiter below;
+#   * per peer address — the abuse ceiling. It lives in utils/rate_limit.py because
+#     it has to outlive any one connection: both halves of the per-session key are
+#     client-supplied, so a reconnect mints a fresh bucket and that limiter alone
+#     never binds across connections.
+# A message must satisfy both. The per-session window is checked first, so a message
+# it already refused doesn't spend the address's ceiling.
 WS_RATE_LIMIT_WINDOW = 60  # seconds
 WS_RATE_LIMIT_MAX = 20  # max messages per window
 
 _ws_rate_limiter = SiteTokenWSRateLimiter(window_seconds=WS_RATE_LIMIT_WINDOW, max_requests=WS_RATE_LIMIT_MAX)
+
+# One refusal frame for both limits: which bucket filled up is the server's business,
+# and the client's remedy ("slow down") is the same either way.
+WS_RATE_LIMITED_MESSAGE = "Too many messages. Please slow down."
 
 # Ceiling on the page body a client can push into the system prompt. Shared with the SSE
 # transport, which imports it from here (the import only goes chat -> chat_sse's way).
@@ -156,6 +168,24 @@ def restore_agent_history(agent: ChatAgent, stored_messages: list[dict], summary
         agent.messages.append({"role": role, "content": msg.get("content", "")})
 
 
+def build_assistant_message(content: str, tool_calls: list[dict] | None) -> dict:
+    """Assemble the assistant message both transports persist after a turn.
+
+    ``tool_calls`` is copied (not referenced) when non-empty, so a later turn resetting the
+    agent's accumulator can't mutate what was already persisted. Omitted entirely when
+    nothing ran — that absence is exactly what a legacy session, or an ordinary turn with no
+    tool call, looks like to the analytics reader.
+    """
+    message: dict = {
+        "role": "assistant",
+        "content": content,
+        "timestamp": datetime.now(UTC).isoformat(),
+    }
+    if tool_calls:
+        message["tool_calls"] = list(tool_calls)
+    return message
+
+
 @router.websocket("/ws/chat")
 async def websocket_chat_init(websocket: WebSocket):
     """WebSocket chat endpoint — site_token is read from the first `init` message.
@@ -230,6 +260,9 @@ async def _run_websocket_chat(
     # Per-site tenant isolation — the global CORS middleware is a site-agnostic
     # allowlist and can't enforce this; see utils/cors.py for contract.
     origin = websocket.headers.get("origin", "")
+    # Read once: the peer address is fixed for the life of the connection, and it is
+    # the only rate-limit dimension this client didn't choose for itself.
+    client_ip = ws_client_ip(websocket)
     if site.get("allowed_domains") and not validate_site_origin(site, origin):
         reason = "Origin required" if not origin else "Origin not allowed"
         # SSE returns 403 (visible in access logs); WS closing silently would
@@ -264,6 +297,13 @@ async def _run_websocket_chat(
     raw_visitor_id = first_data.get("visitor_id", "")
     # Only allow alphanumeric, hyphens, underscores
     sanitized = re.sub(r"[^a-zA-Z0-9_-]", "", str(raw_visitor_id))[:64] if raw_visitor_id else ""
+    # Whether this id is one the *client* holds, or one we minted for this connection alone.
+    # Mirrors chat_sse.py's visitor_is_addressable: the fallback uuid below never reaches the
+    # visitor, so no later connection can present it back — memories keyed by it would be rows
+    # nothing ever reads again, and extraction is a billed LLM round trip. An unaddressable
+    # visitor gets no session-end extraction (see the dispatch in the `finally` block below).
+    # Everything else (the stored session, the prompt) still uses the id.
+    visitor_is_addressable = bool(sanitized)
     if not sanitized:
         sanitized = str(uuid.uuid4())
     # Scope to this site to prevent cross-site memory access
@@ -310,16 +350,22 @@ async def _run_websocket_chat(
                     resumed = True
                     # Clear ended_at since session is being resumed
                     await repos.chat_sessions.set_ended(session_id, clear=True)
-                    # Use visitor_id from existing session if not provided
-                    if not visitor_id:
-                        visitor_id = existing_session.get("visitor_id")
+                    # `visitor_id` is never falsy by this point (the uuid4() fallback above
+                    # guarantees that), so a branch here inheriting `existing_session`'s stored
+                    # visitor_id would never run. Deliberately not made live either: the SSE
+                    # fix established that inheriting a stored id is the wrong fix on its own,
+                    # because the session row can itself hold a minted throwaway id — inheriting
+                    # would hand back exactly the unreachable id this fix removes, and an
+                    # inherited id is indistinguishable from a client-supplied one at the
+                    # `visitor_is_addressable` gate above. This connection's own sanitized input
+                    # is what decides addressability, not what a prior connection happened to
+                    # store.
                     logger.info("Session resumed", session_id=session_id, message_count=len(messages))
 
-        # Create new session if not resuming
+        # Create new session if not resuming. `visitor_id` is never falsy here (the
+        # uuid4() fallback above guarantees that), so this always stores one.
         if not session_id:
-            session_data = {"site_id": site["id"]}
-            if visitor_id:
-                session_data["visitor_id"] = visitor_id
+            session_data = {"site_id": site["id"], "visitor_id": visitor_id}
             chat_session = await repos.chat_sessions.create(session_data)
             session_id = chat_session["id"]
 
@@ -376,17 +422,32 @@ async def _run_websocket_chat(
         if len(first_message) > 10000:
             await websocket.close(code=1008, reason="Message too long")
             return
-        await _handle_message(
-            websocket,
-            agent,
-            repos,
-            session_id,
-            messages,
-            first_message,
-            _clamp_page_context(first_data.get("pageContext")),
-            visitor_id,
-            conversation_summary,
-        )
+        # The per-address ceiling covers this message too. Without it a client could
+        # carry one message per connection and never reach the turn loop's check at
+        # all — the exact reconnect bypass the ceiling exists to close.
+        #
+        # The per-session window is deliberately not applied here. It could never
+        # *refuse* a first message — this connection's bucket is necessarily empty,
+        # a resumed session's having been dropped at the previous disconnect — but
+        # skipping it also means this message never *consumes* a slot, so a client
+        # using this path gets 21 messages per connection against a 20-message
+        # window. That is pre-existing behaviour and costs nothing in abuse terms
+        # (the ceiling counts this message either way); it is one extra message of
+        # slack in the fairness window, not a hole in the ceiling.
+        if not get_ws_ip_ceiling().is_allowed(client_ip):
+            await websocket.send_json({"type": "error", "message": WS_RATE_LIMITED_MESSAGE})
+        else:
+            await _handle_message(
+                websocket,
+                agent,
+                repos,
+                session_id,
+                messages,
+                first_message,
+                _clamp_page_context(first_data.get("pageContext")),
+                visitor_id,
+                conversation_summary,
+            )
 
     # Background heartbeat to detect stale connections
     heartbeat_active = True
@@ -433,14 +494,10 @@ async def _run_websocket_chat(
 
             page_context = _clamp_page_context(page_context)
 
-            # Rate limit WebSocket messages — bucket per (site_token, session)
-            if not _ws_rate_limiter.is_allowed(session_id, site_token):
-                await websocket.send_json(
-                    {
-                        "type": "error",
-                        "message": "Too many messages. Please slow down.",
-                    }
-                )
+            # Rate limit WebSocket messages: the per-(site_token, session) window
+            # first, then the per-address ceiling a reconnect can't reset.
+            if not _ws_rate_limiter.is_allowed(session_id, site_token) or not get_ws_ip_ceiling().is_allowed(client_ip):
+                await websocket.send_json({"type": "error", "message": WS_RATE_LIMITED_MESSAGE})
                 continue
 
             # Swap in a summary the background summarizer finished while we were taking
@@ -501,11 +558,17 @@ async def _run_websocket_chat(
         except Exception as e:
             logger.warning("Failed to mark session ended", session_id=session_id, error=str(e))
         active_agents.pop(session_id, None)
+        # Only the per-session bucket is dropped. The per-address ceiling is left to
+        # expire on its own clock: cleaning it up here would hand every reconnect a
+        # fresh allowance, which is precisely what it exists to prevent.
         _ws_rate_limiter.cleanup(session_id, site_token)
         await repos.close()
 
-        # Background: extract memories from this conversation
-        if visitor_id and messages and len(messages) >= 4:
+        # Background: extract memories from this conversation. Skipped for a minted visitor
+        # id: see visitor_is_addressable above — the extraction would still cost a full LLM
+        # round trip, and would write visitor_memories rows under a key no later connection
+        # can present.
+        if visitor_is_addressable and messages and len(messages) >= 4:
             _fire_and_forget(_extract_and_save_memories(visitor_id, site, session_id, list(messages)))
 
 
@@ -568,16 +631,8 @@ async def _handle_message(
 
     # Only save complete responses (skip if client disconnected with no content)
     if full_response.strip():
-        assistant_msg: dict = {
-            "role": "assistant",
-            "content": full_response,
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
         # Structured tool-invocation record for this turn (analytics reads it).
-        # Copied so a later turn's reset can't mutate what we persisted.
-        if agent.last_tool_calls:
-            assistant_msg["tool_calls"] = list(agent.last_tool_calls)
-        messages.append(assistant_msg)
+        messages.append(build_assistant_message(full_response, agent.last_tool_calls))
         try:
             await repos.chat_sessions.update_messages(session_id, messages)
         except Exception as e:

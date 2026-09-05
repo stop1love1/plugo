@@ -653,19 +653,29 @@ async def _run_crawl_with_tracking(
             # Auth failure: do NOT continue crawling without auth
             error_msg = f"Browser login failed: {e!s}"
             logger.error(error_msg, site_id=site_id)
-            repos_err = await create_repos()
+            # Same rule as the crawl handler below: this is a background task, so the
+            # error path's own DB work must not turn a logged failure into a crash.
             try:
-                await repos_err.crawl_jobs.update(
-                    job_id,
-                    {
-                        "status": "error",
-                        "error_log": error_msg,
-                        "finished_at": datetime.now(UTC),
-                    },
+                repos_err = await create_repos()
+                try:
+                    await repos_err.crawl_jobs.update(
+                        job_id,
+                        {
+                            "status": "error",
+                            "error_log": error_msg,
+                            "finished_at": datetime.now(UTC),
+                        },
+                    )
+                    await repos_err.sites.update(site_id, {"crawl_status": "idle"})
+                finally:
+                    await repos_err.close()
+            except Exception as status_error:
+                logger.error(
+                    "Crawl status update failed after browser login error",
+                    site_id=site_id,
+                    job_id=job_id,
+                    error=str(status_error),
                 )
-                await repos_err.sites.update(site_id, {"crawl_status": "idle"})
-            finally:
-                await repos_err.close()
             return
 
     while True:
@@ -740,16 +750,30 @@ async def _run_crawl_with_tracking(
             break
 
         except Exception as e:
+            # Log the original failure first: whatever happens to the status writes
+            # below, this is the line that has to survive.
             logger.error("Crawl failed", site_id=site_id, job_id=current_job_id, error=str(e))
-            await repos.sites.update(site_id, {"crawl_status": "idle"})
-            await repos.crawl_jobs.update(
-                current_job_id,
-                {
-                    "status": "failed",
-                    "error_log": str(e),
-                    "finished_at": datetime.now(UTC),
-                },
-            )
+            # The failure may have poisoned this session — a commit that trips a foreign
+            # key (site deleted mid-crawl) leaves it pending-rollback, so every write
+            # below raises too. This is a background task with nobody to catch a second
+            # exception, so losing the status update is acceptable; crashing is not.
+            try:
+                await repos.sites.update(site_id, {"crawl_status": "idle"})
+                await repos.crawl_jobs.update(
+                    current_job_id,
+                    {
+                        "status": "failed",
+                        "error_log": str(e),
+                        "finished_at": datetime.now(UTC),
+                    },
+                )
+            except Exception as status_error:
+                logger.error(
+                    "Crawl status update failed after crawl error",
+                    site_id=site_id,
+                    job_id=current_job_id,
+                    error=str(status_error),
+                )
             break
         finally:
             _active_crawlers.pop(site_id, None)

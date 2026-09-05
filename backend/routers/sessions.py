@@ -6,7 +6,7 @@ from config import settings
 from limiter import limiter
 from logging_config import logger
 from repositories import Repositories, get_repos
-from utils.rate_limit import extract_bearer_token, site_token_key
+from utils.rate_limit import client_ip_key, extract_bearer_token, site_token_key
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -43,6 +43,9 @@ class FeedbackRequest(BaseModel):
 
 
 @router.post("/{session_id}/feedback")
+# Two stacked limits, both enforced: per-token for tenant fairness, per-IP as the
+# ceiling a token-rotating caller can't lift. See utils/rate_limit.py.
+@limiter.limit(settings.rate_limit_public_ip, key_func=client_ip_key)
 @limiter.limit(settings.rate_limit_default, key_func=site_token_key)
 async def submit_feedback(
     session_id: str,

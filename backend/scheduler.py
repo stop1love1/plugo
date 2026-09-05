@@ -104,13 +104,30 @@ async def _scheduler_loop():
                     exclude_raw = site.get("crawl_exclude_patterns", "")
                     exclude_patterns = [p.strip() for p in exclude_raw.split("\n") if p.strip()] if exclude_raw else []
 
-                    job = await repos.crawl_jobs.create(
-                        {
-                            "site_id": site_id,
-                            "start_url": crawl_url,
-                        }
-                    )
-                    await repos.sites.update(site_id, {"crawl_status": "running"})
+                    # The site list is read once per tick and the jobs are created later,
+                    # so a site deleted in between is still in `sites` while its row is
+                    # gone — and the foreign key makes that create raise. Handle it here
+                    # instead of letting it unwind into the loop's catch-all: that way
+                    # the failure is logged against the site it belongs to.
+                    try:
+                        job = await repos.crawl_jobs.create(
+                            {
+                                "site_id": site_id,
+                                "start_url": crawl_url,
+                            }
+                        )
+                        await repos.sites.update(site_id, {"crawl_status": "running"})
+                    except Exception as e:
+                        logger.error("Auto-crawl job creation failed", site_id=site_id, error=str(e))
+                        # Stop scheduling for this tick rather than skipping to the next
+                        # site: under SQLite a failed commit leaves this tick's session
+                        # pending-rollback, so the remaining sites would only produce
+                        # more of the same. `repos` is per tick, so the next one is
+                        # clean. (Under MongoDB there is no session to poison and this
+                        # break is merely conservative — it costs the tick's remaining
+                        # sites, which is what the unguarded raise cost on every
+                        # provider before.)
+                        break
 
                     logger.info(
                         "Auto-crawl triggered",

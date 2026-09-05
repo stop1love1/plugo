@@ -35,18 +35,19 @@ from config import settings
 from logging_config import logger
 from repositories import Repositories, get_repos
 from routers.chat import (
-    MAX_PAGE_TEXT_CHARS,
+    MAX_PAGE_TEXT_CHARS,  # noqa: F401 -- re-exported for callers that reach for it via this module
     _clamp_page_context,
     _extract_and_save_memories,
     _fire_and_forget,
     _maybe_summarize,
+    build_assistant_message,
     crossed_multiple,
     get_cached_site,
     restore_agent_history,
 )
 from utils.cors import validate_site_origin
 from utils.pricing import estimate_cost
-from utils.rate_limit import acquire_sse_slot, release_sse_slot, site_token_key
+from utils.rate_limit import acquire_sse_slot, client_ip_key, release_sse_slot, site_token_key
 
 router = APIRouter()
 
@@ -54,9 +55,12 @@ router = APIRouter()
 MAX_MESSAGE_CHARS = 10000
 
 # `MAX_PAGE_TEXT_CHARS` and `_clamp_page_context` live on the WS module now — one clamp,
-# applied identically by both transports — and are re-exported from here for callers that
-# already reach for them on the SSE module.
-__all__ = ["MAX_MESSAGE_CHARS", "MAX_PAGE_TEXT_CHARS", "ChatSSERequest", "register_routes", "router"]
+# applied identically by both transports — and `MAX_PAGE_TEXT_CHARS` is re-exported from
+# here (see the `noqa` on its import above) for callers that already reach for it on the
+# SSE module. No `__all__`: nothing star-imports this module, and a curated list here would
+# read as a public-surface contract this module doesn't actually keep — `MEMORY_MIN_MESSAGES`
+# and `MEMORY_EXTRACT_EVERY_MESSAGES` below are reached for by name (the latter by the test
+# suite) without ever having been listed in one.
 
 # Memory extraction on a cadence, because SSE has no session end to hang it on.
 #
@@ -85,9 +89,9 @@ def _limiter():
     return limiter
 
 
-# Per-site-token rate limit. This decorator is applied after the router
-# definition so the module can import cleanly; main.limiter already exists
-# by the time the first request hits us.
+# The rate-limit decorators are applied after the router definition (see
+# `register_routes`) so the module can import cleanly; main.limiter already
+# exists by the time the first request hits us.
 async def _chat_stream_core(
     site_token: str,
     body: ChatSSERequest,
@@ -200,16 +204,8 @@ async def _chat_stream_core(
                         "timestamp": datetime.now(UTC).isoformat(),
                     }
                 )
-                assistant_msg: dict = {
-                    "role": "assistant",
-                    "content": full_response,
-                    "timestamp": datetime.now(UTC).isoformat(),
-                }
                 # Structured tool-invocation record for this turn (analytics reads it).
-                # Copied so a later turn's reset can't mutate what we persisted.
-                if agent.last_tool_calls:
-                    assistant_msg["tool_calls"] = list(agent.last_tool_calls)
-                history_messages.append(assistant_msg)
+                history_messages.append(build_assistant_message(full_response, agent.last_tool_calls))
                 try:
                     await repos.chat_sessions.update_messages(session_id, history_messages)
                 except Exception as e:
@@ -268,14 +264,22 @@ async def _chat_stream_core(
 
 
 def register_routes() -> APIRouter:
-    """Attach the limiter decorator at include-time (after main.py created the limiter).
+    """Attach the limiter decorators at include-time (after main.py created the limiter).
 
-    Using a factory here lets us use the configured per-site-token key without
-    importing main at module-load time (which would be circular).
+    Using a factory here lets us use the configured per-site-token and per-IP
+    keys without importing main at module-load time (which would be circular).
+    Call it exactly once per process: slowapi accumulates a route's limits by
+    endpoint function name, so a second call would register both limits twice.
     """
     limiter = _limiter()
 
     @router.post("/api/chat/{site_token}/stream")
+    # Two stacked limits, both enforced (see utils/rate_limit.py). The per-IP one
+    # belongs here as much as on the feedback route: `acquire_sse_slot` below is
+    # also keyed by site_token, so it caps concurrent streams per token but a
+    # caller rotating the token still gets a fresh slot pool each time — it caps
+    # concurrency, never the request rate.
+    @limiter.limit(settings.rate_limit_public_ip, key_func=client_ip_key)
     @limiter.limit(settings.rate_limit_chat, key_func=site_token_key)
     async def chat_stream(
         site_token: str,
