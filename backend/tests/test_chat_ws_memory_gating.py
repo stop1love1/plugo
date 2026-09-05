@@ -17,14 +17,12 @@ visitor_id used for the turn) comes from what *this* connection's client supplie
 from whatever a prior connection happened to store on the session row.
 """
 
-import asyncio
-
 import pytest
 
 from agent.core import ChatAgent
 from repositories import Repositories, create_repos
-from routers.chat import _background_tasks, _run_websocket_chat
-from tests.conftest import _FakeWebSocket, _StubProvider
+from routers.chat import _run_websocket_chat
+from tests.conftest import _background_task_baseline, _drain_background_tasks, _FakeWebSocket, _StubProvider
 
 
 def _history(turns: int) -> list[dict]:
@@ -63,16 +61,6 @@ def _capture_background_helpers(monkeypatch: pytest.MonkeyPatch) -> dict[str, li
     monkeypatch.setattr("routers.chat._extract_and_save_memories", _fake_extract)
     monkeypatch.setattr("routers.chat._maybe_summarize", _fake_summarize)
     return calls
-
-
-async def _drain_background(baseline: set[asyncio.Task], timeout: float = 10.0) -> None:
-    """Await the `_fire_and_forget` tasks started since `baseline`."""
-    pending = [task for task in _background_tasks if task not in baseline]
-    if not pending:
-        return
-    _, still_running = await asyncio.wait(pending, timeout=timeout)
-    if still_running:
-        raise AssertionError(f"background tasks still running after {timeout}s: {still_running}")
 
 
 def _patch_stub_agent(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -119,14 +107,14 @@ async def test_ws_anonymous_resumed_session_skips_extraction_but_still_summarize
     calls = _capture_background_helpers(monkeypatch)
 
     session_id = await _seed_session(db_repos, test_site["id"], f"{test_site['id']}:prior-visitor", turns=9)
-    baseline = set(_background_tasks)
+    baseline = _background_task_baseline()
 
     await _run_ws(
         test_site,
         first_data={"type": "init", "session_id": session_id},
         frames=[{"message": "final question"}],
     )
-    await _drain_background(baseline)
+    await _drain_background_tasks(baseline)
 
     # 18 stored + this turn's pair = 20: crosses the summarization threshold.
     assert len(calls["summarize"]) == 1
@@ -143,14 +131,14 @@ async def test_ws_client_supplied_visitor_id_still_extracts_at_session_end(
     """A real, client-supplied visitor id must still get its extraction, as before."""
     _patch_stub_agent(monkeypatch)
     calls = _capture_background_helpers(monkeypatch)
-    baseline = set(_background_tasks)
+    baseline = _background_task_baseline()
 
     await _run_ws(
         test_site,
         first_data={"visitor_id": "visitor-abc", "message": "question one"},
         frames=[{"message": "question two"}],
     )
-    await _drain_background(baseline)
+    await _drain_background_tasks(baseline)
 
     # Two turns = 4 stored messages: exactly the session-end extraction floor.
     assert len(calls["memories"]) == 1
@@ -168,10 +156,10 @@ async def test_ws_short_anonymous_session_skips_extraction(
     """Below the floor there is nothing worth extracting from regardless of addressability."""
     _patch_stub_agent(monkeypatch)
     calls = _capture_background_helpers(monkeypatch)
-    baseline = set(_background_tasks)
+    baseline = _background_task_baseline()
 
     await _run_ws(test_site, first_data={"message": "just one question"}, frames=[])
-    await _drain_background(baseline)
+    await _drain_background_tasks(baseline)
 
     assert calls["memories"] == []
     assert calls["summarize"] == []
@@ -212,14 +200,14 @@ async def test_ws_resume_does_not_inherit_stored_visitor_id(
 
     stored_visitor_id = f"{test_site['id']}:prior-visitor"
     session_id = await _seed_session(db_repos, test_site["id"], stored_visitor_id, turns=1)
-    baseline = set(_background_tasks)
+    baseline = _background_task_baseline()
 
     await _run_ws(
         test_site,
         first_data={"type": "init", "session_id": session_id},
         frames=[{"message": "another question"}],
     )
-    await _drain_background(baseline)
+    await _drain_background_tasks(baseline)
 
     assert len(captured_visitor_ids) == 1
     used_visitor_id = captured_visitor_ids[0]
