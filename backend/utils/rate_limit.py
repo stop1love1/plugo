@@ -3,6 +3,22 @@
 Public (embeddable) endpoints bucket by `site_token` so a single noisy embedder
 behind a CDN doesn't starve other tenants that share its egress IP.
 Admin endpoints remain IP-keyed — they're authenticated, so IPs are meaningful.
+
+Public endpoints carry **two** stacked limits, because no single key can hold
+both properties at once:
+
+* `site_token_key` — tenant fairness. The token is the only thing that
+  identifies a tenant, but it is supplied by the caller, so a caller that varies
+  it gets a fresh bucket every request and the limit never binds.
+* `client_ip_key` — abuse resistance. The peer address is not caller-supplied,
+  so it is the one identifier a token-rotating caller cannot shed. On its own it
+  would re-create the starvation problem above (tenants sharing an egress IP),
+  which is why it stacks on top of the per-token limit rather than replacing it.
+
+slowapi evaluates every limit registered against a route, so a request must
+satisfy both (verified against slowapi 0.1.9 in
+`tests/test_rate_limit_public.py`). Neither binds at all unless the limiter is
+built with `key_style="endpoint"` — see the comment in `limiter.py`.
 """
 
 import asyncio
@@ -55,6 +71,22 @@ def site_token_key(request: Request) -> str:
     if token:
         return f"site:{token}"
     return get_remote_address(request)
+
+
+def client_ip_key(request: Request) -> str:
+    """slowapi key_func: bucket per client IP, namespaced `ip:<addr>`.
+
+    Stacked on the public endpoints alongside `site_token_key` as the abuse
+    ceiling a caller can't rotate away (see the module docstring).
+
+    The `ip:` prefix is not cosmetic. slowapi derives a storage bucket from
+    (limit string, key, route), so this key would share a bucket with
+    `site_token_key`'s bare-IP fallback on any route where the two limits are
+    configured with the same limit string — a tokenless request would then spend
+    two hits from one bucket. Namespacing keeps the two limits independent
+    whatever strings they're configured with.
+    """
+    return f"ip:{get_remote_address(request)}"
 
 
 class SiteTokenWSRateLimiter:

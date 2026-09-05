@@ -46,7 +46,7 @@ from routers.chat import (
 )
 from utils.cors import validate_site_origin
 from utils.pricing import estimate_cost
-from utils.rate_limit import acquire_sse_slot, release_sse_slot, site_token_key
+from utils.rate_limit import acquire_sse_slot, client_ip_key, release_sse_slot, site_token_key
 
 router = APIRouter()
 
@@ -85,9 +85,9 @@ def _limiter():
     return limiter
 
 
-# Per-site-token rate limit. This decorator is applied after the router
-# definition so the module can import cleanly; main.limiter already exists
-# by the time the first request hits us.
+# The rate-limit decorators are applied after the router definition (see
+# `register_routes`) so the module can import cleanly; main.limiter already
+# exists by the time the first request hits us.
 async def _chat_stream_core(
     site_token: str,
     body: ChatSSERequest,
@@ -268,14 +268,22 @@ async def _chat_stream_core(
 
 
 def register_routes() -> APIRouter:
-    """Attach the limiter decorator at include-time (after main.py created the limiter).
+    """Attach the limiter decorators at include-time (after main.py created the limiter).
 
-    Using a factory here lets us use the configured per-site-token key without
-    importing main at module-load time (which would be circular).
+    Using a factory here lets us use the configured per-site-token and per-IP
+    keys without importing main at module-load time (which would be circular).
+    Call it exactly once per process: slowapi accumulates a route's limits by
+    endpoint function name, so a second call would register both limits twice.
     """
     limiter = _limiter()
 
     @router.post("/api/chat/{site_token}/stream")
+    # Two stacked limits, both enforced (see utils/rate_limit.py). The per-IP one
+    # belongs here as much as on the feedback route: `acquire_sse_slot` below is
+    # also keyed by site_token, so it caps concurrent streams per token but a
+    # caller rotating the token still gets a fresh slot pool each time — it caps
+    # concurrency, never the request rate.
+    @limiter.limit(settings.rate_limit_public_ip, key_func=client_ip_key)
     @limiter.limit(settings.rate_limit_chat, key_func=site_token_key)
     async def chat_stream(
         site_token: str,
