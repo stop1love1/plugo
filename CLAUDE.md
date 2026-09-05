@@ -81,8 +81,14 @@ config.json          ← project config (safe to commit)
 ├── vector_store.chroma_path
 ├── rag.min_score/max_chunks
 ├── server.backend_port/cors_origins/widget_cdn_url
-├── auth.enabled
-└── rate_limit.default/chat/crawl
+├── auth.enabled/username/password
+├── crawl.verify_ssl/request_delay/request_timeout/max_concurrent_fetches/
+│         max_concurrent_auto_crawls/stale_timeout_minutes/max_continuous_rounds/
+│         max_retries/scheduler_interval_seconds/embed_batch_size
+├── rate_limit.default/chat/crawl/auth/public_ip/sse_concurrent
+├── session.retention_days
+└── agent.system_prompt/no_knowledge_response_vi/no_knowledge_response_en/
+          no_tool_providers
 
 .env                 ← secrets only
 ├── ANTHROPIC_API_KEY
