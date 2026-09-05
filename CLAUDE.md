@@ -90,13 +90,16 @@ config.json          ← project config (safe to commit)
 └── agent.system_prompt/no_knowledge_response_vi/no_knowledge_response_en/
           no_tool_providers
 
-.env                 ← secrets only
+.env                 ← secrets only (see .env.example)
+├── USERNAME
+├── PASSWORD
+├── SECRET_KEY
+├── FORWARDED_ALLOW_IPS   (optional, not a secret — only when a reverse proxy fronts the backend)
+├── MONGO_USER            (only when database.provider="mongodb")
+├── MONGO_PASSWORD        (only when database.provider="mongodb")
 ├── ANTHROPIC_API_KEY
 ├── OPENAI_API_KEY
-├── GEMINI_API_KEY
-├── SECRET_KEY
-├── USERNAME
-└── PASSWORD
+└── GEMINI_API_KEY
 ```
 
 Environment variables override both (for Docker/CI).
