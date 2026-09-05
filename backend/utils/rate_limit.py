@@ -19,13 +19,20 @@ slowapi evaluates every limit registered against a route, so a request must
 satisfy both (verified against slowapi 0.1.9 in
 `tests/test_rate_limit_public.py`). Neither binds at all unless the limiter is
 built with `key_style="endpoint"` — see the comment in `limiter.py`.
+
+The WebSocket transport carries the same pair, hand-rolled because slowapi does
+not reach WebSocket frames: `SiteTokenWSRateLimiter` (tenant fairness, per
+`(site_token, session_id)`) and `ClientIPWSRateLimiter` (the abuse ceiling, per
+peer address). Same reasoning, same split of responsibilities — see
+`tests/test_ws_rate_limit_ceiling.py`.
 """
 
 import asyncio
 from collections import defaultdict
 from time import time
 
-from fastapi import Request
+from fastapi import Request, WebSocket
+from limits import parse
 from slowapi.util import get_remote_address
 
 
@@ -89,57 +96,168 @@ def client_ip_key(request: Request) -> str:
     return f"ip:{get_remote_address(request)}"
 
 
-class SiteTokenWSRateLimiter:
+def ws_client_ip(websocket: WebSocket) -> str:
+    """Peer address of a WebSocket connection, matching slowapi's `get_remote_address`.
+
+    Both read the address ASGI put on the scope, and uvicorn's proxy-headers
+    middleware rewrites that for `websocket` scopes as well as `http` ones (it
+    branches on `scope["type"] in ("http", "websocket")`), gated on
+    `FORWARDED_ALLOW_IPS`. So the handshake is exactly as trustworthy an address
+    source as the HTTP path — no weaker, and no reason to read `X-Forwarded-For`
+    here, which would be spoofable by any client.
+
+    Falls back to `127.0.0.1` when the scope carries no client, which is both
+    what `get_remote_address` does and what in-process test doubles present.
+    """
+    client = getattr(websocket, "client", None)
+    host = getattr(client, "host", None)
+    return host or "127.0.0.1"
+
+
+class _SlidingWindow:
+    """Sliding-window counter over a bounded registry of keys.
+
+    Shared by the two WebSocket limiters below, which differ only in what they
+    key on and how long their buckets are allowed to live.
+    """
+
+    # Sweep-interval: the global stale-bucket purge is O(N) over the whole dict,
+    # so run it only once every SWEEP_EVERY calls. Correctness of the caller's
+    # own bucket is unaffected — the per-key filter in `_hit` already expires
+    # stale timestamps on every call.
+    SWEEP_EVERY = 100
+
+    # Hard cap on tracked keys. The sweep alone bounds a *quiet* registry, but
+    # nothing stops a burst of distinct keys arriving faster than they expire,
+    # so cap the dict outright — same reasoning as `_session_resume_locks` in
+    # `routers/chat.py`. See `_evict` for why the eviction order matters.
+    MAX_KEYS = 10_000
+
+    def __init__(self, window_seconds: int, max_requests: int) -> None:
+        self.window = window_seconds
+        self.max = max_requests
+        self._timestamps: dict[str, list[float]] = {}
+        # Eviction order only: which key was *seen* least recently, allowed or
+        # refused. Distinct from the timestamps above, which record allowed hits
+        # alone — a key sitting at its limit stops accruing those but is the last
+        # one we want to evict. A monotonic counter rather than a clock reading
+        # because ties matter here: `time()` on Windows can hand out the same
+        # value to a whole burst of calls, and a stable sort over tied keys falls
+        # back to insertion order — evicting the busiest key, which is the oldest
+        # entry, first. That is the opposite of what `_evict` is for.
+        self._last_seen_seq: dict[str, int] = {}
+        self._seq: int = 0
+        self._calls_since_sweep: int = 0
+
+    def bucket_count(self) -> int:
+        """Number of tracked keys — for tests / introspection."""
+        return len(self._timestamps)
+
+    def _forget(self, key: str) -> None:
+        """Single removal path, so the two dicts can't drift apart."""
+        self._timestamps.pop(key, None)
+        self._last_seen_seq.pop(key, None)
+
+    def _sweep(self, now: float, keep: str) -> None:
+        """Drop every key whose window has fully expired."""
+        stale = [k for k, ts in self._timestamps.items() if k != keep and all(now - t >= self.window for t in ts)]
+        for k in stale:
+            self._forget(k)
+
+    def _evict(self, now: float, keep: str) -> None:
+        """Force the registry back under MAX_KEYS: expired keys first, then coldest.
+
+        Ordering by `_last_seen_seq` rather than by the newest allowed hit is
+        what keeps eviction from becoming a way to shed one's own limit: a key
+        that is being refused over and over is the most recently *seen* key
+        there is, so it is evicted last rather than first.
+        """
+        self._sweep(now, keep)
+        overflow = len(self._timestamps) - self.MAX_KEYS
+        if overflow <= 0:
+            return
+        coldest = sorted((k for k in self._timestamps if k != keep), key=lambda k: self._last_seen_seq.get(k, 0))
+        for k in coldest[:overflow]:
+            self._forget(k)
+
+    def _hit(self, key: str) -> bool:
+        now = time()
+        self._seq += 1
+        self._last_seen_seq[key] = self._seq
+
+        # Amortised global sweep: only run every SWEEP_EVERY calls so we aren't
+        # O(N) per message at scale. Per-bucket expiry below handles correctness
+        # for the caller's own key.
+        self._calls_since_sweep += 1
+        if self._calls_since_sweep >= self.SWEEP_EVERY:
+            self._calls_since_sweep = 0
+            self._sweep(now, keep=key)
+
+        timestamps = [t for t in self._timestamps.get(key, []) if now - t < self.window]
+        allowed = len(timestamps) < self.max
+        if allowed:
+            timestamps.append(now)
+        self._timestamps[key] = timestamps
+        if len(self._timestamps) > self.MAX_KEYS:
+            self._evict(now, keep=key)
+        return allowed
+
+
+class SiteTokenWSRateLimiter(_SlidingWindow):
     """Sliding-window rate limiter keyed by (site_token, session_id).
 
     Used for WebSocket messages, which slowapi doesn't cover. Keeping one
     bucket per (token, session) means per-tenant isolation AND per-visitor
     fairness within a tenant. Sessions without a token fall back to session-only
     keying, matching legacy behaviour.
+
+    Both halves of that key are client-supplied, so this limiter carries
+    fairness but not abuse resistance: a client that reconnects gets a fresh
+    session id and therefore a fresh bucket. `ClientIPWSRateLimiter` below is the
+    ceiling a reconnect can't reset, and the two stack exactly as the two
+    slowapi limits do on the HTTP routes (see the module docstring).
     """
 
-    # Sweep-interval: the global stale-bucket purge is O(N) over the whole dict,
-    # so run it only once every SWEEP_EVERY allowed-calls. Correctness of the
-    # caller's own bucket is unaffected — the per-key filter below already
-    # expires stale timestamps on every call.
-    SWEEP_EVERY = 100
-
-    def __init__(self, window_seconds: int = 60, max_requests: int = 20):
-        self.window = window_seconds
-        self.max = max_requests
-        self._timestamps: dict[str, list[float]] = {}
-        self._calls_since_sweep: int = 0
+    def __init__(self, window_seconds: int = 60, max_requests: int = 20) -> None:
+        super().__init__(window_seconds, max_requests)
 
     @staticmethod
     def _key(session_id: str, site_token: str | None) -> str:
         return f"{site_token}:{session_id}" if site_token else session_id
 
     def is_allowed(self, session_id: str, site_token: str | None = None) -> bool:
-        now = time()
-        key = self._key(session_id, site_token)
-
-        # Amortised global sweep: only run every SWEEP_EVERY calls so we aren't
-        # O(N) per message at scale. Per-bucket expiry below handles correctness
-        # for the caller's own session.
-        self._calls_since_sweep += 1
-        if self._calls_since_sweep >= self.SWEEP_EVERY:
-            self._calls_since_sweep = 0
-            stale_keys = [
-                k for k, ts in self._timestamps.items() if k != key and all(now - t >= self.window for t in ts)
-            ]
-            for k in stale_keys:
-                del self._timestamps[k]
-
-        timestamps = [t for t in self._timestamps.get(key, []) if now - t < self.window]
-        if len(timestamps) >= self.max:
-            self._timestamps[key] = timestamps
-            return False
-        timestamps.append(now)
-        self._timestamps[key] = timestamps
-        return True
+        return self._hit(self._key(session_id, site_token))
 
     def cleanup(self, session_id: str, site_token: str | None = None) -> None:
-        self._timestamps.pop(self._key(session_id, site_token), None)
+        """Drop this session's bucket when its connection ends.
+
+        Safe to do eagerly: the session id died with the connection, so nothing
+        can present it again and there is no allowance to reset. That is exactly
+        what is *not* true of the per-address ceiling below.
+        """
+        self._forget(self._key(session_id, site_token))
+
+
+class ClientIPWSRateLimiter(_SlidingWindow):
+    """Sliding-window ceiling on WebSocket messages, keyed by peer address.
+
+    The WS counterpart of `client_ip_key`: the peer address is the one
+    identifier a client that reconnects (fresh session id) or presents a
+    different site_token cannot shed, so it is what makes the per-message
+    allowance actually bind.
+
+    Deliberately **not** cleaned up on disconnect. `SiteTokenWSRateLimiter`'s
+    buckets die with their session; these have to outlive the connection or a
+    reconnect would reset the very ceiling they exist to impose. They expire by
+    time instead — the amortised sweep drops any address idle for a full window
+    — with `MAX_KEYS` as the backstop for a burst of distinct addresses.
+    """
+
+    def __init__(self, window_seconds: int = 60, max_requests: int = 120) -> None:
+        super().__init__(window_seconds, max_requests)
+
+    def is_allowed(self, client_ip: str) -> bool:
+        return self._hit(f"ip:{client_ip}")
 
 
 class SSEConcurrencyGuard:
@@ -215,3 +333,49 @@ def _reset_sse_guard_for_tests(max_per_token: int | None = None) -> None:
     global _sse_guard
     cap = max_per_token if max_per_token is not None else _default_sse_cap()
     _sse_guard = SSEConcurrencyGuard(max_per_token=cap)
+
+
+# Process-wide WebSocket per-address ceiling. It lives here rather than beside
+# the per-session limiter in `routers/chat.py` because it must outlive every
+# individual connection — the router only ever reads it through the accessor.
+def _default_ws_ip_ceiling() -> tuple[int, int]:
+    """(window_seconds, max_messages) for the WS per-address ceiling.
+
+    Reuses `rate_limit.public_ip` rather than adding a WS-only key: a WebSocket
+    message and an SSE chat request are the same unit of work (one LLM turn), so
+    a client that switches transports should meet the same ceiling either way.
+    Parsed with the parser slowapi itself uses, so the two transports can't drift
+    apart. Falls back to the documented 120/minute when settings or the string
+    are unavailable, mirroring `_default_sse_cap`.
+    """
+    try:
+        from config import settings
+
+        item = parse(settings.rate_limit_public_ip)
+        return int(item.get_expiry()), int(item.amount)
+    except Exception:
+        return 60, 120
+
+
+_ws_ip_ceiling = ClientIPWSRateLimiter(*_default_ws_ip_ceiling())
+
+
+def get_ws_ip_ceiling() -> ClientIPWSRateLimiter:
+    """The live per-address WS ceiling. Read it per message, never cache it —
+    `_reset_ws_ip_ceiling_for_tests` rebinds the instance."""
+    return _ws_ip_ceiling
+
+
+def _reset_ws_ip_ceiling_for_tests(window_seconds: int | None = None, max_requests: int | None = None) -> None:
+    """Test helper: rebuild the ceiling, optionally resized.
+
+    The ceiling is process-global, so the suite resets it between tests (see the
+    autouse fixture in `tests/conftest.py`); ceiling tests additionally shrink it
+    so they can reach it without driving 120 real chat turns.
+    """
+    global _ws_ip_ceiling
+    window, cap = _default_ws_ip_ceiling()
+    _ws_ip_ceiling = ClientIPWSRateLimiter(
+        window_seconds=window if window_seconds is None else window_seconds,
+        max_requests=cap if max_requests is None else max_requests,
+    )

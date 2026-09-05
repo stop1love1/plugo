@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 import pytest
 from fastapi import WebSocketDisconnect
 from httpx import ASGITransport, AsyncClient
+from starlette.datastructures import Address
 
 # Add backend directory to path so imports work
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -61,6 +62,21 @@ def _disable_rate_limiter():
         from main import limiter
 
         limiter.enabled = False
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_ws_ip_ceiling():
+    """`utils.rate_limit`'s WebSocket per-address ceiling is process-global too,
+    and it has no `enabled` switch — it is a hand-rolled window, not slowapi. Every
+    fake socket that doesn't name an address presents the same `127.0.0.1`
+    fallback, so one transport test's messages would otherwise count against a
+    later one's. Rebuild it with the configured limits before each test; the
+    ceiling's own tests shrink it inside their bodies, and this puts it back."""
+    with contextlib.suppress(Exception):
+        from utils.rate_limit import _reset_ws_ip_ceiling_for_tests
+
+        _reset_ws_ip_ceiling_for_tests()
     yield
 
 
@@ -184,10 +200,23 @@ class _FakeWebSocket:
     `on_receive` runs before each frame is served (including the eventual disconnect) —
     tests use it to drain background tasks deterministically between turns, without
     depending on a real event-loop yield to interleave them.
+
+    `client_host` fills the peer address the WS per-address ceiling reads via
+    `utils.rate_limit.ws_client_ip`; it is the only way to drive that ceiling from
+    more than one source in-process, mirroring the `client=` argument
+    `test_rate_limit_public.py` hands `ASGITransport`. Left unset, `client` is None
+    and `ws_client_ip` maps it to `127.0.0.1`, exactly as slowapi's
+    `get_remote_address` does for a scope without a client.
     """
 
-    def __init__(self, frames: list[dict], on_receive: Callable[[], Awaitable[None]] | None = None) -> None:
+    def __init__(
+        self,
+        frames: list[dict],
+        on_receive: Callable[[], Awaitable[None]] | None = None,
+        client_host: str | None = None,
+    ) -> None:
         self.headers: dict[str, str] = {}
+        self.client: Address | None = Address(client_host, 12345) if client_host else None
         self.sent: list[dict] = []
         self.closed: list[tuple[int, str]] = []
         self._frames = list(frames)
