@@ -298,6 +298,10 @@ tenant's visitors together — it is not per visitor.
 site token (`rate_limit.sse_concurrent`, default `10`), which is a concurrency cap rather
 than a rate: exceeding it also returns 429, with `"Too many concurrent streams"`.
 
+The embedded widget reaches only the feedback route of the two — it chats over WebSocket,
+but its thumbs-up/down buttons POST here, and it discards the response. A 429 on widget
+feedback is therefore silent: no user-visible error, just feedback that never arrives.
+
 ### WebSocket
 
 `WS /ws/chat/{site_token}` is not a slowapi route. Its limits are enforced per **message**,

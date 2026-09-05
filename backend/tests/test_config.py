@@ -48,14 +48,23 @@ def test_config_json_is_actually_loaded() -> None:
     the lookup work under the `tests/..` prefix conftest.py puts on `sys.path`; drop it
     and every setting silently reverts to its hard-coded default, which is exactly the
     state this branch found the suite in.
+
+    Asserts on derived values, not on `_json_config` itself: `config.json → auth` is a
+    documented place to keep admin credentials (see CLAUDE.md), and pytest's assertion
+    rewriter renders both operands of a failing `in`, so `assert "rate_limit" in
+    _json_config` would dump the whole file — password included. Section *names* are
+    safe; section contents are not.
     """
     from config import _CONFIG_PATHS, _json_config
 
-    assert _json_config, (
+    loaded = bool(_json_config)
+    sections = sorted(_json_config)
+
+    assert loaded, (
         f"config.json was not found — every setting is falling back to its hard-coded "
         f"default. Searched: {[str(p) for p in _CONFIG_PATHS]}"
     )
-    assert "rate_limit" in _json_config, "config.json parsed but carries no rate_limit section"
+    assert "rate_limit" in sections, "config.json parsed but carries no rate_limit section"
 
 
 def test_secrets_do_not_leak_into_the_suite() -> None:
@@ -73,12 +82,23 @@ def test_secrets_do_not_leak_into_the_suite() -> None:
     `config.py` calls out, made visible: your real `.env` is feeding `settings`, live
     API keys included. Run from `backend/`, or fix the cwd-dependence for real (pin the
     cwd, or gate on an explicit test environment). Do not weaken this assertion.
+
+    Assert on a bound `bool`, never on the attribute. pytest's assertion rewriter
+    renders the failing operand's repr and, for an attribute access, appends a
+    `+ where ... = <Settings ...>.anthropic_api_key` clause — so `assert not
+    settings.anthropic_api_key` would echo the live key *and* pydantic's full-model
+    repr (secret_key, admin_password, the other provider keys) to the terminal and into
+    any CI log or JUnit XML. This test's only failure mode is a populated `.env`, so
+    that shape would make a guard against secret exposure into a means of it. Via
+    `leaked` the rewriter can only ever print `True`.
     """
     from config import settings
 
-    assert not settings.anthropic_api_key, (
+    leaked = bool(settings.anthropic_api_key)
+    assert not leaked, (
         "settings.anthropic_api_key is populated under test — the project-root .env "
-        "reached Settings. Run pytest from backend/ (see the docstring)."
+        "reached Settings. Run pytest from backend/ (see the docstring). "
+        "The value is deliberately not shown."
     )
 
 

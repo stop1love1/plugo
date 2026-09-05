@@ -165,9 +165,16 @@ What this means on upgrade:
   across all of that tenant's callers, not per visitor) and **120/minute per client IP**.
 - `POST /api/sessions/{session_id}/feedback` is now **60/minute per site token** and
   **120/minute per client IP**.
-- The widget is unaffected in practice — it speaks WebSocket only. If you drive Plugo
-  from your own backend, review `config.json` → `rate_limit.chat` against your
-  integration's aggregate rate before upgrading.
+- The widget's **chat** traffic is unaffected: it speaks WebSocket only, so it never
+  reaches `rate_limit.chat`. If you drive chat from your own backend over SSE instead,
+  review `config.json` → `rate_limit.chat` against your integration's aggregate rate
+  before upgrading.
+- The widget's **feedback** traffic *is* affected. Its thumbs-up/down buttons POST to
+  `/api/sessions/{session_id}/feedback`, so all of a tenant's visitors now share one
+  60/minute bucket (`rate_limit.default`). The widget discards the response, so a 429
+  there is **silent** — no user-visible error, just feedback that never arrives. If you
+  have a high-traffic tenant and your feedback numbers drop after upgrading, raise
+  `rate_limit.default`.
 - If a reverse proxy fronts the backend, read the `FORWARDED_ALLOW_IPS` note above
   first: without it, the per-IP limits collapse every visitor into a single bucket.
 
