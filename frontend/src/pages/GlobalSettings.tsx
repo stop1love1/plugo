@@ -687,7 +687,10 @@ export default function GlobalSettings() {
             title="Rate Limiting"
             desc="Request limits per endpoint. Format: count/period (e.g. 60/minute, 10/second)."
           >
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* No "Crawl" field: nothing ever read `rate_limit.crawl`, and editing
+                it here wrote a dead key back into config.json while presenting as
+                protection. See the note in backend/config.py. */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <InputField
                 label="Default"
                 value={get("rate_limit", "default", "60/minute")}
@@ -699,12 +702,6 @@ export default function GlobalSettings() {
                 value={get("rate_limit", "chat", "30/minute")}
                 onChange={(v) => update("rate_limit", "chat", v)}
                 placeholder="30/minute"
-              />
-              <InputField
-                label="Crawl"
-                value={get("rate_limit", "crawl", "5/minute")}
-                onChange={(v) => update("rate_limit", "crawl", v)}
-                placeholder="5/minute"
               />
             </div>
           </SectionCard>

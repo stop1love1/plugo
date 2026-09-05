@@ -111,7 +111,15 @@ class Settings(BaseSettings):
     # --- Rate Limiting (from config.json → rate_limit) ---
     rate_limit_default: str = _get("rate_limit", "default", "60/minute")
     rate_limit_chat: str = _get("rate_limit", "chat", "30/minute")
-    rate_limit_crawl: str = _get("rate_limit", "crawl", "5/minute")
+    # There is deliberately no `rate_limit.crawl`. It existed here, in config.json
+    # and as a dashboard field for a long time while no route ever read it — every
+    # `/api/crawl/*` endpoint is admin-authenticated and carries no
+    # `@limiter.limit(...)`. Removed on the same principle that removed
+    # `default_limits` from `limiter.py`: in a security-adjacent module,
+    # configuration that reads as protection while providing none is worse than no
+    # configuration at all, and a dashboard input labelled "Crawl" was the most
+    # visible form of that. If the crawl routes ever need a limit, add the
+    # decorator and the key together, in one change.
     # Strict per-IP limit on the admin login endpoint to blunt brute-force attempts.
     rate_limit_auth: str = _get("rate_limit", "auth", "5/minute")
     # Abuse ceiling per client IP, applied to each public (site-token) endpoint
