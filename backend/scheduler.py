@@ -119,9 +119,14 @@ async def _scheduler_loop():
                         await repos.sites.update(site_id, {"crawl_status": "running"})
                     except Exception as e:
                         logger.error("Auto-crawl job creation failed", site_id=site_id, error=str(e))
-                        # A failed commit leaves this tick's session pending-rollback, so
-                        # the remaining sites would only produce more of the same. Stop
-                        # scheduling; the next tick builds a fresh session.
+                        # Stop scheduling for this tick rather than skipping to the next
+                        # site: under SQLite a failed commit leaves this tick's session
+                        # pending-rollback, so the remaining sites would only produce
+                        # more of the same. `repos` is per tick, so the next one is
+                        # clean. (Under MongoDB there is no session to poison and this
+                        # break is merely conservative — it costs the tick's remaining
+                        # sites, which is what the unguarded raise cost on every
+                        # provider before.)
                         break
 
                     logger.info(

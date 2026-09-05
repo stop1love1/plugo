@@ -252,6 +252,59 @@ async def test_continuous_crawl_happy_path_still_creates_next_job_and_updates_st
     assert site["last_crawled_at"] is not None
 
 
+@pytest.mark.asyncio
+async def test_browser_login_handler_survives_its_own_db_work_failing(
+    db_repos: Repositories,
+    test_site: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    crawl_logs: _LogRecorder,
+) -> None:
+    """The browser-login handler opens its own session; that too must not crash the task.
+
+    The login failure itself is real — a loopback login URL that the SSRF guard rejects,
+    no mocking of the login machinery. The injected failure is the handler's *own*
+    `create_repos()`, which is the call that used to sit outside the try.
+    """
+    from routers.crawl import _run_crawl_with_tracking
+
+    site_id = test_site["id"]
+    await db_repos.sites.update(
+        site_id,
+        {"crawl_login_url": "http://127.0.0.1/login", "crawl_login_username": "someone"},
+    )
+    job = await db_repos.crawl_jobs.create({"site_id": site_id, "start_url": test_site["url"]})
+
+    real_create_repos = create_repos
+    handler_calls: list[int] = []
+
+    async def _create_repos() -> Repositories:
+        # Identify the handler's call semantically rather than by position: it is the
+        # only `create_repos` that happens after the login failure has been logged.
+        if any(message.startswith("Browser login failed") for message in crawl_logs.messages()):
+            handler_calls.append(1)
+            raise RuntimeError("database unavailable")
+        return await real_create_repos()
+
+    monkeypatch.setattr("routers.crawl.create_repos", _create_repos)
+
+    # Again no pytest.raises: the point is that this returns.
+    await _run_crawl_with_tracking(site_id, test_site["url"], job["id"], max_pages=5, use_browser=True)
+
+    errors = crawl_logs.messages("error")
+    # The login really failed, for the real reason, and that is the first thing logged.
+    assert errors, "the browser-login handler was never reached"
+    assert errors[0].startswith("Browser login failed: ")
+    assert "SSRF guard" in errors[0]
+    # The handler really did try its own DB work, and it really did fail...
+    assert handler_calls == [1]
+    # ...and that failure was reported rather than raised out of the task.
+    assert "Crawl status update failed after browser login error" in errors
+    followup = crawl_logs.fields_for("Crawl status update failed after browser login error")
+    assert followup["site_id"] == site_id
+    assert followup["job_id"] == job["id"]
+    assert followup["error"] == "database unavailable"
+
+
 # ---------------------------------------------------------------------------
 # scheduler.py — the auto-crawl tick
 # ---------------------------------------------------------------------------
