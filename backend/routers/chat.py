@@ -156,6 +156,24 @@ def restore_agent_history(agent: ChatAgent, stored_messages: list[dict], summary
         agent.messages.append({"role": role, "content": msg.get("content", "")})
 
 
+def build_assistant_message(content: str, tool_calls: list[dict] | None) -> dict:
+    """Assemble the assistant message both transports persist after a turn.
+
+    ``tool_calls`` is copied (not referenced) when non-empty, so a later turn resetting the
+    agent's accumulator can't mutate what was already persisted. Omitted entirely when
+    nothing ran — that absence is exactly what a legacy session, or an ordinary turn with no
+    tool call, looks like to the analytics reader.
+    """
+    message: dict = {
+        "role": "assistant",
+        "content": content,
+        "timestamp": datetime.now(UTC).isoformat(),
+    }
+    if tool_calls:
+        message["tool_calls"] = list(tool_calls)
+    return message
+
+
 @router.websocket("/ws/chat")
 async def websocket_chat_init(websocket: WebSocket):
     """WebSocket chat endpoint — site_token is read from the first `init` message.
@@ -329,11 +347,10 @@ async def _run_websocket_chat(
                     # store.
                     logger.info("Session resumed", session_id=session_id, message_count=len(messages))
 
-        # Create new session if not resuming
+        # Create new session if not resuming. `visitor_id` is never falsy here (the
+        # uuid4() fallback above guarantees that), so this always stores one.
         if not session_id:
-            session_data = {"site_id": site["id"]}
-            if visitor_id:
-                session_data["visitor_id"] = visitor_id
+            session_data = {"site_id": site["id"], "visitor_id": visitor_id}
             chat_session = await repos.chat_sessions.create(session_data)
             session_id = chat_session["id"]
 
@@ -585,16 +602,8 @@ async def _handle_message(
 
     # Only save complete responses (skip if client disconnected with no content)
     if full_response.strip():
-        assistant_msg: dict = {
-            "role": "assistant",
-            "content": full_response,
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
         # Structured tool-invocation record for this turn (analytics reads it).
-        # Copied so a later turn's reset can't mutate what we persisted.
-        if agent.last_tool_calls:
-            assistant_msg["tool_calls"] = list(agent.last_tool_calls)
-        messages.append(assistant_msg)
+        messages.append(build_assistant_message(full_response, agent.last_tool_calls))
         try:
             await repos.chat_sessions.update_messages(session_id, messages)
         except Exception as e:

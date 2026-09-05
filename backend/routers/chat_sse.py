@@ -35,11 +35,12 @@ from config import settings
 from logging_config import logger
 from repositories import Repositories, get_repos
 from routers.chat import (
-    MAX_PAGE_TEXT_CHARS,
+    MAX_PAGE_TEXT_CHARS,  # noqa: F401 -- re-exported for callers that reach for it via this module
     _clamp_page_context,
     _extract_and_save_memories,
     _fire_and_forget,
     _maybe_summarize,
+    build_assistant_message,
     crossed_multiple,
     get_cached_site,
     restore_agent_history,
@@ -54,9 +55,12 @@ router = APIRouter()
 MAX_MESSAGE_CHARS = 10000
 
 # `MAX_PAGE_TEXT_CHARS` and `_clamp_page_context` live on the WS module now — one clamp,
-# applied identically by both transports — and are re-exported from here for callers that
-# already reach for them on the SSE module.
-__all__ = ["MAX_MESSAGE_CHARS", "MAX_PAGE_TEXT_CHARS", "ChatSSERequest", "register_routes", "router"]
+# applied identically by both transports — and `MAX_PAGE_TEXT_CHARS` is re-exported from
+# here (see the `noqa` on its import above) for callers that already reach for it on the
+# SSE module. No `__all__`: nothing star-imports this module, and a curated list here would
+# read as a public-surface contract this module doesn't actually keep — `MEMORY_MIN_MESSAGES`
+# and `MEMORY_EXTRACT_EVERY_MESSAGES` below are reached for by name (the latter by the test
+# suite) without ever having been listed in one.
 
 # Memory extraction on a cadence, because SSE has no session end to hang it on.
 #
@@ -200,16 +204,8 @@ async def _chat_stream_core(
                         "timestamp": datetime.now(UTC).isoformat(),
                     }
                 )
-                assistant_msg: dict = {
-                    "role": "assistant",
-                    "content": full_response,
-                    "timestamp": datetime.now(UTC).isoformat(),
-                }
                 # Structured tool-invocation record for this turn (analytics reads it).
-                # Copied so a later turn's reset can't mutate what we persisted.
-                if agent.last_tool_calls:
-                    assistant_msg["tool_calls"] = list(agent.last_tool_calls)
-                history_messages.append(assistant_msg)
+                history_messages.append(build_assistant_message(full_response, agent.last_tool_calls))
                 try:
                     await repos.chat_sessions.update_messages(session_id, history_messages)
                 except Exception as e:

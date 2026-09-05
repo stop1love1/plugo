@@ -14,6 +14,7 @@ from collections.abc import AsyncIterator
 import pytest
 
 from repositories import Repositories
+from tests.conftest import _FakeWebSocket
 
 TOOL_NAME = "lookup_order"
 
@@ -74,16 +75,6 @@ async def _seed_tool(db_repos: Repositories, site_id: str) -> None:
     )
 
 
-class _FakeWebSocket:
-    """Records the frames `_handle_message` would have sent."""
-
-    def __init__(self):
-        self.sent: list[dict] = []
-
-    async def send_json(self, data: dict) -> None:
-        self.sent.append(data)
-
-
 @pytest.mark.asyncio
 async def test_websocket_persists_tool_calls_on_assistant_message(db_repos: Repositories, test_site: dict) -> None:
     from agent.core import ChatAgent
@@ -102,7 +93,7 @@ async def test_websocket_persists_tool_calls_on_assistant_message(db_repos: Repo
     messages: list[dict] = []
 
     await _handle_message(
-        _FakeWebSocket(),
+        _FakeWebSocket(frames=[]),
         agent,
         db_repos,
         session["id"],
@@ -187,7 +178,7 @@ async def test_turn_without_tool_calls_persists_no_tool_key(
         llm_model=test_site["llm_model"],
     )
 
-    await _handle_message(_FakeWebSocket(), agent, db_repos, session["id"], [], "hello there", None)
+    await _handle_message(_FakeWebSocket(frames=[]), agent, db_repos, session["id"], [], "hello there", None)
 
     stored = await db_repos.chat_sessions.get_by_id(session["id"])
     assistant = stored["messages"][-1]

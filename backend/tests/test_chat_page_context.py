@@ -12,54 +12,16 @@ reading as though the page body were bounded.
 """
 
 import asyncio
-from collections.abc import AsyncIterator
 
 import pytest
-from fastapi import WebSocketDisconnect
 
 from agent.core import ChatAgent
 from repositories import create_repos
 from routers.chat import MAX_PAGE_TEXT_CHARS, _clamp_page_context
+from tests.conftest import _FakeWebSocket, _StubProvider
 
 # What the agent itself slices the body down to before fencing it into the prompt.
 AGENT_PAGE_TEXT_CHARS = 1500
-
-
-class _StubProvider:
-    """LLM stub — no network, and no knowledge lookup to satisfy."""
-
-    supports_tools = False
-
-    def __init__(self, *args: object, **kwargs: object) -> None:
-        self.last_usage: dict | None = None
-
-    async def chat(self, messages: list[dict], system_prompt: str = "", tools: list[dict] | None = None) -> dict:
-        return {"content": "Sure thing.", "tool_calls": [], "usage": None}
-
-    async def stream(
-        self, messages: list[dict], system_prompt: str = "", tools: list[dict] | None = None
-    ) -> AsyncIterator[str]:
-        yield "Sure thing."
-
-
-class _FakeWebSocket:
-    """Feeds `_run_websocket_chat` a scripted frame sequence, then disconnects."""
-
-    def __init__(self, frames: list[dict]) -> None:
-        self.headers: dict[str, str] = {}
-        self.sent: list[dict] = []
-        self._frames = list(frames)
-
-    async def send_json(self, data: dict) -> None:
-        self.sent.append(data)
-
-    async def receive_json(self) -> dict:
-        if not self._frames:
-            raise WebSocketDisconnect(code=1000)
-        return self._frames.pop(0)
-
-    async def close(self, code: int = 1000, reason: str = "") -> None:
-        pass
 
 
 # --- The shared clamp -----------------------------------------------------------------

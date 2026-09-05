@@ -1,10 +1,13 @@
 """Shared test fixtures for the Plugo backend."""
 
+import asyncio
 import contextlib
 import os
 import sys
+from collections.abc import AsyncIterator, Awaitable, Callable
 
 import pytest
+from fastapi import WebSocketDisconnect
 from httpx import ASGITransport, AsyncClient
 
 # Add backend directory to path so imports work
@@ -108,3 +111,97 @@ async def test_site(db_repos, auth_headers):
     # Cleanup
     with contextlib.suppress(Exception):
         await db_repos.sites.delete(site["id"])
+
+
+# --- Draining `_fire_and_forget` background tasks (shared by the transport tests) -------
+#
+# `routers.chat._background_tasks` is a module global whose entries are only discarded by
+# a done callback, so a task another test left behind on a now-closed loop would never
+# clear. Snapshotting a baseline before dispatch and draining only what's new afterwards
+# keeps that foreign state out of the picture. A task of ours that genuinely overruns the
+# deadline is a failure, not something to proceed past silently.
+
+
+def _background_task_baseline() -> set[asyncio.Task]:
+    """Snapshot `routers.chat._background_tasks` so a drain can ignore foreign tasks."""
+    from routers.chat import _background_tasks
+
+    return set(_background_tasks)
+
+
+async def _drain_background_tasks(baseline: set[asyncio.Task], timeout: float = 10.0) -> None:
+    """Await the `_fire_and_forget` tasks started since `baseline`."""
+    from routers.chat import _background_tasks
+
+    pending = [task for task in _background_tasks if task not in baseline]
+    if not pending:
+        return
+    _, still_running = await asyncio.wait(pending, timeout=timeout)
+    if still_running:
+        raise AssertionError(f"background tasks still running after {timeout}s: {still_running}")
+
+
+# --- LLM provider / WebSocket test doubles shared by the transport tests ----------------
+
+
+class _StubProvider:
+    """LLM stub for the chat agent, the summarizer, and the memory extractor.
+
+    `chat_content` is what `.chat()` answers with — parameterised because
+    `test_conversation_trim.py` drives the real summarizer through this stub and asserts on
+    the text it returns, while the other callers only need it to stay off the network.
+    """
+
+    supports_tools = False
+
+    def __init__(self, *args: object, chat_content: str = "Sure thing.", **kwargs: object) -> None:
+        self.last_usage: dict | None = None
+        self._chat_content = chat_content
+
+    async def chat(
+        self,
+        messages: list[dict],
+        system_prompt: str = "",
+        tools: list[dict] | None = None,
+        temperature: float = 0.7,
+    ) -> dict:
+        return {"content": self._chat_content, "tool_calls": [], "usage": None}
+
+    async def stream(
+        self,
+        messages: list[dict],
+        system_prompt: str = "",
+        tools: list[dict] | None = None,
+        temperature: float = 0.7,
+    ) -> AsyncIterator[str]:
+        yield "Sure thing."
+
+
+class _FakeWebSocket:
+    """Feeds `_run_websocket_chat` (or `_handle_message` directly) a scripted frame
+    sequence, then disconnects.
+
+    `on_receive` runs before each frame is served (including the eventual disconnect) —
+    tests use it to drain background tasks deterministically between turns, without
+    depending on a real event-loop yield to interleave them.
+    """
+
+    def __init__(self, frames: list[dict], on_receive: Callable[[], Awaitable[None]] | None = None) -> None:
+        self.headers: dict[str, str] = {}
+        self.sent: list[dict] = []
+        self.closed: list[tuple[int, str]] = []
+        self._frames = list(frames)
+        self._on_receive = on_receive
+
+    async def send_json(self, data: dict) -> None:
+        self.sent.append(data)
+
+    async def receive_json(self) -> dict:
+        if self._on_receive is not None:
+            await self._on_receive()
+        if not self._frames:
+            raise WebSocketDisconnect(code=1000)
+        return self._frames.pop(0)
+
+    async def close(self, code: int = 1000, reason: str = "") -> None:
+        self.closed.append((code, reason))

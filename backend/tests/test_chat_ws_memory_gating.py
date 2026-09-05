@@ -18,51 +18,13 @@ from whatever a prior connection happened to store on the session row.
 """
 
 import asyncio
-from collections.abc import AsyncIterator
 
 import pytest
-from fastapi import WebSocketDisconnect
 
 from agent.core import ChatAgent
 from repositories import Repositories, create_repos
 from routers.chat import _background_tasks, _run_websocket_chat
-
-
-class _StubProvider:
-    """LLM stub — no network, no tool support, no RAG lookup to satisfy."""
-
-    supports_tools = False
-
-    def __init__(self, *args: object, **kwargs: object) -> None:
-        self.last_usage: dict | None = None
-
-    async def chat(self, messages: list[dict], system_prompt: str = "", tools: list[dict] | None = None) -> dict:
-        return {"content": "Sure thing.", "tool_calls": [], "usage": None}
-
-    async def stream(
-        self, messages: list[dict], system_prompt: str = "", tools: list[dict] | None = None
-    ) -> AsyncIterator[str]:
-        yield "Sure thing."
-
-
-class _FakeWebSocket:
-    """Feeds `_run_websocket_chat` a scripted frame sequence, then disconnects."""
-
-    def __init__(self, frames: list[dict]) -> None:
-        self.headers: dict[str, str] = {}
-        self.sent: list[dict] = []
-        self._frames = list(frames)
-
-    async def send_json(self, data: dict) -> None:
-        self.sent.append(data)
-
-    async def receive_json(self) -> dict:
-        if not self._frames:
-            raise WebSocketDisconnect(code=1000)
-        return self._frames.pop(0)
-
-    async def close(self, code: int = 1000, reason: str = "") -> None:
-        pass
+from tests.conftest import _FakeWebSocket, _StubProvider
 
 
 def _history(turns: int) -> list[dict]:

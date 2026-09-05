@@ -11,51 +11,29 @@ makes true:
 """
 
 import asyncio
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator
 
 import pytest
-from fastapi import WebSocketDisconnect
 
 from agent.core import ChatAgent
 from agent.memory import ConversationSummarizer, trim_messages_for_context
 from repositories import Repositories, create_repos
+from tests.conftest import (
+    _background_task_baseline,
+    _drain_background_tasks,
+    _FakeWebSocket,
+    _StubProvider,
+)
 
 KEEP = ConversationSummarizer.KEEP_RECENT_MESSAGES
 SUMMARY_TEXT = "The visitor asked about shipping and was told it takes three days."
 
 
-class _StubProvider:
-    """LLM stub for both the chat agent and the summarizer."""
-
-    supports_tools = False
-
-    def __init__(self, *args: object, **kwargs: object) -> None:
-        self.last_usage: dict | None = None
-
-    async def chat(
-        self,
-        messages: list[dict],
-        system_prompt: str = "",
-        tools: list[dict] | None = None,
-        temperature: float = 0.7,
-    ) -> dict:
-        return {"content": SUMMARY_TEXT, "tool_calls": [], "usage": None}
-
-    async def stream(
-        self,
-        messages: list[dict],
-        system_prompt: str = "",
-        tools: list[dict] | None = None,
-        temperature: float = 0.7,
-    ) -> AsyncIterator[str]:
-        yield "Sure thing."
-
-
 @pytest.fixture(autouse=True)
 def _stub_llm(monkeypatch: pytest.MonkeyPatch) -> None:
     """No real providers: the agent, the summarizer and the memory extractor all stub out."""
-    monkeypatch.setattr("agent.core.get_llm_provider", lambda *a, **k: _StubProvider())
-    monkeypatch.setattr("routers.chat.get_llm_provider", lambda *a, **k: _StubProvider())
+    monkeypatch.setattr("agent.core.get_llm_provider", lambda *a, **k: _StubProvider(chat_content=SUMMARY_TEXT))
+    monkeypatch.setattr("routers.chat.get_llm_provider", lambda *a, **k: _StubProvider(chat_content=SUMMARY_TEXT))
 
 
 def _make_agent(llm_provider: str = "claude") -> ChatAgent:
@@ -75,56 +53,6 @@ def _persisted_history(turns: int) -> list[dict]:
         history.append({"role": "user", "content": f"question {i}", "timestamp": "2026-01-01T00:00:00Z"})
         history.append({"role": "assistant", "content": f"answer {i}", "timestamp": "2026-01-01T00:00:01Z"})
     return history
-
-
-def _background_task_baseline() -> set[asyncio.Task]:
-    """Snapshot `routers.chat._background_tasks` so a drain can ignore foreign tasks."""
-    from routers.chat import _background_tasks
-
-    return set(_background_tasks)
-
-
-async def _drain_background_tasks(baseline: set[asyncio.Task], timeout: float = 10.0) -> None:
-    """Await the `_fire_and_forget` tasks started since `baseline` — the summarizer is one.
-
-    `_background_tasks` is a module global whose entries are only discarded by a done
-    callback, so a task another test left behind on a now-closed loop would never clear.
-    Waiting on the whole set would hang until the deadline on every call; waiting only on
-    what this test started keeps that state out of the picture. A task of ours that really
-    does overrun the deadline is a failure, not something to proceed past silently.
-    """
-    from routers.chat import _background_tasks
-
-    pending = [task for task in _background_tasks if task not in baseline]
-    if not pending:
-        return
-    _, still_running = await asyncio.wait(pending, timeout=timeout)
-    if still_running:
-        raise AssertionError(f"background tasks still running after {timeout}s: {still_running}")
-
-
-class _FakeWebSocket:
-    """Feeds `_run_websocket_chat` a scripted frame sequence, then disconnects."""
-
-    def __init__(self, frames: list[dict], on_receive: Callable[[], Awaitable[None]] | None = None) -> None:
-        self.headers: dict[str, str] = {}
-        self.sent: list[dict] = []
-        self.closed: list[tuple[int, str]] = []
-        self._frames = list(frames)
-        self._on_receive = on_receive
-
-    async def send_json(self, data: dict) -> None:
-        self.sent.append(data)
-
-    async def receive_json(self) -> dict:
-        if self._on_receive is not None:
-            await self._on_receive()
-        if not self._frames:
-            raise WebSocketDisconnect(code=1000)
-        return self._frames.pop(0)
-
-    async def close(self, code: int = 1000, reason: str = "") -> None:
-        self.closed.append((code, reason))
 
 
 # --- Trim primitive: shape integrity across every provider format -------------------

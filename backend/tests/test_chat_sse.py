@@ -13,7 +13,6 @@ summarization — the latter two on a cadence, since SSE has no session end to r
 and per-turn would bill the operator an LLM round trip for every visitor message.
 """
 
-import asyncio
 import json
 import uuid
 
@@ -30,6 +29,7 @@ from routers.chat_sse import (
     MEMORY_EXTRACT_EVERY_MESSAGES,
     ChatSSERequest,
 )
+from tests.conftest import _background_task_baseline, _drain_background_tasks
 from utils.rate_limit import acquire_sse_slot
 
 # Distinct from other files' chunk ids — tests share a single sqlite DB
@@ -166,30 +166,6 @@ def _capture_background_helpers(monkeypatch: pytest.MonkeyPatch) -> dict[str, li
     monkeypatch.setattr("routers.chat_sse._extract_and_save_memories", _fake_extract)
     monkeypatch.setattr("routers.chat_sse._maybe_summarize", _fake_summarize)
     return calls
-
-
-def _background_baseline() -> set[asyncio.Task]:
-    """Snapshot `routers.chat._background_tasks` so a drain can ignore foreign tasks."""
-    from routers.chat import _background_tasks
-
-    return set(_background_tasks)
-
-
-async def _drain_background(baseline: set[asyncio.Task], timeout: float = 10.0) -> None:
-    """Await the `_fire_and_forget` tasks started since `baseline`.
-
-    `_background_tasks` is a module global cleared only by a done callback, so a task
-    another test left on a now-closed loop would never clear; waiting only on what this
-    test started keeps that state out of the picture.
-    """
-    from routers.chat import _background_tasks
-
-    pending = [task for task in _background_tasks if task not in baseline]
-    if not pending:
-        return
-    _, still_running = await asyncio.wait(pending, timeout=timeout)
-    if still_running:
-        raise AssertionError(f"background tasks still running after {timeout}s: {still_running}")
 
 
 def _stored_history(turns: int, unanswered_question: bool = False) -> list[dict]:
@@ -544,14 +520,14 @@ async def _run_turn_and_capture_background(
     session_id = await _seed_session(db_repos, test_site["id"], stored_turns, unanswered_question)
     _record_agent_calls(monkeypatch)
     calls = _capture_background_helpers(monkeypatch)
-    baseline = _background_baseline()
+    baseline = _background_task_baseline()
 
     await _run_core_stream(
         test_site["token"],
         ChatSSERequest(message="next question", session_id=session_id, visitor_id=visitor_id),
         db_repos,
     )
-    await _drain_background(baseline)
+    await _drain_background_tasks(baseline)
     return session_id, calls
 
 
@@ -589,15 +565,20 @@ async def test_sse_extracts_memories_once_the_conversation_is_worth_it(
 async def test_sse_short_session_does_not_extract_memories(
     db_repos: Repositories, test_site: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Below the WS floor there is nothing worth an extraction call."""
+    """Below the WS floor there is nothing worth an extraction call.
+
+    An explicit `visitor_id` keeps this addressable, so the assertion depends only on the
+    message-floor check (`crossed_floor` in the router) rather than holding vacuously for an
+    anonymous request the way it would if extraction were gated off for an unrelated reason.
+    """
     await _approve_site(db_repos, test_site["id"])
     _record_agent_calls(monkeypatch)
     calls = _capture_background_helpers(monkeypatch)
-    baseline = _background_baseline()
+    baseline = _background_task_baseline()
 
     # A brand-new session ends this turn holding only the question and its answer.
-    await _run_core_stream(test_site["token"], ChatSSERequest(message="hi"), db_repos)
-    await _drain_background(baseline)
+    await _run_core_stream(test_site["token"], ChatSSERequest(message="hi", visitor_id="visitor-1"), db_repos)
+    await _drain_background_tasks(baseline)
 
     assert calls["memories"] == []
     assert calls["summarize"] == []
