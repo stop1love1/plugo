@@ -373,6 +373,121 @@ async def test_websocket_session_trims_context_once_summarized(
     assert stored["messages"][0]["content"] == "question 0"
 
 
+@pytest.mark.asyncio
+async def test_websocket_summarizes_after_a_turn_that_streamed_nothing(
+    db_repos: Repositories, test_site: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An odd stored count must not disable summarization for the rest of the session.
+
+    `_handle_message` appends the visitor's message unconditionally but saves only when the
+    provider produced content. A turn where the provider returns empty content raises
+    nothing and does not end the loop — it just leaves an unpaired user message behind, and
+    the count is odd from then on. Under a `len(messages) % 20 == 0` test the turn loop
+    would never dispatch the summarizer again, and since the summary is the only thing
+    bounding the prompt, that session's prompt would grow without limit forever.
+
+    So the loop asks whether the turn *crossed* a multiple of 20. Here turn 0 streams
+    nothing (1 message), the ten turns after it add a pair each (3, 5, ... 21), and the
+    last one steps over 20 without ever landing on it.
+    """
+    from routers.chat import _run_websocket_chat, _ws_rate_limiter
+
+    # 11 turns exceeds the per-session WS message cap, which isn't what's under test.
+    monkeypatch.setattr(_ws_rate_limiter, "is_allowed", lambda session_id, site_token: True)
+
+    async def _stream_response(self: ChatAgent, message: str, **kwargs: object) -> AsyncIterator[str]:
+        """The first turn's provider yields empty content; every later turn answers."""
+        self.last_citations = []
+        self.last_tool_calls = []
+        if message == "question 0":
+            return
+        yield "answer"
+
+    monkeypatch.setattr(ChatAgent, "stream_response", _stream_response)
+
+    dispatched: list[list[dict]] = []
+
+    async def _fake_summarize(
+        session_id: str,
+        site: dict,
+        messages: list[dict],
+        agent: ChatAgent | None = None,
+        trim_boundary: dict | None = None,
+    ) -> None:
+        dispatched.append(messages)
+
+    monkeypatch.setattr("routers.chat._maybe_summarize", _fake_summarize)
+
+    baseline = _background_task_baseline()
+
+    async def _drain() -> None:
+        await _drain_background_tasks(baseline)
+
+    site = {**test_site, "is_approved": True}
+    websocket = _FakeWebSocket(
+        frames=[{"message": f"question {i}"} for i in range(11)],
+        on_receive=_drain,
+    )
+    ws_repos = await create_repos()
+    await _run_websocket_chat(
+        websocket,
+        ws_repos,
+        site,
+        site["token"],
+        first_data={"type": "init", "visitor_id": "visitor-1"},
+    )
+    await _drain_background_tasks(baseline)
+
+    assert len(dispatched) == 1, "the odd count must not silence the summarizer"
+    assert len(dispatched[0]) == 21
+
+    # The unanswered question is in the list the summarizer saw, and in the stored record.
+    stored = await db_repos.chat_sessions.get_by_id(websocket.sent[0]["session_id"])
+    assert len(stored["messages"]) == 21
+    assert stored["messages"][0]["content"] == "question 0"
+    assert stored["messages"][1]["content"] == "question 1"
+
+
+@pytest.mark.asyncio
+async def test_a_failed_summary_pass_does_not_shrink_the_recorded_reach(
+    db_repos: Repositories, test_site: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A pass that summarized nothing must not overwrite an existing row's reach.
+
+    `ConversationSummarizer.summarize` hands back `(existing_summary, 0)` when the provider
+    call raises — the carried-over text is truthy, so upserting on the text alone rewrites a
+    correct `message_count_summarized` with 0. `restore_agent_history` degrades safely
+    (it replays everything), so the cost is prompt bloat rather than lost data, but the row
+    then records less reach than the summary it holds actually has.
+    """
+    from routers.chat import _maybe_summarize
+
+    session = await db_repos.chat_sessions.create({"site_id": test_site["id"]})
+    persisted = _persisted_history(12)  # 24 messages, past MESSAGE_THRESHOLD
+    await db_repos.chat_sessions.update_messages(session["id"], persisted)
+    await db_repos.conversation_summaries.upsert_by_session(
+        session_id=session["id"],
+        data={
+            "site_id": test_site["id"],
+            "summary_text": SUMMARY_TEXT,
+            "message_count_summarized": 18,
+            "total_message_count": 24,
+        },
+    )
+
+    class _UnavailableProvider(_StubProvider):
+        async def chat(self, *args: object, **kwargs: object) -> dict:
+            raise RuntimeError("provider unavailable")
+
+    monkeypatch.setattr("routers.chat.get_llm_provider", lambda *a, **k: _UnavailableProvider())
+
+    await _maybe_summarize(session["id"], test_site, list(persisted))
+
+    row = await db_repos.conversation_summaries.get_by_session(session["id"])
+    assert row["summary_text"] == SUMMARY_TEXT
+    assert row["message_count_summarized"] == 18, "a failed pass rewrote the reach it never had"
+
+
 # --- Resumed session: the replay is bounded the same way ----------------------------
 
 

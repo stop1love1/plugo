@@ -1,6 +1,61 @@
 """Tests for the model pricing table and cost estimator (backend/utils/pricing.py)."""
 
-from utils.pricing import estimate_cost
+import pytest
+
+from utils.pricing import PRICING_PER_1M, estimate_cost
+
+# Every priced model, with the exact per-1M (input, output) USD pair the table must hold.
+#
+# Relative assertions (`> 0`, `mini < full`) cannot catch a decimal point in the wrong
+# place, and these numbers are cost-facing: an operator reads the dashboard's cost column
+# as real money, so a 10x typo is a 10x wrong invoice estimate. Pinning the exact pairs
+# makes an accidental edit fail loudly; a deliberate repricing updates both sides together.
+EXPECTED_PRICES: dict[str, tuple[float, float]] = {
+    "claude-sonnet-4": (3.0, 15.0),
+    "claude-opus-4": (15.0, 75.0),
+    "claude-haiku": (1.0, 5.0),
+    "gpt-4o-mini": (0.15, 0.6),
+    "gpt-4o": (2.5, 10.0),
+    "gpt-4-turbo": (10.0, 30.0),
+    "gemini-1.5-flash": (0.075, 0.3),
+    "gemini-1.5-pro": (1.25, 5.0),
+    "gemini-2.0-flash": (0.1, 0.4),
+    "default": (0.0, 0.0),
+}
+
+
+def test_pricing_table_holds_exactly_the_expected_models() -> None:
+    """A model added to (or dropped from) the table without a price review fails here."""
+    assert set(PRICING_PER_1M) == set(EXPECTED_PRICES)
+
+
+@pytest.mark.parametrize("model", sorted(EXPECTED_PRICES))
+def test_pricing_table_entry_is_exact(model: str) -> None:
+    assert PRICING_PER_1M[model] == EXPECTED_PRICES[model]
+
+
+@pytest.mark.parametrize("model", sorted(set(EXPECTED_PRICES) - {"default"}))
+def test_estimate_cost_charges_the_table_price(model: str) -> None:
+    """The estimator has to bill what the table says, for input and output separately.
+
+    Asymmetric token counts so a lookup that swapped the two prices can't produce the
+    same total as the correct one.
+    """
+    in_price, out_price = EXPECTED_PRICES[model]
+
+    cost = estimate_cost(model, input_tokens=2_000_000, output_tokens=1_000_000)
+
+    assert cost == pytest.approx(2 * in_price + out_price)
+
+
+@pytest.mark.parametrize("model", sorted(set(EXPECTED_PRICES) - {"default"}))
+def test_dated_model_variants_resolve_to_their_base_price(model: str) -> None:
+    """Prefix matching is what lets `claude-sonnet-4-20250514` bill as `claude-sonnet-4`."""
+    in_price, out_price = EXPECTED_PRICES[model]
+
+    cost = estimate_cost(f"{model}-20250514", input_tokens=1_000_000, output_tokens=1_000_000)
+
+    assert cost == pytest.approx(in_price + out_price)
 
 
 def test_gemini_model_yields_non_zero_cost() -> None:

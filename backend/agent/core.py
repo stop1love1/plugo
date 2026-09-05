@@ -425,7 +425,10 @@ class ChatAgent:
         if page_context:
             safe_url = _neutralize_fence_markers(str(page_context.get("url", "N/A")))
             safe_title = _neutralize_fence_markers(str(page_context.get("title", "N/A")))
-            safe_page_text = _neutralize_fence_markers(page_context.get("pageText", "")[:1500])
+            # `pageText` comes straight off the wire: a client can send a number, a list,
+            # or an explicit null, any of which would make the slice raise mid-request.
+            raw_page_text = page_context.get("pageText", "")
+            safe_page_text = _neutralize_fence_markers(raw_page_text[:1500] if isinstance(raw_page_text, str) else "")
             context_body = f"- URL: {safe_url}\n- Title: {safe_title}\n- Page content:\n{safe_page_text}"
             context_section = "## Current Page\n" + _fence_untrusted("PAGE_CONTEXT", context_body)
 

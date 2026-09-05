@@ -59,6 +59,43 @@ WS_RATE_LIMIT_MAX = 20  # max messages per window
 
 _ws_rate_limiter = SiteTokenWSRateLimiter(window_seconds=WS_RATE_LIMIT_WINDOW, max_requests=WS_RATE_LIMIT_MAX)
 
+# Ceiling on the page body a client can push into the system prompt. Shared with the SSE
+# transport, which imports it from here (the import only goes chat -> chat_sse's way).
+MAX_PAGE_TEXT_CHARS = 5000
+
+
+def _clamp_page_context(page_context: dict | None) -> dict | None:
+    """Bound the page body a client can push into the system prompt.
+
+    The body travels under ``pageText``: that is the key the widget fills
+    (``frontend/src/widget/index.ts``), the key ``docs/api-reference.md`` documents, and
+    the only one ``ChatAgent._build_system_prompt`` reads. An earlier clamp on ``"text"``
+    bounded a key nothing writes and nothing reads, so it never truncated anything while
+    reading as if the page body were bounded.
+
+    Returns a shallow copy when a clamp applies; the caller's request model is left alone.
+    """
+    if not isinstance(page_context, dict):
+        return None
+    page_text = page_context.get("pageText")
+    if isinstance(page_text, str) and len(page_text) > MAX_PAGE_TEXT_CHARS:
+        return {**page_context, "pageText": page_text[:MAX_PAGE_TEXT_CHARS]}
+    return page_context
+
+
+def crossed_multiple(before: int, after: int, step: int) -> bool:
+    """Did the stored message count move past a multiple of ``step`` on this turn?
+
+    Asked instead of ``after % step == 0`` because a stored count can go odd and stay odd:
+    a turn whose provider streams nothing leaves the visitor's message in the list without
+    a reply (``_handle_message`` appends it unconditionally but persists only non-empty
+    output), so every later count on that session is off by one. An exact-landing test
+    would then never fire again for the rest of the session's life — not a skipped beat
+    but a permanent one, which for summarization means the prompt grows unbounded forever.
+    """
+    return before // step < after // step
+
+
 # --- Site config cache ---
 _site_cache: dict[str, tuple[dict, float]] = {}
 CACHE_TTL = 60  # seconds
@@ -346,7 +383,7 @@ async def _run_websocket_chat(
             session_id,
             messages,
             first_message,
-            first_data.get("pageContext"),
+            _clamp_page_context(first_data.get("pageContext")),
             visitor_id,
             conversation_summary,
         )
@@ -394,10 +431,7 @@ async def _run_websocket_chat(
                 )
                 continue
 
-            if page_context and isinstance(page_context, dict):
-                page_text = page_context.get("text", "")
-                if isinstance(page_text, str) and len(page_text) > 5000:
-                    page_context["text"] = page_text[:5000]
+            page_context = _clamp_page_context(page_context)
 
             # Rate limit WebSocket messages — bucket per (site_token, session)
             if not _ws_rate_limiter.is_allowed(session_id, site_token):
@@ -417,6 +451,12 @@ async def _run_websocket_chat(
             if staged_summary:
                 conversation_summary = staged_summary
 
+            # Captured *before* the call: `_handle_message` mutates `messages` in place,
+            # appending this turn's visitor message (always) and its reply (only when the
+            # provider produced one). Reading the length afterwards would leave nothing to
+            # compare the crossing against.
+            stored_before = len(messages)
+
             await _handle_message(
                 websocket,
                 agent,
@@ -429,8 +469,11 @@ async def _run_websocket_chat(
                 conversation_summary,
             )
 
-            # Periodic summarization (every 20 messages)
-            if len(messages) > 0 and len(messages) % 20 == 0:
+            # Periodic summarization — every 20 messages, asked as "did this turn cross a
+            # multiple?" rather than "did it land on one". See `crossed_multiple`: a turn
+            # that streamed nothing makes the count odd for good, and an exact-landing test
+            # would silently disable summarization for that session from then on.
+            if crossed_multiple(stored_before, len(messages), ConversationSummarizer.MESSAGE_THRESHOLD):
                 # Read the boundary here, on this task, so it lines up with the snapshot
                 # handed to the summarizer; anything appended while it runs stays.
                 _fire_and_forget(
@@ -628,7 +671,11 @@ async def _maybe_summarize(
         provider = get_llm_provider(site["llm_provider"], site["llm_model"])
         summary_text, count = await summarizer.summarize(messages, provider, existing_text)
 
-        if summary_text:
+        # `count` is 0 on the two paths that produced no new coverage: nothing left to
+        # summarize, and the exception handler, which carries the *existing* text back out.
+        # Upserting on the text alone would then rewrite a correct `message_count_summarized`
+        # with 0, recording less reach than the stored summary actually has.
+        if summary_text and count:
             await repos.conversation_summaries.upsert_by_session(
                 session_id=session_id,
                 data={

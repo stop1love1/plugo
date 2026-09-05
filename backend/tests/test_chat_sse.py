@@ -460,7 +460,8 @@ async def test_sse_clamps_oversized_page_text(
     """`pageText` is the key that carries the page body, so that is the key we clamp.
 
     The widget fills it (`frontend/src/widget/index.ts`) and `_build_system_prompt` reads
-    it; the WS path's `"text"` clamp matches neither and so never fires.
+    it. Both transports now share `routers.chat._clamp_page_context`; see
+    `test_chat_page_context.py` for the helper's own contract and the WS side of it.
     """
     await _approve_site(db_repos, test_site["id"])
     calls = _record_agent_calls(monkeypatch)
@@ -531,6 +532,10 @@ async def _run_turn_and_capture_background(
     unanswered_question: bool = False,
 ) -> tuple[str, dict[str, list[dict]]]:
     """Run one SSE turn on a session already holding `stored_turns` turns.
+
+    Leaving `visitor_id` at `None` models an anonymous request: the router mints a
+    throwaway `uuid4()` for it, which gates memory extraction off. Pass an id to exercise
+    the extraction cadence itself.
 
     Returns the session id and what the two background helpers were handed, with the
     dispatched tasks already drained.
@@ -608,7 +613,9 @@ async def test_sse_does_not_extract_memories_on_every_turn(
     turn would cost ~19 calls across a 20-turn conversation where the WS transport makes
     one — a 19x amplification for anyone who moves an embed from WS to SSE.
     """
-    _, calls = await _run_turn_and_capture_background(db_repos, test_site, monkeypatch, stored_turns=2)
+    _, calls = await _run_turn_and_capture_background(
+        db_repos, test_site, monkeypatch, stored_turns=2, visitor_id="visitor-1"
+    )
 
     # 4 stored + this turn's pair = 6: past the floor, short of the cadence.
     assert calls["memories"] == []
@@ -620,7 +627,9 @@ async def test_sse_extracts_memories_again_on_the_cadence(
     db_repos: Repositories, test_site: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """At the cadence it fires again, on the same beat as the summarizer."""
-    session_id, calls = await _run_turn_and_capture_background(db_repos, test_site, monkeypatch, stored_turns=9)
+    session_id, calls = await _run_turn_and_capture_background(
+        db_repos, test_site, monkeypatch, stored_turns=9, visitor_id="visitor-1"
+    )
 
     # 18 stored + this turn's pair = 20 = MEMORY_EXTRACT_EVERY_MESSAGES.
     assert len(calls["memories"]) == 1
@@ -634,24 +643,56 @@ async def test_sse_extracts_memories_again_on_the_cadence(
 async def test_sse_cadence_survives_an_odd_stored_message_count(
     db_repos: Repositories, test_site: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A session whose stored count went odd must still hit the cadence.
+    """A session whose stored count went odd must still hit *both* cadences.
 
-    The WS path can persist an odd count (a turn that streamed nothing leaves the
-    visitor's message to be saved alone), and the count stays odd for the rest of the
-    session's life. A `stored % cadence == 0` test would then never fire again — not a
-    skipped beat but a permanent one, silently ending memory extraction for that visitor.
-    So the cadence asks whether this turn *crossed* a multiple, not whether it landed on
-    one.
+    A turn that streamed nothing leaves the visitor's message to be saved alone, and the
+    count stays odd for the rest of the session's life. A `stored % cadence == 0` test
+    would then never fire again — not a skipped beat but a permanent one. For extraction
+    that silently ends visitor memory; for summarization it is worse, because the summary
+    is the only thing bounding the prompt, so an affected session's prompt grows forever.
+    Both dispatches therefore ask whether this turn *crossed* a multiple.
     """
     _, calls = await _run_turn_and_capture_background(
-        db_repos, test_site, monkeypatch, stored_turns=9, unanswered_question=True
+        db_repos, test_site, monkeypatch, stored_turns=9, visitor_id="visitor-1", unanswered_question=True
     )
 
     # 18 + the orphaned question = 19 stored, + this turn's pair = 21: past 20, never on it.
     assert len(calls["memories"]) == 1
     assert len(calls["memories"][0]["messages"]) == 21
-    # Summarization deliberately keeps the WS turn loop's exact `% 20 == 0` test, so it
-    # does not fire here — that parity is intentional and not this cadence's business.
+    assert len(calls["summarize"]) == 1
+    assert len(calls["summarize"][0]["messages"]) == 21
+
+
+@pytest.mark.asyncio
+async def test_sse_anonymous_request_skips_memory_extraction_but_still_summarizes(
+    db_repos: Repositories, test_site: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No client-supplied visitor id means no extraction — the rows would be unreachable.
+
+    SSE is stateless and mints a fresh `uuid4()` per *request* when the body carries no
+    `visitor_id`. That id never reaches the visitor, so no later request can present it and
+    nothing ever reads back the `visitor_memories` rows written under it. The extraction is
+    a full LLM round trip billed to the site operator, so it is pure cost with the table
+    growing behind it.
+
+    Summarization is keyed by the session, not the visitor, so it must still run.
+    """
+    _, calls = await _run_turn_and_capture_background(db_repos, test_site, monkeypatch, stored_turns=9)
+
+    assert calls["memories"] == []
+    assert len(calls["summarize"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_sse_anonymous_request_skips_extraction_at_the_floor_too(
+    db_repos: Repositories, test_site: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The floor crossing is the other branch that dispatches extraction; same gate."""
+    _, calls = await _run_turn_and_capture_background(db_repos, test_site, monkeypatch, stored_turns=1)
+
+    # 2 stored + this turn's pair = 4 — the floor. With a visitor id this extracts (see
+    # `test_sse_extracts_memories_once_the_conversation_is_worth_it`); anonymous, it must not.
+    assert calls["memories"] == []
     assert calls["summarize"] == []
 
 

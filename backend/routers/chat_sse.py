@@ -35,9 +35,12 @@ from config import settings
 from logging_config import logger
 from repositories import Repositories, get_repos
 from routers.chat import (
+    MAX_PAGE_TEXT_CHARS,
+    _clamp_page_context,
     _extract_and_save_memories,
     _fire_and_forget,
     _maybe_summarize,
+    crossed_multiple,
     get_cached_site,
     restore_agent_history,
 )
@@ -47,9 +50,13 @@ from utils.rate_limit import acquire_sse_slot, release_sse_slot, site_token_key
 
 router = APIRouter()
 
-# Same ceilings the WS turn loop enforces, so neither transport is the soft way in.
+# The same ceiling the WS turn loop enforces, so neither transport is the soft way in.
 MAX_MESSAGE_CHARS = 10000
-MAX_PAGE_TEXT_CHARS = 5000
+
+# `MAX_PAGE_TEXT_CHARS` and `_clamp_page_context` live on the WS module now — one clamp,
+# applied identically by both transports — and are re-exported from here for callers that
+# already reach for them on the SSE module.
+__all__ = ["MAX_MESSAGE_CHARS", "MAX_PAGE_TEXT_CHARS", "ChatSSERequest", "register_routes", "router"]
 
 # Memory extraction on a cadence, because SSE has no session end to hang it on.
 #
@@ -69,25 +76,6 @@ class ChatSSERequest(BaseModel):
     session_id: str | None = None
     visitor_id: str | None = None
     page_context: dict | None = None
-
-
-def _clamp_page_context(page_context: dict | None) -> dict | None:
-    """Bound the page body a client can push into the system prompt.
-
-    The body travels under ``pageText``: that is the key the widget fills
-    (``frontend/src/widget/index.ts``), the key ``docs/api-reference.md`` documents, and
-    the only one ``ChatAgent._build_system_prompt`` reads. The WS path clamps ``"text"``
-    instead, which nothing writes and nothing reads — so clamp the key that genuinely
-    carries the body rather than copying a clamp that never fires.
-
-    Returns a shallow copy when a clamp applies; the caller's request model is left alone.
-    """
-    if not isinstance(page_context, dict):
-        return None
-    page_text = page_context.get("pageText")
-    if isinstance(page_text, str) and len(page_text) > MAX_PAGE_TEXT_CHARS:
-        return {**page_context, "pageText": page_text[:MAX_PAGE_TEXT_CHARS]}
-    return page_context
 
 
 # Lazy limiter lookup so we stay decoupled from main.py import order.
@@ -124,6 +112,12 @@ async def _chat_stream_core(
     # spoofing.
     raw_visitor_id = body.visitor_id or ""
     sanitized = re.sub(r"[^a-zA-Z0-9_-]", "", str(raw_visitor_id))[:64] if raw_visitor_id else ""
+    # Whether the id is one the *client* holds, or one we minted for this request alone.
+    # SSE is stateless, so the fallback uuid never reaches the visitor and no later request
+    # can present it: memories keyed by it are rows nothing will ever read back. Extraction
+    # is a billed LLM round trip, so an unaddressable visitor gets no extraction — see the
+    # dispatch below. Everything else (the stored session, the prompt) still uses the id.
+    visitor_is_addressable = bool(sanitized)
     if not sanitized:
         sanitized = str(uuid.uuid4())
     visitor_id = f"{site['id']}:{sanitized}"
@@ -241,29 +235,25 @@ async def _chat_stream_core(
                 # before FastAPI closes the request-scoped one.
                 stored = len(history_messages)
                 # See MEMORY_EXTRACT_EVERY_MESSAGES: once when this turn takes the
-                # conversation past the floor, then on the cadence.
-                #
-                # Both tests ask whether *this turn* crossed a line, rather than whether the
-                # new count lands exactly on one. A stored count can go odd — the WS path
-                # appends the visitor's message unconditionally but persists only when the
-                # response is non-empty, so the save after a turn that streamed nothing
-                # writes an odd number — and it stays odd for the rest of the session's
-                # life. An equality test against the floor would skip the first pass on such
-                # a session, and a `% cadence == 0` test would never fire again at all.
+                # conversation past the floor, then on the cadence. Both tests ask whether
+                # *this turn* crossed a line rather than whether the new count lands exactly
+                # on one — see `crossed_multiple` for why an odd count makes the difference
+                # permanent.
                 crossed_floor = stored_before < MEMORY_MIN_MESSAGES <= stored
-                crossed_cadence = (
-                    stored_before // MEMORY_EXTRACT_EVERY_MESSAGES < stored // MEMORY_EXTRACT_EVERY_MESSAGES
-                )
-                if crossed_floor or crossed_cadence:
+                crossed_cadence = crossed_multiple(stored_before, stored, MEMORY_EXTRACT_EVERY_MESSAGES)
+                # Skipped for a minted visitor id: the extraction would still cost a full
+                # LLM round trip, and would write `visitor_memories` rows under a key no
+                # later request can present.
+                if visitor_is_addressable and (crossed_floor or crossed_cadence):
                     _fire_and_forget(_extract_and_save_memories(visitor_id, site, session_id, list(history_messages)))
-                # Summarization keeps the WS turn loop's exact `% MESSAGE_THRESHOLD == 0`
-                # test, deliberately: the two transports must dispatch on the same beat.
+                # Summarization is keyed by session, not visitor, so it runs for anonymous
+                # requests too — and on the same crossing test the WS turn loop now uses.
                 #
                 # No `agent`/`trim_boundary`: this agent is discarded with the request, so
                 # staging a summary on it would trim history nobody reads again. The next
                 # SSE request re-reads the stored summary row and bounds its own replay
                 # through `restore_agent_history` — that is where SSE's shrink happens.
-                if stored % ConversationSummarizer.MESSAGE_THRESHOLD == 0:
+                if crossed_multiple(stored_before, stored, ConversationSummarizer.MESSAGE_THRESHOLD):
                     _fire_and_forget(_maybe_summarize(session_id, site, list(history_messages)))
             # Release the concurrent-stream slot acquired by the endpoint.
             await release_sse_slot(site_token)

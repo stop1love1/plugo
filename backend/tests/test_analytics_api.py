@@ -285,7 +285,9 @@ async def test_knowledge_gaps_ignores_advice_addressed_to_the_visitor(
         analytics_site["id"],
         [
             _msg("user", "Cửa hàng có giao quốc tế không?", now),
-            _msg("assistant", "Nếu chưa rõ phí ship, bạn có thể xem bảng giá trên website.", now),
+            # "không rõ" unanchored — an indicator only in its first-person forms
+            # ("tôi không rõ" / "mình không rõ"), which is exactly what must not match here.
+            _msg("assistant", "Nếu bạn không rõ phí ship, bạn có thể xem bảng giá trên website.", now),
         ],
     )
     # First person — this one really is a gap.
