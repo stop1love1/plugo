@@ -108,9 +108,7 @@ def test_clamp_drops_a_page_context_that_is_not_a_dict() -> None:
 
 
 @pytest.mark.asyncio
-async def test_websocket_bounds_the_page_body_on_every_turn(
-    test_site: dict, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_websocket_bounds_the_page_body_on_every_turn(test_site: dict, monkeypatch: pytest.MonkeyPatch) -> None:
     """Both WS entry points into `_handle_message` clamp: the first frame and the loop.
 
     The first-message path exists so a chat frame sent before any `init` is still handled;
