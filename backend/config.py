@@ -16,6 +16,27 @@ from dotenv import dotenv_values
 from pydantic_settings import BaseSettings
 
 # --- Load .env file directly (bypass OS env for specific keys) ---
+# The missing `.resolve()` here is DELIBERATE, and the asymmetry with the
+# config.json block below is the whole point — do not "fix" it for consistency.
+#
+# The two files have opposite contracts. config.json is tracked, non-secret
+# project configuration, so tests must honour it; `.env` is untracked
+# per-developer secrets, so tests must not. Under the documented test workflow
+# (`cd backend && pytest`) `__file__` carries tests/conftest.py's unnormalized
+# `backend/tests/..` prefix, this path resolves to `backend/tests/.env` and
+# misses, and the cwd-relative fallback below misses too — which is what keeps a
+# developer's real credentials out of the suite. Resolving this line would make
+# whatever USERNAME/PASSWORD that developer happens to hold the credentials the
+# suite starts from (the two fields at the bottom of Settings are `_dotenv`'s
+# only consumers, and .env.example documents that file as where they belong).
+# conftest.py overrides both immediately after import, so nothing breaks today —
+# but that override would silently become load-bearing, and test inputs would
+# vary per machine. That is the same defect as config.json being inert, inverted.
+#
+# Honest limitation: this is cwd-dependent, not a guarantee. Run pytest from the
+# project root instead and the fallback below *does* load the real `.env`. A true
+# guarantee would mean pinning cwd or gating on an explicit test environment,
+# which is a behaviour change, not a comment. See also `env_file` on Settings.Config.
 _dotenv = dotenv_values(Path(__file__).parent.parent / ".env")
 if not _dotenv:
     _dotenv = dotenv_values(".env")
@@ -164,6 +185,13 @@ class Settings(BaseSettings):
     agent_no_knowledge_en: str = _get("agent", "no_knowledge_response_en", "")
 
     class Config:
+        # Resolved by pydantic relative to the *current working directory*, not to
+        # this file — so like the `_dotenv` block at the top, it misses under the
+        # documented `cd backend && pytest` workflow and loads the real `.env`
+        # (live API keys included) when the suite is run from the project root
+        # instead. This is the path that actually populates the api-key fields;
+        # `_dotenv` only feeds the admin credentials. Same deliberate stance, same
+        # cwd caveat — see the comment on `_dotenv` above before changing either.
         env_file = ".env"
         extra = "ignore"
 
