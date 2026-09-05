@@ -278,8 +278,8 @@ dashboard exposes the two tenant-facing values under **Global Settings → Rate 
 
 ### Limited routes
 
-Only three routes are limited. Everything else is unlimited and relies on
-authentication.
+Only three routes carry a limit at all — everything else is unlimited and relies on
+authentication. Two of the three carry two limits each, one row per limit below.
 
 | Route | Keyed by | Default | `config.json` key |
 |-------|----------|---------|-------------------|
