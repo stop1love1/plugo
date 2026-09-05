@@ -212,3 +212,41 @@ async def test_feedback_site_token_limit_fires_below_the_ip_ceiling(
     assert statuses[token_limit] == 429, "the per-token limit no longer fires — did the per-IP limit override it?"
     assert neighbour_same_ip.status_code == 404, "a second tenant on the noisy tenant's IP was starved"
     assert neighbour_other_ip.status_code == 404, "a second tenant on its own IP was starved"
+
+
+@pytest.mark.asyncio
+async def test_bursty_dashboard_route_is_not_rate_limited(
+    clients_by_ip: Callable[[str], AsyncClient],
+    auth_headers: dict[str, str],
+) -> None:
+    """An admin route the dashboard calls once per rendered item must not be limited.
+
+    `limiter.py` passes `default_limits`, which reads as an app-wide 60/minute
+    per-IP limit — it isn't one, because slowapi only consults `default_limits`
+    from `SlowAPIMiddleware` and main.py doesn't install it. That distinction
+    decides the blast radius of the limiter's `key_style="endpoint"`: under
+    url-scoping a per-path bucket hides a burst, under endpoint-scoping every
+    call to one route shares a bucket, and a Flows page rendering one screenshot
+    per step would 429 the admin on their own dashboard.
+
+    So this drives more requests at a representative burst route than the
+    default limit allows and asserts none is refused — it fails the moment
+    anything (that middleware, or a decorator added without regard for the
+    call pattern) puts this route under a per-IP window.
+    """
+    burst = _limit_amount(settings.rate_limit_default) + 1
+    admin = clients_by_ip("203.0.113.15")
+
+    with _rate_limiting_enabled():
+        statuses = [
+            (
+                await admin.get(
+                    f"/api/flows/screenshots/flow-1/step-{i}.png",
+                    headers=auth_headers,
+                )
+            ).status_code
+            for i in range(burst)
+        ]
+
+    # 404 (no such screenshot file) — the request reached the handler every time.
+    assert set(statuses) == {404}, f"a {burst}-request dashboard burst was refused: {sorted(set(statuses))}"

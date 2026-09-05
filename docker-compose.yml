@@ -66,6 +66,14 @@ services:
       - DATABASE_PROVIDER=${DATABASE_PROVIDER:-mongodb}
       - MONGODB_URL=mongodb://${MONGO_USER:-plugo}:${MONGO_PASSWORD:-plugo_dev_password}@mongodb:27017
       - MONGODB_DATABASE=plugo
+      # Which upstream addresses uvicorn will accept X-Forwarded-For from. The
+      # default (uvicorn's own) trusts only 127.0.0.1, so nothing on a compose
+      # network — correct for this file, which publishes the backend directly.
+      # Put a reverse proxy in front and every visitor otherwise arrives as the
+      # proxy's address and shares one per-IP rate-limit bucket, so set this to
+      # the proxy's address in .env. Never "*": it would let anyone able to
+      # reach this container forge a client IP past the per-IP limits.
+      - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-127.0.0.1}
     depends_on:
       mongodb:
         condition: service_healthy
