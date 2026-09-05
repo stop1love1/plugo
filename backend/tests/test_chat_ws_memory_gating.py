@@ -22,7 +22,13 @@ import pytest
 from agent.core import ChatAgent
 from repositories import Repositories, create_repos
 from routers.chat import _run_websocket_chat
-from tests.conftest import _background_task_baseline, _drain_background_tasks, _FakeWebSocket, _StubProvider
+from tests.conftest import (
+    _background_task_baseline,
+    _drain_background_tasks,
+    _FakeWebSocket,
+    _patch_stub_agent,
+    _StubProvider,
+)
 
 
 def _history(turns: int) -> list[dict]:
@@ -61,24 +67,6 @@ def _capture_background_helpers(monkeypatch: pytest.MonkeyPatch) -> dict[str, li
     monkeypatch.setattr("routers.chat._extract_and_save_memories", _fake_extract)
     monkeypatch.setattr("routers.chat._maybe_summarize", _fake_summarize)
     return calls
-
-
-def _patch_stub_agent(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("agent.core.get_llm_provider", lambda *a, **k: _StubProvider())
-
-    async def _fake_build_system_prompt(
-        self: ChatAgent,
-        query: str,
-        page_context: dict | None = None,
-        repos: object = None,
-        visitor_id: str | None = None,
-        conversation_summary: str | None = None,
-    ) -> tuple[str, list[dict], bool]:
-        self.last_citations = []
-        self.last_tool_calls = []
-        return "system prompt", [], True
-
-    monkeypatch.setattr(ChatAgent, "_build_system_prompt", _fake_build_system_prompt)
 
 
 async def _run_ws(test_site: dict, first_data: dict, frames: list[dict]) -> None:

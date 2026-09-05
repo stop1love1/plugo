@@ -141,6 +141,17 @@ class _SlidingWindow:
     # subclass with the largest `max`, not against this number.
     MAX_KEYS = 10_000
 
+    # Low-water mark for `_evict`: once over `MAX_KEYS`, trim down to this
+    # fraction of it rather than back to the cap exactly. Trimming to the cap
+    # leaves the registry one admission from overflowing again, so *every*
+    # subsequent new key would pay for a full `sorted()` over MAX_KEYS entries —
+    # the eviction path turning into its own CPU amplifier under precisely the
+    # distributed flood the cap exists to blunt. At 0.9 the sort is paid once per
+    # ~1,000 admissions instead of once per admission, and the extra ~1,000 keys
+    # discarded per pass are the coldest ones, which is who `_evict` was going to
+    # reach for next anyway.
+    EVICT_TO_FRACTION = 0.9
+
     def __init__(self, window_seconds: int, max_requests: int) -> None:
         self.window = window_seconds
         self.max = max_requests
@@ -179,9 +190,19 @@ class _SlidingWindow:
         what keeps eviction from becoming a way to shed one's own limit: a key
         that is being refused over and over is the most recently *seen* key
         there is, so it is evicted last rather than first.
+
+        Two-level trim. The expiry sweep is cheap and non-destructive, so if it
+        alone brings the registry back under the cap we stop there and no live
+        key is dropped. Only when real, unexpired keys are still over the cap do
+        we sort, and then we trim to `EVICT_TO_FRACTION` of it rather than to the
+        cap — see that constant for why the headroom matters more than the ~1,000
+        extra cold keys it costs.
         """
         self._sweep(now, keep)
-        overflow = len(self._timestamps) - self.MAX_KEYS
+        if len(self._timestamps) <= self.MAX_KEYS:
+            return
+        target = max(1, int(self.MAX_KEYS * self.EVICT_TO_FRACTION))
+        overflow = len(self._timestamps) - target
         if overflow <= 0:
             return
         coldest = sorted((k for k in self._timestamps if k != keep), key=lambda k: self._last_seen_seq.get(k, 0))

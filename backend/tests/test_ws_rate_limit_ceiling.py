@@ -29,31 +29,11 @@ are unreachable from any other test even if the reset were skipped.
 import pytest
 from limits import parse
 
-from agent.core import ChatAgent
 from config import settings
 from repositories import Repositories, create_repos
 from routers.chat import WS_RATE_LIMIT_MAX, WS_RATE_LIMITED_MESSAGE, _run_websocket_chat, _ws_rate_limiter
-from tests.conftest import _FakeWebSocket, _StubProvider
+from tests.conftest import _FakeWebSocket, _patch_stub_agent
 from utils.rate_limit import ClientIPWSRateLimiter, _reset_ws_ip_ceiling_for_tests, get_ws_ip_ceiling
-
-
-def _patch_stub_agent(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep the turn loop off the network: stub provider, no retrieval."""
-    monkeypatch.setattr("agent.core.get_llm_provider", lambda *a, **k: _StubProvider())
-
-    async def _fake_build_system_prompt(
-        self: ChatAgent,
-        query: str,
-        page_context: dict | None = None,
-        repos: object = None,
-        visitor_id: str | None = None,
-        conversation_summary: str | None = None,
-    ) -> tuple[str, list[dict], bool]:
-        self.last_citations = []
-        self.last_tool_calls = []
-        return "system prompt", [], True
-
-    monkeypatch.setattr(ChatAgent, "_build_system_prompt", _fake_build_system_prompt)
 
 
 async def _run_ws(
@@ -280,6 +260,54 @@ def test_ip_ceiling_registry_is_bounded_and_evicts_the_coldest_first() -> None:
 
     assert limiter.bucket_count() <= limiter.MAX_KEYS
     assert not limiter.is_allowed("198.51.100.1")
+
+
+def test_ip_ceiling_eviction_amortises_instead_of_sorting_every_admission() -> None:
+    """Eviction must leave headroom, not trim back to the cap exactly.
+
+    `_evict` sorts the whole registry. Trimming to `MAX_KEYS` exactly leaves it one
+    admission from overflowing again, so every subsequent new key pays for a full sort
+    over MAX_KEYS entries — the eviction path becoming its own CPU amplifier under
+    exactly the distributed flood the cap exists to blunt. Trimming to
+    `EVICT_TO_FRACTION` of the cap amortises that sort over the admissions it takes to
+    refill the headroom.
+
+    Both halves are asserted, because either alone can pass for the wrong reason: the
+    headroom check would still pass if the sort ran every call and removed nothing, and
+    the trim count alone doesn't show where the registry landed.
+    """
+    limiter = ClientIPWSRateLimiter(window_seconds=60, max_requests=1)
+    limiter.MAX_KEYS = 100
+    low_water = int(limiter.MAX_KEYS * limiter.EVICT_TO_FRACTION)
+
+    trims: list[int] = []
+    original_evict = limiter._evict
+
+    def _counting_evict(now: float, keep: str) -> None:
+        before = limiter.bucket_count()
+        original_evict(now, keep)
+        if limiter.bucket_count() < before:
+            trims.append(before)
+
+    limiter._evict = _counting_evict
+
+    admissions = 300
+    for i in range(admissions):
+        assert limiter.is_allowed(f"198.51.100.{i}")
+
+    assert limiter.bucket_count() <= limiter.MAX_KEYS
+    assert limiter.bucket_count() <= low_water + 1, (
+        f"registry sits at {limiter.bucket_count()} against a cap of {limiter.MAX_KEYS} — "
+        "eviction left no headroom, so the next new key sorts the whole dict again"
+    )
+    # Refilling the headroom takes MAX_KEYS - low_water admissions, so an amortised
+    # eviction sorts about that rarely. Trimming to the cap exactly would sort on every
+    # admission past the first overflow — ~200 of the 300 here.
+    expected_trims = admissions // (limiter.MAX_KEYS - low_water) + 2
+    assert len(trims) <= expected_trims, (
+        f"{len(trims)} sorts over {admissions} admissions (expected at most "
+        f"{expected_trims}) — eviction is firing per-admission, not amortised"
+    )
 
 
 def test_ws_ip_ceiling_uses_its_own_configured_limit() -> None:

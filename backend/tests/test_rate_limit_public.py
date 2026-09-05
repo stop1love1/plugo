@@ -300,7 +300,15 @@ async def test_bursty_dashboard_route_is_not_rate_limited(
 
     # 404 (no such screenshot file) — the request reached the handler every time.
     assert set(statuses) == {404}, f"a {burst}-request dashboard burst was refused: {sorted(set(statuses))}"
-    assert limiter._default_limits == [], (
-        "limiter.py grew default limits again — harmless alone, but installing "
-        "SlowAPIMiddleware would then put this burst route under one per-IP bucket"
+    # `_default_limits` is slowapi-private, so read it defensively: a minor-version
+    # rename would otherwise turn this guard into an AttributeError rather than a
+    # failure. The `None` sentinel can never equal `[]`, so a rename fails the
+    # assertion loudly — and if it ever does, the guard must be RE-DERIVED against
+    # whatever slowapi replaced the attribute with, never deleted. It is the
+    # compensating control for removing `default_limits` from limiter.py; without
+    # it, nothing in the suite would notice the argument coming back.
+    assert getattr(limiter, "_default_limits", None) == [], (
+        "limiter.py grew default limits again (or slowapi renamed the attribute this "
+        "reads) — harmless alone, but installing SlowAPIMiddleware would then put this "
+        "burst route under one per-IP bucket"
     )

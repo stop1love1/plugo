@@ -60,16 +60,25 @@ def anyio_backend():
     return "asyncio"
 
 
+# Both fixtures below deliberately import *unguarded*. They used to sit behind
+# `contextlib.suppress(Exception)`, which made the failure they most need to
+# survive — the imported name being renamed or moved — turn them into silent
+# no-ops: cross-test contamination would return with the suite still green.
+# Narrowing to `ImportError` would not have helped, since `from x import y` on a
+# missing `y` raises exactly that. Let them raise instead: if either import ever
+# breaks, every test errors at once and names the missing symbol, which is a far
+# cheaper failure than the isolation quietly going away.
+
+
 @pytest.fixture(autouse=True)
 def _disable_rate_limiter():
     """slowapi's limiter state is process-global (app + limiter are module-cached),
     so per-window limits would otherwise leak across tests and make ordering matter.
     Disable it by default; tests that specifically exercise rate limiting flip it
     back on locally inside the test body."""
-    with contextlib.suppress(Exception):
-        from main import limiter
+    from main import limiter
 
-        limiter.enabled = False
+    limiter.enabled = False
     yield
 
 
@@ -81,10 +90,9 @@ def _reset_ws_ip_ceiling():
     fallback, so one transport test's messages would otherwise count against a
     later one's. Rebuild it with the configured limits before each test; the
     ceiling's own tests shrink it inside their bodies, and this puts it back."""
-    with contextlib.suppress(Exception):
-        from utils.rate_limit import _reset_ws_ip_ceiling_for_tests
+    from utils.rate_limit import _reset_ws_ip_ceiling_for_tests
 
-        _reset_ws_ip_ceiling_for_tests()
+    _reset_ws_ip_ceiling_for_tests()
     yield
 
 
@@ -199,6 +207,32 @@ class _StubProvider:
         temperature: float = 0.7,
     ) -> AsyncIterator[str]:
         yield "Sure thing."
+
+
+def _patch_stub_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the turn loop off the network: stub provider, no retrieval.
+
+    Lives here beside `_StubProvider`, which is what it patches in — every WS transport
+    test that drives a real turn loop needs exactly this pair, and it was copied
+    verbatim into each of them before.
+    """
+    from agent.core import ChatAgent
+
+    monkeypatch.setattr("agent.core.get_llm_provider", lambda *a, **k: _StubProvider())
+
+    async def _fake_build_system_prompt(
+        self: ChatAgent,
+        query: str,
+        page_context: dict | None = None,
+        repos: object = None,
+        visitor_id: str | None = None,
+        conversation_summary: str | None = None,
+    ) -> tuple[str, list[dict], bool]:
+        self.last_citations = []
+        self.last_tool_calls = []
+        return "system prompt", [], True
+
+    monkeypatch.setattr(ChatAgent, "_build_system_prompt", _fake_build_system_prompt)
 
 
 class _FakeWebSocket:
