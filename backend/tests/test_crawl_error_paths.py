@@ -29,6 +29,11 @@ class _LogRecorder:
         self.records: list[tuple[str, str, dict[str, Any]]] = []
 
     def __getattr__(self, level: str) -> Callable[..., None]:
+        # Every loguru level (info/warning/error/...) records; dunders stay missing so
+        # nothing mistakes this for a copyable/iterable object.
+        if level.startswith("__"):
+            raise AttributeError(level)
+
         def _log(message: str, **fields: Any) -> None:
             self.records.append((level, message, fields))
 
