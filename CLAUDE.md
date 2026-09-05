@@ -94,7 +94,9 @@ config.json          ← project config (safe to commit)
 ├── USERNAME
 ├── PASSWORD
 ├── SECRET_KEY
-├── FORWARDED_ALLOW_IPS   (optional, not a secret — only when a reverse proxy fronts the backend)
+├── FORWARDED_ALLOW_IPS   (optional, not a secret — only when a reverse proxy fronts the backend;
+│                          read by uvicorn before load_dotenv() runs, so outside Docker it must be
+│                          EXPORTED into the process environment — .env alone is silently ignored)
 ├── MONGO_USER            (only when database.provider="mongodb")
 ├── MONGO_PASSWORD        (only when database.provider="mongodb")
 ├── ANTHROPIC_API_KEY

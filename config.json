@@ -53,7 +53,7 @@
   },
   "rate_limit": {
     "default": "60/minute",
-    "chat": "30/minute",
+    "chat": "60/minute",
     "auth": "5/minute",
     "public_ip": "120/minute",
     "ws_public_ip": "300/minute",

@@ -25,6 +25,16 @@ not reach WebSocket frames: `SiteTokenWSRateLimiter` (tenant fairness, per
 `(site_token, session_id)`) and `ClientIPWSRateLimiter` (the abuse ceiling, per
 peer address). Same reasoning, same split of responsibilities — see
 `tests/test_ws_rate_limit_ceiling.py`.
+
+**That symmetry covers message rate and nothing else.** Both WS limiters are
+per-*message*, and there is no WebSocket analogue of `SSEConcurrencyGuard`
+below. An accepted WS connection inserts a `chat_sessions` row, opens a
+repository session and starts a heartbeat task before either limiter is
+consulted, so a client that connects and never sends a frame is counted by
+neither — WS *connection* volume is unbounded by anything in this module, on the
+transport the widget actually uses. That is pre-existing and untouched here;
+it is written down so nothing above is read as claiming the three transports are
+now equivalent, or that connection volume is bounded.
 """
 
 import asyncio
@@ -295,6 +305,9 @@ class SSEConcurrencyGuard:
     slowapi gates requests-per-window but not concurrent long-lived streams;
     without this cap an attacker can open thousands of SSE connections on the
     same site_token and pin server memory / file descriptors indefinitely.
+
+    SSE only. The WebSocket transport has no equivalent — see the module
+    docstring; its two limiters both count messages, not connections.
     """
 
     def __init__(self, max_per_token: int = 10):

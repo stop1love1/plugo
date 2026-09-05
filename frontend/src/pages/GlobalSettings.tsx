@@ -699,9 +699,9 @@ export default function GlobalSettings() {
               />
               <InputField
                 label="Chat"
-                value={get("rate_limit", "chat", "30/minute")}
+                value={get("rate_limit", "chat", "60/minute")}
                 onChange={(v) => update("rate_limit", "chat", v)}
-                placeholder="30/minute"
+                placeholder="60/minute"
               />
             </div>
           </SectionCard>

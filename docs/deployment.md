@@ -7,6 +7,7 @@ This guide covers different ways to deploy Plugo in production.
 - [Docker Compose (Recommended)](#docker-compose-recommended)
 - [Manual Deployment](#manual-deployment)
 - [Environment Variables](#environment-variables)
+- [Upgrading: rate limits now bind](#upgrading-rate-limits-now-bind)
 - [Reverse Proxy (Nginx)](#reverse-proxy-nginx)
 - [SSL/HTTPS Setup](#sslhttps-setup)
 - [Production Checklist](#production-checklist)
@@ -113,6 +114,65 @@ See [.env.example](../.env.example) for all available variables.
 | `EMBEDDING_PROVIDER` | No | `openai` | Embedding provider: `openai` or `ollama` |
 | `SECRET_KEY` | Yes | `change-me` | Secret key for token generation |
 | `CORS_ORIGINS` | No | `http://localhost:3000` | Allowed CORS origins (comma-separated) |
+| `FORWARDED_ALLOW_IPS` | Only behind a proxy | — | Literal address(es) of the proxy whose `X-Forwarded-For` uvicorn should trust. **Must be exported into the process environment — see below.** |
+
+### `FORWARDED_ALLOW_IPS` must be a real environment variable
+
+This one is read by **uvicorn**, not by Plugo. uvicorn reads it in `Config.__init__`,
+which runs *before* it imports the app module — and therefore before Plugo's
+`load_dotenv()` ever executes. **A value that exists only in `.env` never reaches
+uvicorn.** The failure is silent: nothing is logged, `X-Forwarded-For` is discarded, and
+every visitor behind your proxy shares one rate-limit bucket.
+
+It works under Docker Compose because compose injects it as a real process environment
+variable. It does **not** work for `make dev-backend`, for a systemd unit, or for the
+manual `uvicorn main:app` deployment above — none of those puts it in the environment.
+Either of these fixes it:
+
+```bash
+# 1. Export it into the process environment.
+#    systemd equivalent: Environment=FORWARDED_ALLOW_IPS=10.0.0.7
+export FORWARDED_ALLOW_IPS=10.0.0.7
+uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+
+# 2. Or hand your .env to uvicorn itself. uvicorn loads --env-file inside
+#    Config.__init__, before it reads FORWARDED_ALLOW_IPS, so this does work —
+#    and unlike the silent failure, it logs "Loading environment from '.env'".
+uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4 --env-file .env
+```
+
+Two further traps, both silent:
+
+- It takes **literal addresses only**, comma-separated — not CIDR. uvicorn matches the
+  peer by plain set membership, so `10.0.0.0/16` matches nothing.
+- Never set it to `*`, which lets any caller forge a client IP past the rate limits.
+
+The Nginx example below proxies from `localhost`, and `127.0.0.1` is uvicorn's default
+trusted host — so that exact topology works without setting this at all. A proxy on a
+*different* host does not.
+
+## Upgrading: rate limits now bind
+
+**The rate limits on the two public routes take effect for the first time in this
+version.** They were configured in earlier releases but never enforced: the limiter was
+built with slowapi's default `key_style="url"`, which folds the request path into the
+bucket scope — and both public routes carry a caller-supplied value *in the path*, so
+every request minted a fresh bucket and no limit could ever bind.
+
+What this means on upgrade:
+
+- `POST /api/chat/{site_token}/stream` is now **60/minute per site token** (site-wide
+  across all of that tenant's callers, not per visitor) and **120/minute per client IP**.
+- `POST /api/sessions/{session_id}/feedback` is now **60/minute per site token** and
+  **120/minute per client IP**.
+- The widget is unaffected in practice — it speaks WebSocket only. If you drive Plugo
+  from your own backend, review `config.json` → `rate_limit.chat` against your
+  integration's aggregate rate before upgrading.
+- If a reverse proxy fronts the backend, read the `FORWARDED_ALLOW_IPS` note above
+  first: without it, the per-IP limits collapse every visitor into a single bucket.
+
+Full details, including what a single source can send across all transports, are in the
+[API Reference → Rate Limits](api-reference.md#rate-limits).
 
 ## Reverse Proxy (Nginx)
 

@@ -110,7 +110,36 @@ class Settings(BaseSettings):
 
     # --- Rate Limiting (from config.json → rate_limit) ---
     rate_limit_default: str = _get("rate_limit", "default", "60/minute")
-    rate_limit_chat: str = _get("rate_limit", "chat", "30/minute")
+    # Tenant-fairness limit on the SSE chat route, keyed by site_token — so it is
+    # **site-wide across all of that tenant's callers**, not per visitor. Under
+    # slowapi's `key_style="url"` default it never bound at all, so the inherited
+    # 30/minute had never met real traffic and was not chosen with tenant-wide
+    # scope in mind.
+    #
+    # Sized from the usage shape at the granularity it keys on, as with
+    # `ws_public_ip` below. The widget speaks WebSocket exclusively
+    # (`frontend/src/widget/ui/App.tsx` — no EventSource, no fetch of `/stream`),
+    # so this route carries only direct API consumers: server-side integrations,
+    # CLIs, mobile clients. One request is one LLM turn, and an engaged
+    # conversation runs ~3 turns/minute once thinking and reading are counted. At
+    # 30/minute a whole tenant saturates at ~10 concurrent conversations, which is
+    # a demo, not a customer — and the same branch judged ~50 concurrent chatters
+    # the right headroom for one *address* on WebSocket. 60/minute buys ~20
+    # concurrent conversations per tenant, which is where a real integration sits.
+    #
+    # Three relationships hold it in place, all pinned in
+    # `tests/test_rate_limit_public.py`:
+    #   * strictly below `public_ip` (120), so a well-behaved tenant always meets
+    #     its own fairness limit before the abuse ceiling — same ordering the WS
+    #     pair holds;
+    #   * level with `default` (the feedback route). Chat is by far the more
+    #     expensive call, but the expensive dimension here — simultaneous open
+    #     streams — is governed by `sse_concurrent`, not by this key, so there was
+    #     never a reason for chat to sit at *half* the allowance of a DB write;
+    #   * still well under what `sse_concurrent` alone would permit (10 streams,
+    #     each a few seconds, is >100 turns/minute), so raising it does not defeat
+    #     the purpose-built concurrency cap.
+    rate_limit_chat: str = _get("rate_limit", "chat", "60/minute")
     # There is deliberately no `rate_limit.crawl`. It existed here, in config.json
     # and as a dashboard field for a long time while no route ever read it — every
     # `/api/crawl/*` endpoint is admin-authenticated and carries no

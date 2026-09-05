@@ -257,6 +257,47 @@ async def test_sse_site_token_limit_fires_below_the_ip_ceiling(
     assert neighbour_same_ip.status_code == 404, "a second tenant sharing the noisy tenant's IP was starved"
 
 
+def test_sse_chat_limit_is_sized_for_a_tenant_not_a_visitor() -> None:
+    """Pins the three sizing relationships `backend/config.py` argues `chat` from.
+
+    `rate_limit_chat` is keyed by site_token, so its allowance is spent by a whole
+    tenant's callers together, not by one visitor. It never bound before this branch
+    (slowapi's `key_style="url"` default), so the value it carried had never met real
+    traffic — and it is silently breakable by editing one number in config.json, which
+    is exactly when someone should have to read the reasoning.
+
+    * **Below the per-IP ceiling**, or a well-behaved tenant would meet the abuse cap
+      before its own fairness limit. Same ordering the WS pair holds.
+    * **At least the feedback route's allowance.** The expensive dimension on this
+      route — simultaneous open streams — is capped by `sse_concurrent`, not by this
+      key, so there is no reason for a chat turn to be scarcer than a DB write.
+    * **Room for a real integration.** The widget speaks WebSocket exclusively, so this
+      route carries only direct API consumers, whose tenant-aggregate rate is what this
+      bucket sees. At ~3 turns/minute for an engaged conversation, a tenant needs room
+      for tens of them at once, not a handful.
+    """
+    chat = _limit_amount(settings.rate_limit_chat)
+    ip_ceiling = _limit_amount(settings.rate_limit_public_ip)
+    feedback = _limit_amount(settings.rate_limit_default)
+
+    assert chat < ip_ceiling, (
+        f"config.json → rate_limit.chat ({chat}/min) is at or above public_ip "
+        f"({ip_ceiling}/min) — the abuse ceiling would fire before tenant fairness"
+    )
+    assert chat >= feedback, (
+        f"config.json → rate_limit.chat ({chat}/min) is scarcer than rate_limit.default "
+        f"({feedback}/min), which limits a feedback DB write; concurrent-stream cost is "
+        f"sse_concurrent's job, not this key's"
+    )
+    # 3/minute is an engaged conversation's turn rate; 20 of them at once is the
+    # per-tenant headroom the value was chosen for.
+    assert chat // 3 >= 20, (
+        f"{chat}/min site-wide leaves room for only {chat // 3} concurrent conversations "
+        f"across an entire tenant — see the sizing note on rate_limit_chat in "
+        f"backend/config.py"
+    )
+
+
 @pytest.mark.asyncio
 async def test_bursty_dashboard_route_is_not_rate_limited(
     clients_by_ip: Callable[[str], AsyncClient],

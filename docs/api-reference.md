@@ -13,6 +13,7 @@ Interactive API documentation is available at `/docs` (Swagger UI) when the back
 - [Knowledge](#knowledge)
 - [Tools](#tools)
 - [Sessions](#sessions)
+- [Rate Limits](#rate-limits)
 
 ---
 
@@ -261,3 +262,75 @@ List chat sessions for a site.
 ### `GET /api/sessions/{session_id}`
 
 Get a specific chat session with its messages.
+
+---
+
+## Rate Limits
+
+Rate-limited requests are refused with **HTTP 429**. Every limit is configured in
+`config.json` → `rate_limit`, and a change takes effect on backend restart. The
+dashboard exposes the two tenant-facing values under **Global Settings → Rate Limiting**.
+
+> **These limits bind for the first time in this version.** They were configured but
+> inert in earlier releases (see [Upgrading](deployment.md#upgrading-rate-limits-now-bind)).
+> If you drive Plugo from your own backend rather than the widget, size
+> `rate_limit.chat` for your integration before upgrading.
+
+### Limited routes
+
+Only three routes are limited. Everything else is unlimited and relies on
+authentication.
+
+| Route | Keyed by | Default | `config.json` key |
+|-------|----------|---------|-------------------|
+| `POST /api/chat/{site_token}/stream` | site token — **whole tenant**, all its callers share one bucket | `60/minute` | `rate_limit.chat` |
+| `POST /api/chat/{site_token}/stream` | client IP | `120/minute` | `rate_limit.public_ip` |
+| `POST /api/sessions/{session_id}/feedback` | site token — whole tenant | `60/minute` | `rate_limit.default` |
+| `POST /api/sessions/{session_id}/feedback` | client IP | `120/minute` | `rate_limit.public_ip` |
+| `POST /api/auth/login` | client IP | `5/minute` | `rate_limit.auth` |
+
+The two public routes carry **both** of their limits at once, and a request must satisfy
+each. The token-keyed limit is tenant fairness; the IP-keyed one is the ceiling a caller
+who rotates the site token cannot shed. A tenant-keyed limit is spent by all of that
+tenant's visitors together — it is not per visitor.
+
+`POST /api/chat/{site_token}/stream` additionally caps **simultaneous open streams** per
+site token (`rate_limit.sse_concurrent`, default `10`), which is a concurrency cap rather
+than a rate: exceeding it also returns 429, with `"Too many concurrent streams"`.
+
+### WebSocket
+
+`WS /ws/chat/{site_token}` is not a slowapi route. Its limits are enforced per **message**,
+and an over-limit message is answered with an in-band frame rather than a status code:
+
+```json
+{ "type": "error", "message": "Too many messages. Please slow down." }
+```
+
+| Limit | Keyed by | Default | `config.json` key |
+|-------|----------|---------|-------------------|
+| Per-session fairness | (site token, session id) | 20 per 60s | *not configurable — `WS_RATE_LIMIT_MAX` in `routers/chat.py`* |
+| Per-address ceiling | client IP | `300/minute` | `rate_limit.ws_public_ip` |
+
+Note that nothing limits how many WebSocket *connections* a client may open — only how
+many messages it may send once connected.
+
+### What one source can send in total
+
+**slowapi buckets per endpoint, so these are not a shared pool.** A single client IP can
+therefore spend every per-IP allowance concurrently:
+
+| | Per minute | LLM turns? |
+|---|---|---|
+| `POST .../feedback` (`public_ip`) | 120 | no — a DB write |
+| `POST .../stream` (`public_ip`) | 120 | yes |
+| `WS /ws/chat/...` (`ws_public_ip`) | 300 | yes |
+| **Total** | **540** | **420** |
+
+No single config value expresses that total, and 420 LLM turns per minute per source is
+the number to size provider spend against — not any one row above. Lowering the total
+means lowering `public_ip` and `ws_public_ip` together.
+
+Behind a reverse proxy, every visitor presents the proxy's address and shares one bucket
+unless `FORWARDED_ALLOW_IPS` is set — see
+[Environment Variables](deployment.md#environment-variables).
