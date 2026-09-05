@@ -61,6 +61,7 @@ async def _run_ws(
     client_host: str,
     messages: list[str],
     site_token: str | None = None,
+    first_data: dict | None = None,
 ) -> _FakeWebSocket:
     """Drive one full WS connection from `client_host`, then let it disconnect.
 
@@ -68,6 +69,10 @@ async def _run_ws(
     rotating it doesn't lift the ceiling. It is the only thing `_run_websocket_chat`
     uses the token for, so passing a different string is exactly what a caller holding
     a second tenant's token looks like to the limiters.
+
+    `first_data` defaults to a bare `init` frame, so every message in `messages` goes
+    through the turn loop. Pass a frame carrying a `message` instead to exercise the
+    pre-loop path, which handles one message before the loop is ever entered.
     """
     websocket = _FakeWebSocket(frames=[{"message": m} for m in messages], client_host=client_host)
     ws_repos = await create_repos()
@@ -76,7 +81,7 @@ async def _run_ws(
         ws_repos,
         {**site, "is_approved": True},
         site_token if site_token is not None else site["token"],
-        first_data={"type": "init"},
+        first_data={"type": "init"} if first_data is None else first_data,
     )
     return websocket
 
@@ -168,6 +173,34 @@ async def test_ws_ip_ceiling_does_not_starve_another_tenant_on_another_source(
     quiet = await _run_ws(test_site, "203.0.113.25", ["q1", "q2"], site_token="quiet-tenant")
     assert _answered(quiet) == 2
     assert _refusals(quiet) == 0
+
+
+@pytest.mark.asyncio
+async def test_ceiling_covers_the_message_carried_in_the_connection_frame(
+    db_repos: Repositories, test_site: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One message per connection, carried in the first frame, must still be counted.
+
+    `_run_websocket_chat` answers a first frame that carries a `message` (rather than
+    `type: "init"`) *before* entering the turn loop, so that message never reaches the
+    loop's rate-limit check. Connect, send one message, disconnect, repeat would
+    otherwise walk straight past the ceiling — the reconnect bypass in its purest form,
+    and the tests above would not see it because they all open with an `init` frame.
+    """
+    _patch_stub_agent(monkeypatch)
+    _reset_ws_ip_ceiling_for_tests(window_seconds=60, max_requests=2)
+
+    sockets = [await _run_ws(test_site, "203.0.113.28", [], first_data={"message": f"q{i}"}) for i in range(3)]
+
+    assert len({_session_id(ws) for ws in sockets}) == 3
+    assert [_answered(ws) for ws in sockets] == [1, 1, 0]
+    assert [_refusals(ws) for ws in sockets] == [0, 0, 1]
+
+    # One message on a fresh session can never trip the per-session window, and a
+    # connection from another address is answered — so the refusal is the ceiling's.
+    neighbour = await _run_ws(test_site, "203.0.113.29", [], first_data={"message": "q"})
+    assert _answered(neighbour) == 1
+    assert _refusals(neighbour) == 0
 
 
 @pytest.mark.asyncio
